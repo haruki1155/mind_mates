@@ -1,0 +1,26 @@
+name: mind_mates
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  firebase_core: ^4.10.0
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/Login/
+    - assets/images/ONBOARDING_1/
+    - assets/images/ONBOARDING_2/
+    - assets/images/ONBOARDING_3/
+    - assets/images/ONBOARDING_4/ONBOARDING 4/
