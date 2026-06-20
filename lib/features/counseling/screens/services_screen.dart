@@ -455,7 +455,7 @@ class _ServicesBottomNav extends StatelessWidget {
             _BottomNavItem(
               icon: Icons.person,
               label: 'Profile',
-              onTap: () => ServicesScreen._openBlankPage(context, 'Profile'),
+              onTap: () => Navigator.of(context).pushNamed(RouteNames.profile),
             ),
           ],
         ),

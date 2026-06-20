@@ -9,4 +9,5 @@ class RouteNames {
   static const home = '/home';
   static const services = '/services';
   static const mindAid = '/mind-aid';
+  static const profile = '/profile';
 }

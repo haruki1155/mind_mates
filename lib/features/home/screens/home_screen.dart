@@ -150,7 +150,8 @@ class _CalendarHeader extends StatelessWidget {
               _CircleIconButton(
                 icon: Icons.person_outline,
                 tooltip: 'Profile',
-                onTap: () => _pushFromHeader(context, 'Profile'),
+                onTap: () =>
+                    Navigator.of(context).pushNamed(RouteNames.profile),
               ),
               const Expanded(
                 child: Text(
