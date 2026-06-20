@@ -8,4 +8,5 @@ class RouteNames {
   static const forgotPassword = '/forgot-password';
   static const home = '/home';
   static const services = '/services';
+  static const mindAid = '/mind-aid';
 }

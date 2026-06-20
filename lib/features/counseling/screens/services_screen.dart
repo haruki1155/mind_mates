@@ -450,7 +450,7 @@ class _ServicesBottomNav extends StatelessWidget {
             _BottomNavItem(
               icon: Icons.chat_bubble_outline,
               label: 'Messages',
-              onTap: () => ServicesScreen._openBlankPage(context, 'Messages'),
+              onTap: () => Navigator.of(context).pushNamed(RouteNames.mindAid),
             ),
             _BottomNavItem(
               icon: Icons.person,
