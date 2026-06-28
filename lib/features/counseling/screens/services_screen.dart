@@ -439,7 +439,7 @@ class _ServicesBottomNav extends StatelessWidget {
               icon: Icons.forum_outlined,
               label: 'Secret chat',
               onTap: () =>
-                  ServicesScreen._openBlankPage(context, 'Secret Chat'),
+                  Navigator.of(context).pushNamed(RouteNames.secretChat),
             ),
             _BottomNavItem(
               icon: Icons.show_chart,

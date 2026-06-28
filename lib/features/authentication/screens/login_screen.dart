@@ -5,7 +5,6 @@ import '../../../routes/route_names.dart';
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  // Builds the full login page with decorative background and form content.
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
@@ -13,8 +12,8 @@ class LoginScreen extends StatelessWidget {
       body: SafeArea(
         child: Stack(
           children: [
-            _BubbleCluster(top: -27, left: -14, mirror: false),
-            _BubbleCluster(top: -16, right: -12, mirror: true),
+            _SoftCircle(top: -84, left: -76, size: 198),
+            _SoftCircle(top: 46, right: -82, size: 164, muted: true),
             _LoginBody(),
           ],
         ),
@@ -34,7 +33,6 @@ class _LoginBodyState extends State<_LoginBody> {
   final _identificationController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Releases text controllers owned by the visible login form.
   @override
   void dispose() {
     _identificationController.dispose();
@@ -42,43 +40,60 @@ class _LoginBodyState extends State<_LoginBody> {
     super.dispose();
   }
 
-  // Temporarily opens the dashboard while authentication is being built.
   void _handleSignIn() {
     FocusScope.of(context).unfocus();
     Navigator.of(context).pushReplacementNamed(RouteNames.home);
   }
 
-  // Opens the existing forgot password route without validating inputs.
   void _openForgotPassword() {
     Navigator.of(context).pushNamed(RouteNames.forgotPassword);
   }
 
-  // Lays out the logo, notice card, and form card responsively.
+  void _openSignup() {
+    Navigator.of(context).pushNamed(RouteNames.signup);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.sizeOf(context).height;
+    final size = MediaQuery.sizeOf(context);
+    final compactHeight = size.height < 720;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(6, screenHeight < 720 ? 28 : 60, 6, 30),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 390),
-          child: Column(
-            children: [
-              const _LogoHeader(),
-              const SizedBox(height: 21),
-              const _NoticePanel(),
-              const SizedBox(height: 8),
-              _LoginFormCard(
-                identificationController: _identificationController,
-                passwordController: _passwordController,
-                onForgotPassword: _openForgotPassword,
-                onSignIn: _handleSignIn,
-              ),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            24,
+            compactHeight ? 22 : 42,
+            24,
+            28 + MediaQuery.paddingOf(context).bottom,
           ),
-        ),
-      ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 50),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 390),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const _LogoHeader(),
+                    SizedBox(height: compactHeight ? 18 : 24),
+                    const _LoginIntro(),
+                    const SizedBox(height: 18),
+                    _LoginFormCard(
+                      identificationController: _identificationController,
+                      passwordController: _passwordController,
+                      onForgotPassword: _openForgotPassword,
+                      onCreateAccount: _openSignup,
+                      onSignIn: _handleSignIn,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -88,36 +103,57 @@ class _LogoHeader extends StatelessWidget {
 
   static const _logoPath = 'assets/images/Login/logo.png';
 
-  // Displays the MindMate logo image from the Login asset folder.
-  @override
-  Widget build(BuildContext context) {
-    return Image.asset(_logoPath, width: 150, height: 150, fit: BoxFit.contain);
-  }
-}
-
-class _NoticePanel extends StatelessWidget {
-  const _NoticePanel();
-
-  // Shows the unofficial-use reminder card below the logo.
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 300,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+      width: 132,
+      height: 132,
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: _LoginColors.notice,
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: _LoginColors.shadow.withAlpha(22),
+            blurRadius: 26,
+            offset: const Offset(0, 14),
+          ),
+        ],
       ),
-      child: const Text(
-        '-- Unofficial --\nRefer to the instructions of UCU-MiS+ FB Page\n+ PACC before using.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: _LoginColors.text,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          height: 1.33,
+      child: Image.asset(_logoPath, fit: BoxFit.contain),
+    );
+  }
+}
+
+class _LoginIntro extends StatelessWidget {
+  const _LoginIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        Text(
+          'Welcome back',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: _LoginColors.text,
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            height: 1.05,
+          ),
         ),
-      ),
+        SizedBox(height: 8),
+        Text(
+          'Sign in to continue your MindMate check-ins.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: _LoginColors.mutedText,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -127,46 +163,53 @@ class _LoginFormCard extends StatelessWidget {
     required this.identificationController,
     required this.passwordController,
     required this.onForgotPassword,
+    required this.onCreateAccount,
     required this.onSignIn,
   });
 
   final TextEditingController identificationController;
   final TextEditingController passwordController;
   final VoidCallback onForgotPassword;
+  final VoidCallback onCreateAccount;
   final VoidCallback onSignIn;
 
-  // Groups all future-login inputs and actions inside one reusable card.
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 346,
-      padding: const EdgeInsets.fromLTRB(24, 28, 16, 40),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
       decoration: BoxDecoration(
         color: _LoginColors.card,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _LoginColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(50),
-            blurRadius: 5,
-            offset: const Offset(0, 3),
+            color: _LoginColors.shadow.withAlpha(18),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const _NoticePanel(),
+          const SizedBox(height: 22),
           _LoginField(
             controller: identificationController,
             label: 'Identification Number',
             assetIconPath: 'assets/images/Login/mail.png',
             keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.next,
           ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 16),
           _LoginField(
             controller: passwordController,
             label: 'Password',
-            icon: Icons.lock_outline,
+            icon: Icons.lock_outline_rounded,
             obscureText: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => onSignIn(),
           ),
           const SizedBox(height: 8),
           Align(
@@ -175,20 +218,76 @@ class _LoginFormCard extends StatelessWidget {
               onPressed: onForgotPassword,
               style: TextButton.styleFrom(
                 foregroundColor: _LoginColors.text,
-                minimumSize: const Size(0, 24),
-                padding: const EdgeInsets.only(right: 6),
+                minimumSize: const Size(0, 34),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: const TextStyle(
-                  fontSize: 9,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              child: const Text('Forgot Password?'),
+              child: const Text('Forgot password?'),
             ),
           ),
-          const SizedBox(height: 13),
+          const SizedBox(height: 14),
           _SignInButton(onPressed: onSignIn),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Flexible(
+                child: Text(
+                  'New to MindMate?',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _LoginColors.mutedText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onCreateAccount,
+                style: TextButton.styleFrom(
+                  foregroundColor: _LoginColors.text,
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                child: const Text('Create account'),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _NoticePanel extends StatelessWidget {
+  const _NoticePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _LoginColors.notice,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text(
+        'Unofficial campus support app. Refer to UCU-MiS+ and PACC instructions before use.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: _LoginColors.text,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          height: 1.35,
+        ),
       ),
     );
   }
@@ -201,7 +300,9 @@ class _LoginField extends StatelessWidget {
     this.assetIconPath,
     this.icon,
     this.keyboardType,
+    this.textInputAction,
     this.obscureText = false,
+    this.onSubmitted,
   }) : assert(assetIconPath != null || icon != null);
 
   final TextEditingController controller;
@@ -209,59 +310,59 @@ class _LoginField extends StatelessWidget {
   final String? assetIconPath;
   final IconData? icon;
   final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
   final bool obscureText;
+  final ValueChanged<String>? onSubmitted;
 
-  // Builds a labeled input with an asset icon and no validation attached.
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 11, bottom: 6),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: _LoginColors.text,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      obscureText: obscureText,
+      onSubmitted: onSubmitted,
+      style: const TextStyle(
+        color: _LoginColors.text,
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: _LoginColors.mutedText,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
         ),
-        SizedBox(
-          height: 29,
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            obscureText: obscureText,
-            style: const TextStyle(fontSize: 13, height: 1),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: EdgeInsets.zero,
-              prefixIcon: _LoginFieldIcon(
-                assetIconPath: assetIconPath,
-                icon: icon,
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 38,
-                minHeight: 29,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(
-                  color: _LoginColors.button,
-                  width: 1.2,
-                ),
-              ),
-            ),
-          ),
+        floatingLabelStyle: const TextStyle(
+          color: _LoginColors.text,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
         ),
-      ],
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 16,
+        ),
+        prefixIcon: _LoginFieldIcon(assetIconPath: assetIconPath, icon: icon),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 48,
+          minHeight: 52,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: _LoginColors.fieldBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: _LoginColors.fieldBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: _LoginColors.primary, width: 1.4),
+        ),
+      ),
     );
   }
 }
@@ -275,13 +376,13 @@ class _LoginFieldIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 6, 9, 6),
+      padding: const EdgeInsets.fromLTRB(15, 14, 10, 14),
       child: assetIconPath == null
-          ? Icon(icon, size: 18, color: _LoginColors.text)
+          ? Icon(icon, size: 20, color: _LoginColors.text)
           : Image.asset(
               assetIconPath!,
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               fit: BoxFit.contain,
             ),
     );
@@ -293,24 +394,25 @@ class _SignInButton extends StatelessWidget {
 
   final VoidCallback onPressed;
 
-  // Renders the sign-in call to action without performing authentication.
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 29,
+      height: 52,
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: _LoginColors.button,
+          backgroundColor: _LoginColors.primary,
           foregroundColor: _LoginColors.text,
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock, size: 13),
+            Icon(Icons.lock_rounded, size: 18),
             SizedBox(width: 10),
             Text('Sign in'),
           ],
@@ -320,96 +422,51 @@ class _SignInButton extends StatelessWidget {
   }
 }
 
-class _BubbleCluster extends StatelessWidget {
-  const _BubbleCluster({this.top, this.left, this.right, required this.mirror});
+class _SoftCircle extends StatelessWidget {
+  const _SoftCircle({
+    this.top,
+    this.left,
+    this.right,
+    required this.size,
+    this.muted = false,
+  });
 
   final double? top;
   final double? left;
   final double? right;
-  final bool mirror;
+  final double size;
+  final bool muted;
 
-  // Positions the decorative bubble cluster around the page corners.
   @override
   Widget build(BuildContext context) {
-    const bubbles = [
-      _BubbleSpec(23, 0, 30, _LoginColors.bubbleYellow),
-      _BubbleSpec(52, 29, 29, _LoginColors.bubbleGray),
-      _BubbleSpec(9, 30, 23, _LoginColors.bubbleYellow),
-      _BubbleSpec(66, 38, 24, _LoginColors.bubbleYellow),
-      _BubbleSpec(35, 52, 20, _LoginColors.bubbleGray),
-      _BubbleSpec(0, 62, 26, _LoginColors.bubbleGray),
-      _BubbleSpec(53, 73, 24, _LoginColors.bubbleYellow),
-      _BubbleSpec(82, 80, 14, _LoginColors.bubbleYellow),
-      _BubbleSpec(28, 98, 17, _LoginColors.bubbleGray),
-      _BubbleSpec(51, 127, 20, _LoginColors.bubbleYellow),
-    ];
-
     return Positioned(
       top: top,
       left: left,
       right: right,
-      child: Transform.scale(
-        scaleX: mirror ? -1 : 1,
-        child: SizedBox(
-          width: 118,
-          height: 153,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [for (final bubble in bubbles) _Bubble(spec: bubble)],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.spec});
-
-  final _BubbleSpec spec;
-
-  // Draws one shadowed circular bubble.
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: spec.left,
-      top: spec.top,
       child: Container(
-        width: spec.size,
-        height: spec.size,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
-          color: spec.color,
           shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(40),
-              blurRadius: 7,
-              offset: const Offset(4, 5),
-            ),
-          ],
+          color: (muted ? _LoginColors.softGreen : _LoginColors.primary)
+              .withAlpha(48),
         ),
       ),
     );
   }
-}
-
-class _BubbleSpec {
-  const _BubbleSpec(this.left, this.top, this.size, this.color);
-
-  final double left;
-  final double top;
-  final double size;
-  final Color color;
 }
 
 class _LoginColors {
   const _LoginColors._();
 
-  static const background = Color(0xFFFEFEFE);
-  static const card = Color(0xFFFFE9AC);
-  static const notice = Color(0xFFFFE292);
-  static const button = Color(0xFFFFBE0A);
-  static const text = Color(0xFF050505);
-  static const bubbleYellow = Color(0xFFFFCF52);
-  static const bubbleGray = Color(0xFFD9D9D9);
+  static const background = Color(0xFFFFFCF4);
+  static const card = Color(0xFFFFFFFF);
+  static const notice = Color(0xFFFFF1C8);
+  static const primary = Color(0xFFFFC944);
+  static const softGreen = Color(0xFFBFE3D6);
+  static const border = Color(0xFFF0E5C8);
+  static const fieldBorder = Color(0xFFE7DDC9);
+  static const text = Color(0xFF17201D);
+  static const mutedText = Color(0xFF66736F);
+  static const shadow = Color(0xFF4B3A12);
 }

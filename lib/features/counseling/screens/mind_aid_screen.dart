@@ -38,6 +38,7 @@ class MindAidScreen extends StatefulWidget {
     this.messages = const [],
     this.suggestions = const [],
     this.disclaimerText,
+    this.isAssistantTyping = false,
     this.onSendMessage,
     this.onSuggestionSelected,
     this.onNotificationTap,
@@ -46,6 +47,7 @@ class MindAidScreen extends StatefulWidget {
   final List<MindAidMessage> messages;
   final List<MindAidSuggestion> suggestions;
   final String? disclaimerText;
+  final bool isAssistantTyping;
   final ValueChanged<String>? onSendMessage;
   final ValueChanged<MindAidSuggestion>? onSuggestionSelected;
   final VoidCallback? onNotificationTap;
@@ -110,6 +112,7 @@ class _MindAidScreenState extends State<MindAidScreen> {
                 child: _MindAidConversation(
                   messages: widget.messages,
                   suggestions: widget.suggestions,
+                  isAssistantTyping: widget.isAssistantTyping,
                   disclaimerText: widget.disclaimerText,
                   onSuggestionSelected: widget.onSuggestionSelected,
                 ),
@@ -242,12 +245,14 @@ class _MindAidConversation extends StatelessWidget {
   const _MindAidConversation({
     required this.messages,
     required this.suggestions,
+    required this.isAssistantTyping,
     required this.disclaimerText,
     required this.onSuggestionSelected,
   });
 
   final List<MindAidMessage> messages;
   final List<MindAidSuggestion> suggestions;
+  final bool isAssistantTyping;
   final String? disclaimerText;
   final ValueChanged<MindAidSuggestion>? onSuggestionSelected;
 
@@ -259,15 +264,18 @@ class _MindAidConversation extends StatelessWidget {
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-          sliver: messages.isEmpty
+          sliver: messages.isEmpty && !isAssistantTyping
               ? const SliverFillRemaining(
                   hasScrollBody: false,
                   child: _EmptyConversationSpace(),
                 )
               : SliverList.separated(
-                  itemCount: messages.length,
+                  itemCount: messages.length + (isAssistantTyping ? 1 : 0),
                   separatorBuilder: (_, _) => const SizedBox(height: 18),
                   itemBuilder: (context, index) {
+                    if (index == messages.length) {
+                      return const _TypingBubble();
+                    }
                     return _MessageBubble(message: messages[index]);
                   },
                 ),
@@ -284,6 +292,39 @@ class _MindAidConversation extends StatelessWidget {
             child: _DisclaimerPanel(text: disclaimerText!.trim()),
           ),
       ],
+    );
+  }
+}
+
+class _TypingBubble extends StatelessWidget {
+  const _TypingBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: _MindAidColors.aiBubble,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(16),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x20000000),
+              blurRadius: 8,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(14, 12, 14, 10),
+          child: Text('MindAid is thinking...', style: _MindAidText.status),
+        ),
+      ),
     );
   }
 }

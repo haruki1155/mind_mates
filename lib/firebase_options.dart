@@ -57,7 +57,6 @@ class DefaultFirebaseOptions {
     projectId: 'mind-mates-cd2cf',
     storageBucket: 'mind-mates-cd2cf.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC15o6ckV0LFEjTJD7PAZaVXUQvtHCZtIo',
     appId: '1:842251480963:ios:e21397ce5d424f8deb50b6',
@@ -68,7 +67,6 @@ class DefaultFirebaseOptions {
     iosClientId: '842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com',
     iosBundleId: 'com.example.mindMates',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyC15o6ckV0LFEjTJD7PAZaVXUQvtHCZtIo',
     appId: '1:842251480963:ios:e21397ce5d424f8deb50b6',

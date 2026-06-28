@@ -1,0 +1,105 @@
+﻿{
+    "version":  1,
+    "sourceDatasetId":  "mindmate_supportive_guidance_dataset",
+    "sourceVersion":  "1.0.1",
+    "records":  [
+                    {
+                        "id":  "safety_self_harm_crisis_001",
+                        "intent":  "self_harm_or_suicide_concern",
+                        "category":  "crisis_safety",
+                        "keywords":  [
+                                         "self harm",
+                                         "suicide",
+                                         "kill myself",
+                                         "end my life",
+                                         "hurt myself",
+                                         "crisis",
+                                         "hopeless",
+                                         "unsafe",
+                                         "Self-Harm or Suicide Concern",
+                                         "crisis_safety",
+                                         "crisis_support"
+                                     ],
+                        "phrases":  [
+                                        "self harm",
+                                        "kill myself",
+                                        "end my life",
+                                        "hurt myself",
+                                        "Self-Harm or Suicide Concern"
+                                    ],
+                        "severity":  "crisis",
+                        "riskFlags":  [
+                                          "self_harm",
+                                          "suicidal_ideation"
+                                      ],
+                        "responses":  [
+                                          "I am really sorry you are feeling this much pain. Your safety matters right now. Please contact emergency services, go to the nearest emergency room, or reach out to a trusted person near you immediately. If this is happening inside the university, contact the guidance office, clinic, or security office right away."
+                                      ],
+                        "copingSteps":  [
+                                            "safety_reach_out",
+                                            "grounding_5_4_3_2_1"
+                                        ],
+                        "recommendations":  [
+                                                "resource_crisis_safety",
+                                                "urgent-support",
+                                                "pacc-counseling"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Are you somewhere safe right now?",
+                                                  "Can you contact a trusted person or campus support immediately?"
+                                              ],
+                        "escalation":  {
+                                           "required":  true,
+                                           "message":  "This may need immediate human support. Please contact PACC Counseling Services, a trusted person, or local emergency services if there is immediate danger."
+                                       }
+                    },
+                    {
+                        "id":  "safety_abuse_or_violence_001",
+                        "intent":  "abuse_harassment_or_violence",
+                        "category":  "personal_safety",
+                        "keywords":  [
+                                         "abuse",
+                                         "harassment",
+                                         "threatened",
+                                         "violence",
+                                         "unsafe at home",
+                                         "unsafe relationship",
+                                         "assault",
+                                         "Abuse, Harassment, or Violence",
+                                         "personal_safety",
+                                         "safety_support"
+                                     ],
+                        "phrases":  [
+                                        "unsafe at home",
+                                        "unsafe relationship",
+                                        "Abuse, Harassment, or Violence"
+                                    ],
+                        "severity":  "high",
+                        "riskFlags":  [
+                                          "violence",
+                                          "abuse",
+                                          "safety_risk"
+                                      ],
+                        "responses":  [
+                                          "Your safety comes first. If someone may hurt you or you are in immediate danger, move to a safer place if possible and contact emergency services or a trusted authority. You deserve protection and support without blame."
+                                      ],
+                        "copingSteps":  [
+                                            "safety_reach_out",
+                                            "grounding_5_4_3_2_1"
+                                        ],
+                        "recommendations":  [
+                                                "resource_personal_safety",
+                                                "urgent-support",
+                                                "pacc-counseling"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Are you somewhere safe right now?",
+                                                  "Can you contact a trusted person or campus support immediately?"
+                                              ],
+                        "escalation":  {
+                                           "required":  true,
+                                           "message":  "This may need immediate human support. Please contact PACC Counseling Services, a trusted person, or local emergency services if there is immediate danger."
+                                       }
+                    }
+                ]
+}

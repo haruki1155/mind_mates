@@ -17,30 +17,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingData(
       title: 'Track Your Mind Rhythm',
       description:
-          'Monitor your emotional cycle with our 28-day Mind Rhythm Ring. Understand your patterns and gain insights into your mental wellbeing.',
+          'Notice emotional patterns over time and understand what your day is trying to tell you.',
       iconPath: 'assets/images/ONBOARDING_1/Target.png',
-      iconWidth: 96,
+      accentColor: Color(0xFFFFC944),
     ),
     _OnboardingData(
-      title: 'Express Your Thoughts',
+      title: 'Share What Feels Heavy',
       description:
-          'Share your feelings privately in Secret Thoughts. Post, reflect, and comment on your journey in a safe, judgment-free space.',
+          'Write private reflections or anonymous thoughts in a space built for honesty and care.',
       iconPath: 'assets/images/ONBOARDING_2/Thought Balloon.png',
-      iconWidth: 102,
+      accentColor: Color(0xFFBFE3D6),
     ),
     _OnboardingData(
-      title: 'Daily Mind Quests',
+      title: 'Build Gentle Habits',
       description:
-          'Complete personalized daily quests to build healthy habits. Earn rewards and watch your Mood Pet grow with you!',
+          'Try small daily quests that make emotional check-ins feel possible, not overwhelming.',
       iconPath: 'assets/images/ONBOARDING_3/Creativity.png',
-      iconWidth: 104,
+      accentColor: Color(0xFFFFDFA0),
     ),
     _OnboardingData(
-      title: 'Express Your Thoughts',
+      title: 'Find Support Sooner',
       description:
-          'Share your feelings privately in Secret Thoughts. Post, reflect, and comment on your journey in a safe, judgment-free space.',
+          'Reach campus resources, counseling help, and calming tools when you need someone beside you.',
       iconPath: 'assets/images/ONBOARDING_4/ONBOARDING 4/Sparkling.png',
-      iconWidth: 104,
+      accentColor: Color(0xFFD9D2F2),
     ),
   ];
 
@@ -64,21 +64,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFEFEFE),
+      backgroundColor: _OnboardingColors.background,
       body: SafeArea(
         child: Stack(
           children: [
-            const _BubbleCluster(
-              top: -18,
-              left: -16,
-              mirror: false,
-            ),
-            const _BubbleCluster(
-              top: 52,
-              right: -9,
-              mirror: true,
-            ),
+            const _SoftCircle(top: -72, left: -80, size: 190),
+            const _SoftCircle(top: 32, right: -76, size: 148, muted: true),
             PageView.builder(
               controller: _pageController,
               itemCount: _pages.length,
@@ -88,12 +82,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   animation: _pageController,
                   builder: (context, child) {
                     double delta = 0;
-                    if (_pageController.hasClients && _pageController.page != null) {
+                    if (_pageController.hasClients &&
+                        _pageController.page != null) {
                       delta = (_pageController.page! - index).clamp(-1.0, 1.0);
                     }
 
                     return Opacity(
-                      opacity: 1 - (delta.abs() * 0.18),
+                      opacity: 1 - (delta.abs() * 0.12),
                       child: Transform.translate(
                         offset: Offset(delta * -18, 0),
                         child: child,
@@ -107,17 +102,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 0, 0, 48),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _PageIndicator(
-                      count: _pages.length,
-                      currentIndex: _currentPage,
-                    ),
-                    const SizedBox(height: 26),
-                    _NextButton(onPressed: _next),
-                  ],
+                padding: EdgeInsets.fromLTRB(28, 0, 28, 22 + bottomPadding),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PageIndicator(
+                        count: _pages.length,
+                        currentIndex: _currentPage,
+                      ),
+                      const SizedBox(height: 22),
+                      _NextButton(
+                        label: _currentPage == _pages.length - 1
+                            ? 'Start checking in'
+                            : 'Next',
+                        onPressed: _next,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -136,85 +139,82 @@ class _OnboardingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final contentWidth = size.width.clamp(0, 360).toDouble();
+    final compactHeight = size.height < 700;
+    final illustrationSize = compactHeight ? 158.0 : 188.0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 34),
-      child: Column(
-        children: [
-          SizedBox(height: size.height * 0.24),
-          _IllustrationBadge(data: data),
-          SizedBox(height: size.height * 0.078),
-          SizedBox(
-            width: contentWidth,
-            child: Text(
-              data.title,
-              textAlign: TextAlign.left,
-              style: const TextStyle(
-                color: Color(0xFF050505),
-                fontSize: 23,
-                fontWeight: FontWeight.w900,
-                height: 1.05,
+      padding: const EdgeInsets.fromLTRB(30, 24, 30, 128),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _IllustrationBadge(data: data, size: illustrationSize),
+              SizedBox(height: compactHeight ? 34 : 48),
+              Text(
+                data.title,
+                textAlign: TextAlign.left,
+                style: const TextStyle(
+                  color: _OnboardingColors.text,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  height: 1.05,
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: contentWidth - 32,
-            child: Text(
-              data.description,
-              textAlign: TextAlign.left,
-              style: const TextStyle(
-                color: Color(0xFF111111),
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-                height: 1.35,
+              const SizedBox(height: 14),
+              Text(
+                data.description,
+                textAlign: TextAlign.left,
+                style: const TextStyle(
+                  color: _OnboardingColors.mutedText,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  height: 1.48,
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _IllustrationBadge extends StatelessWidget {
-  const _IllustrationBadge({required this.data});
+  const _IllustrationBadge({required this.data, required this.size});
 
   final _OnboardingData data;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 166,
-      height: 166,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFFFBE0A),
-            Color(0xFFFFD754),
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        width: size,
+        height: size,
+        padding: EdgeInsets.all(size * 0.2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: data.accentColor,
+          boxShadow: [
+            BoxShadow(
+              color: data.accentColor.withAlpha(84),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
+            ),
           ],
         ),
-      ),
-      child: Center(
-        child: Image.asset(
-          data.iconPath,
-          width: data.iconWidth,
-          fit: BoxFit.contain,
-        ),
+        child: Image.asset(data.iconPath, fit: BoxFit.contain),
       ),
     );
   }
 }
 
 class _PageIndicator extends StatelessWidget {
-  const _PageIndicator({
-    required this.count,
-    required this.currentIndex,
-  });
+  const _PageIndicator({required this.count, required this.currentIndex});
 
   final int count;
   final int currentIndex;
@@ -229,20 +229,14 @@ class _PageIndicator extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 2.5),
-          width: isActive ? 30 : 8,
-          height: 7,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isActive ? 28 : 8,
+          height: 8,
           decoration: BoxDecoration(
-            color: isActive ? const Color(0xFFFFBE0A) : const Color(0xFF686868),
+            color: isActive
+                ? _OnboardingColors.primary
+                : _OnboardingColors.indicatorMuted,
             borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              if (isActive)
-                BoxShadow(
-                  color: const Color(0xFFFFBE0A).withAlpha(82),
-                  blurRadius: 7,
-                  offset: const Offset(0, 3),
-                ),
-            ],
           ),
         );
       }),
@@ -251,138 +245,73 @@ class _PageIndicator extends StatelessWidget {
 }
 
 class _NextButton extends StatelessWidget {
-  const _NextButton({required this.onPressed});
+  const _NextButton({required this.label, required this.onPressed});
 
+  final String label;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 216,
-      height: 37,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(35),
-              blurRadius: 8,
-              offset: const Offset(0, 5),
-            ),
-          ],
+      width: double.infinity,
+      height: 52,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: _OnboardingColors.primary,
+          foregroundColor: _OnboardingColors.text,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
         ),
-        child: FilledButton(
-          onPressed: onPressed,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFFFBE0A),
-            foregroundColor: Colors.black,
-            padding: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            textStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Next'),
-              SizedBox(width: 7),
-              Icon(Icons.chevron_right_rounded, size: 20),
-            ],
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_rounded, size: 20),
+          ],
         ),
       ),
     );
   }
 }
 
-class _BubbleCluster extends StatelessWidget {
-  const _BubbleCluster({
+class _SoftCircle extends StatelessWidget {
+  const _SoftCircle({
     this.top,
     this.left,
     this.right,
-    required this.mirror,
+    required this.size,
+    this.muted = false,
   });
 
   final double? top;
   final double? left;
   final double? right;
-  final bool mirror;
-
-  static const _yellow = Color(0xFFFFCF52);
-  static const _gray = Color(0xFFD9D9D9);
+  final double size;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    final bubbles = [
-      _BubbleSpec(18, 0, 31, _yellow),
-      _BubbleSpec(43, 9, 28, _gray),
-      _BubbleSpec(6, 36, 28, _yellow),
-      _BubbleSpec(59, 48, 22, _gray),
-      _BubbleSpec(28, 67, 16, _gray),
-      _BubbleSpec(72, 82, 20, _yellow),
-      _BubbleSpec(1, 91, 25, _yellow),
-      _BubbleSpec(51, 111, 15, _gray),
-      _BubbleSpec(75, 127, 17, _yellow),
-    ];
-
     return Positioned(
       top: top,
       left: left,
       right: right,
-      child: Transform.scale(
-        scaleX: mirror ? -1 : 1,
-        scaleY: 1,
-        child: SizedBox(
-          width: 118,
-          height: 158,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: bubbles.map((bubble) => _Bubble(spec: bubble)).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.spec});
-
-  final _BubbleSpec spec;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: spec.left,
-      top: spec.top,
       child: Container(
-        width: spec.size,
-        height: spec.size,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
-          color: spec.color,
           shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(spec.color == const Color(0xFFD9D9D9) ? 42 : 28),
-              blurRadius: 7,
-              offset: const Offset(3, 4),
-            ),
-          ],
+          color:
+              (muted ? _OnboardingColors.softGreen : _OnboardingColors.primary)
+                  .withAlpha(50),
         ),
       ),
     );
   }
-}
-
-class _BubbleSpec {
-  const _BubbleSpec(this.left, this.top, this.size, this.color);
-
-  final double left;
-  final double top;
-  final double size;
-  final Color color;
 }
 
 class _OnboardingData {
@@ -390,11 +319,22 @@ class _OnboardingData {
     required this.title,
     required this.description,
     required this.iconPath,
-    required this.iconWidth,
+    required this.accentColor,
   });
 
   final String title;
   final String description;
   final String iconPath;
-  final double iconWidth;
+  final Color accentColor;
+}
+
+class _OnboardingColors {
+  const _OnboardingColors._();
+
+  static const background = Color(0xFFFFFCF4);
+  static const primary = Color(0xFFFFC944);
+  static const softGreen = Color(0xFFBFE3D6);
+  static const text = Color(0xFF17201D);
+  static const mutedText = Color(0xFF66736F);
+  static const indicatorMuted = Color(0xFFE2DDD1);
 }

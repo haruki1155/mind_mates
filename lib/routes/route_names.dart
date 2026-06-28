@@ -9,5 +9,6 @@ class RouteNames {
   static const home = '/home';
   static const services = '/services';
   static const mindAid = '/mind-aid';
+  static const secretChat = '/secret-chat';
   static const profile = '/profile';
 }

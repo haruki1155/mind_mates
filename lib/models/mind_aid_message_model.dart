@@ -1,7 +1,7 @@
 class MindAidMessageModel {
   final String id;
   final String conversationId;
-  final String sender; // user | bot
+  final String sender; // user | assistant
   final String text;
   final DateTime createdAt;
   final String status;

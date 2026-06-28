@@ -1,0 +1,197 @@
+﻿{
+    "version":  1,
+    "records":  [
+                    {
+                        "id":  "pacc-counseling",
+                        "title":  "PACC Counseling Services",
+                        "description":  "Professional mental health support and guidance.",
+                        "routeName":  "/services",
+                        "tags":  [
+                                     "support",
+                                     "counseling",
+                                     "pacc"
+                                 ]
+                    },
+                    {
+                        "id":  "urgent-support",
+                        "title":  "Urgent support",
+                        "description":  "Contact immediate human support when safety may be at risk.",
+                        "routeName":  "/services",
+                        "tags":  [
+                                     "crisis",
+                                     "safety",
+                                     "urgent"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_academic_wellbeing",
+                        "title":  "academic wellbeing",
+                        "description":  "Supportive guidance and coping prompts for academic wellbeing.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "academic_wellbeing",
+                                     "academic_wellbeing"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_general_support",
+                        "title":  "general support",
+                        "description":  "Supportive guidance and coping prompts for general support.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "general_support",
+                                     "general_support"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_social_relationships",
+                        "title":  "social relationships",
+                        "description":  "Supportive guidance and coping prompts for social relationships.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "social_relationships",
+                                     "social_relationships"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_self_worth_and_confidence",
+                        "title":  "self worth and confidence",
+                        "description":  "Supportive guidance and coping prompts for self worth and confidence.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "self_worth_and_confidence",
+                                     "self_worth_and_confidence"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_stress_and_recovery",
+                        "title":  "stress and recovery",
+                        "description":  "Supportive guidance and coping prompts for stress and recovery.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "stress_and_recovery",
+                                     "stress_and_recovery"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_emotional_wellbeing",
+                        "title":  "emotional wellbeing",
+                        "description":  "Supportive guidance and coping prompts for emotional wellbeing.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "emotional_wellbeing",
+                                     "emotional_wellbeing"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_workplace_wellbeing",
+                        "title":  "workplace wellbeing",
+                        "description":  "Supportive guidance and coping prompts for workplace wellbeing.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "workplace_wellbeing",
+                                     "workplace_wellbeing"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_crisis_safety",
+                        "title":  "crisis safety",
+                        "description":  "Supportive guidance and coping prompts for crisis safety.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "crisis_safety",
+                                     "crisis_safety"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_acute_anxiety",
+                        "title":  "acute anxiety",
+                        "description":  "Supportive guidance and coping prompts for acute anxiety.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "acute_anxiety",
+                                     "acute_anxiety"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_mood_support",
+                        "title":  "mood support",
+                        "description":  "Supportive guidance and coping prompts for mood support.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "mood_support",
+                                     "mood_support"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_trauma_support",
+                        "title":  "trauma support",
+                        "description":  "Supportive guidance and coping prompts for trauma support.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "trauma_support",
+                                     "trauma_support"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_personal_safety",
+                        "title":  "personal safety",
+                        "description":  "Supportive guidance and coping prompts for personal safety.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "personal_safety",
+                                     "personal_safety"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_social_safety",
+                        "title":  "social safety",
+                        "description":  "Supportive guidance and coping prompts for social safety.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "social_safety",
+                                     "social_safety"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_coping_and_substance_use",
+                        "title":  "coping and substance use",
+                        "description":  "Supportive guidance and coping prompts for coping and substance use.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "coping_and_substance_use",
+                                     "coping_and_substance_use"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_grief_and_loss",
+                        "title":  "grief and loss",
+                        "description":  "Supportive guidance and coping prompts for grief and loss.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "grief_and_loss",
+                                     "grief_and_loss"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_anxiety_and_performance",
+                        "title":  "anxiety and performance",
+                        "description":  "Supportive guidance and coping prompts for anxiety and performance.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "anxiety_and_performance",
+                                     "anxiety_and_performance"
+                                 ]
+                    },
+                    {
+                        "id":  "resource_adjustment_and_transition",
+                        "title":  "adjustment and transition",
+                        "description":  "Supportive guidance and coping prompts for adjustment and transition.",
+                        "routeName":  "",
+                        "tags":  [
+                                     "adjustment_and_transition",
+                                     "adjustment_and_transition"
+                                 ]
+                    }
+                ]
+}

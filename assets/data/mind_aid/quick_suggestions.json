@@ -1,0 +1,30 @@
+﻿{
+    "version":  1,
+    "records":  [
+                    {
+                        "id":  "academic_stress",
+                        "label":  "Academic Stress",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "examination_anxiety",
+                        "label":  "Examination Anxiety",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "burnout",
+                        "label":  "Burnout",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "loneliness",
+                        "label":  "Loneliness",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "self_harm_or_suicide_concern",
+                        "label":  "Self-Harm or Suicide Concern",
+                        "iconAsset":  ""
+                    }
+                ]
+}

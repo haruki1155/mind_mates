@@ -1,0 +1,45 @@
+﻿{
+    "version":  1,
+    "records":  [
+                    {
+                        "id":  "two_minute_breathing",
+                        "title":  "Two-minute breathing reset",
+                        "description":  "Breathe in for four counts, hold for two, and breathe out for six. Repeat five times."
+                    },
+                    {
+                        "id":  "grounding_5_4_3_2_1",
+                        "title":  "5-4-3-2-1 grounding",
+                        "description":  "Name five things you see, four you feel, three you hear, two you smell, and one you taste."
+                    },
+                    {
+                        "id":  "task_breakdown",
+                        "title":  "One-task reset",
+                        "description":  "Write the next task as one tiny action that can be started in less than five minutes."
+                    },
+                    {
+                        "id":  "body_check",
+                        "title":  "Body check",
+                        "description":  "Notice your breathing, shoulders, hands, and jaw. Relax one area at a time."
+                    },
+                    {
+                        "id":  "rest_plan",
+                        "title":  "Rest plan",
+                        "description":  "Choose one short, realistic recovery action before returning to responsibilities."
+                    },
+                    {
+                        "id":  "reach_one_person",
+                        "title":  "Reach one person",
+                        "description":  "Send one honest message to someone safe or sit near supportive people."
+                    },
+                    {
+                        "id":  "reach_support_service",
+                        "title":  "Reach support service",
+                        "description":  "Consider contacting PACC or another trusted support service for guided help."
+                    },
+                    {
+                        "id":  "safety_reach_out",
+                        "title":  "Reach immediate support",
+                        "description":  "Move near a safe person or contact emergency, campus, or trusted support immediately."
+                    }
+                ]
+}

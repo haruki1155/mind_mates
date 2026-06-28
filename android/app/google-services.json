@@ -37,6 +37,13 @@
             {
               "client_id": "842251480963-csirkeh4ah6a02sg89id6qfkr41rrk91.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.mindMates"
+              }
             }
           ]
         }

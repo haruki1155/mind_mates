@@ -7,7 +7,10 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
-  firebase_core: ^4.10.0
+  cloud_firestore: ^6.6.0
+  firebase_auth: ^6.5.4
+  firebase_core: ^4.11.0
+  firebase_storage: ^13.4.3
   flutter:
     sdk: flutter
   provider: ^6.1.5+1
@@ -21,6 +24,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/Login/
+    - assets/images/Create Account/
     - assets/images/ONBOARDING_1/
     - assets/images/ONBOARDING_2/
     - assets/images/ONBOARDING_3/
@@ -29,3 +33,5 @@ flutter:
     - assets/images/SERVICES/
     - assets/images/MESSAGE/
     - assets/images/PROFILE 1/
+    - assets/images/SECRET CHAT/
+    - assets/data/mind_aid/

@@ -30,6 +30,7 @@ class _MindAidPageState extends State<MindAidPage> {
     return MindAidScreen(
       messages: provider.messages,
       suggestions: provider.suggestions,
+      isAssistantTyping: provider.isSending,
       onSendMessage: (text) {
         provider.sendMessage(userId, text);
       },

@@ -1,0 +1,2062 @@
+{
+  "datasetId": "mindmate_supportive_guidance_dataset",
+  "datasetName": "MindMate AI Chatbot Supportive Guidance Dataset",
+  "version": "1.0.1",
+  "language": "en",
+  "localeCountry": "PH",
+  "lastUpdated": "2026-06-27",
+  "sourceDocument": "FOr ai CHat bot(1).docx",
+  "intendedUse": "Grounding/retrieval dataset for a university mental-health supportive chatbot. Not a diagnostic tool.",
+  "safetyNotice": "This chatbot should not diagnose, treat, or replace licensed mental-health professionals. High-risk messages should trigger human handoff or emergency guidance.",
+  "severityDefinitions": {
+    "low": "Everyday stress or emotional concern; self-help guidance may be appropriate.",
+    "moderate": "Ongoing or distressing concern; encourage trusted support or counselor contact.",
+    "high": "Safety, abuse, severe impairment, or urgent concern; human handoff recommended.",
+    "imminent": "Immediate self-harm/violence/emergency risk; emergency response required."
+  },
+  "triageActions": [
+    "self_help",
+    "seek_support",
+    "professional_help",
+    "urgent_help",
+    "emergency"
+  ],
+  "entries": [
+    {
+      "id": "student_academic_stress_001",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Academic Stress",
+      "keywords": [
+        "academic stress",
+        "academic",
+        "stress"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "It sounds like you're carrying a lot of academic responsibilities right now, and that can be exhausting. Many students experience stress when balancing assignments, projects, deadlines, and personal responsibilities. Remember that feeling stressed does not mean you are incapable-it often means you are trying your best to meet important goals. Take things one step at a time, celebrate even small accomplishments, and give yourself credit for the effort you have already made. Progress is built through consistent effort, not perfection.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), stress can affect concentration, motivation, and emotional well-being, making self-care and stress management important for maintaining mental health. Source: WHO (2022) https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health Strengthening Our Response",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), stress can affect concentration, motivation, and emotional well-being, making self-care and stress management important for maintaining mental health. Source: WHO (2022) https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_examination_anxiety_002",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Examination Anxiety",
+      "keywords": [
+        "examination anxiety",
+        "examination",
+        "anxiety"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Feeling nervous before an examination is completely normal. In fact, many students experience anxiety because they care about doing well and achieving their goals. While exams may feel overwhelming, they do not define your intelligence, worth, or future success. Focus on the preparation you have already completed and remind yourself that doing your best is enough. Trust in the effort you have invested and approach the examination one question at a time.",
+      "evidenceSummary": "The American Psychological Association (APA, 2023) explains that moderate anxiety can encourage preparation and focus, while healthy coping strategies can help reduce excessive worry. Source: APA (2023) https://www.apa.org/topics/anxiety",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Anxiety",
+          "url": "https://www.apa.org/topics/anxiety",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "The American Psychological Association (APA, 2023) explains that moderate anxiety can encourage preparation and focus, while healthy coping strategies can help reduce excessive worry. Source: APA (2023) https://www.apa.org/topics/anxiety"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_financial_stress_004",
+      "audience": [
+        "student"
+      ],
+      "domain": "general_support",
+      "topic": "Financial Stress",
+      "keywords": [
+        "financial stress",
+        "financial",
+        "stress"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Financial concerns can create significant pressure and uncertainty, and it is understandable if these challenges are affecting your peace of mind. Remember that financial difficulties are circumstances you are experiencing-they do not define your value, potential, or future. Many people face financial struggles at different stages of life. Focus on the steps you can take today, seek support when needed, and remind yourself that difficult situations can improve over time.",
+      "evidenceSummary": "According to the World Health Organization (2022), financial pressures are among the common sources of stress that may affect emotional well-being. Source: WHO (2022) https://www.who.int/news-room/questions-and-answers/item/stress",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Stress",
+          "url": "https://www.who.int/news-room/questions-and-answers/item/stress",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (2022), financial pressures are among the common sources of stress that may affect emotional well-being. Source: WHO (2022) https://www.who.int/news-room/questions-and-answers/item/stress"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_lack_of_motivation_005",
+      "audience": [
+        "student"
+      ],
+      "domain": "general_support",
+      "topic": "Lack of Motivation",
+      "keywords": [
+        "lack of motivation",
+        "lack",
+        "motivation"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "There are days when motivation feels difficult to find, and that's completely okay. Motivation naturally rises and falls, especially during periods of stress, fatigue, or emotional strain. You do not have to feel motivated all the time to make progress. Sometimes, simply taking one small step forward is already an accomplishment. Be patient with yourself and remember that consistency often matters more than motivation.",
+      "evidenceSummary": "The American Psychological Association (2023) notes that motivation can fluctuate due to stress and emotional concerns, and small achievements can help rebuild confidence and momentum. Source: APA (2023) https://www.apa.org/topics/stress/health",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Health",
+          "url": "https://www.apa.org/topics/stress/health",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "The American Psychological Association (2023) notes that motivation can fluctuate due to stress and emotional concerns, and small achievements can help rebuild confidence and momentum. Source: APA (2023) https://www.apa.org/topics/stress/health"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_loneliness_007",
+      "audience": [
+        "student"
+      ],
+      "domain": "social_relationships",
+      "topic": "Loneliness",
+      "keywords": [
+        "loneliness"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Feeling lonely can be difficult, and it is important to know that your feelings are valid. Loneliness does not mean something is wrong with you-it simply reflects a human need for connection and belonging. While it may feel isolating right now, meaningful connections often begin through small conversations, shared experiences, or reaching out to trusted individuals. You do not have to carry everything on your own.",
+      "evidenceSummary": "The Psychological Association of the Philippines (PAP, 2023) highlights the importance of social support and meaningful relationships in strengthening emotional resilience. Source: PAP (2023) https://www.pap.ph/assets/files/journals/development-and-initial-evaluation-of-the-resiliencefocused-family-psychoeducation-rffp.pdf",
+      "sources": [
+        {
+          "publisher": "PAP",
+          "year": "2023",
+          "title": "Development And Initial Evaluation Of The Resiliencefocused Family Psychoeducation Rffp.Pdf",
+          "url": "https://www.pap.ph/assets/files/journals/development-and-initial-evaluation-of-the-resiliencefocused-family-psychoeducation-rffp.pdf",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "The Psychological Association of the Philippines (PAP, 2023) highlights the importance of social support and meaningful relationships in strengthening emotional resilience. Source: PAP (2023) https://www.pap.ph/assets/files/journals/development-and-initial-evaluation-of-the-resiliencefocused-family-psychoeducation-rffp.pdf"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_social_isolation_008",
+      "audience": [
+        "student"
+      ],
+      "domain": "social_relationships",
+      "topic": "Social Isolation",
+      "keywords": [
+        "social isolation",
+        "social",
+        "isolation"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Spending long periods feeling disconnected from others can affect emotional well-being. Human beings naturally seek connection, support, and understanding from people around them. Even small interactions with friends, family members, classmates, or colleagues can positively impact emotional health. Remember that reaching out is a sign of strength, not weakness.",
+      "evidenceSummary": "The World Health Organization (2022) recognizes social support as an important protective factor for mental well-being. Source: WHO (2022) https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health Strengthening Our Response",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "The World Health Organization (2022) recognizes social support as an important protective factor for mental well-being. Source: WHO (2022) https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_self_doubt_010",
+      "audience": [
+        "student"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Self-Doubt",
+      "keywords": [
+        "self-doubt",
+        "self",
+        "doubt"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Many people experience moments where they question their abilities, decisions, or potential. Experiencing self-doubt does not mean you are incapable-it often means you care deeply about doing well. Try to remember the challenges you have already overcome and the progress you have made so far. Growth comes through learning and persistence, not through perfection. Trust yourself and give yourself the same kindness you would offer a friend.",
+      "evidenceSummary": "According to the American Psychological Association (2023), self-confidence develops through experience, learning, and perseverance rather than flawless performance. https://www.apa.org/research-practice/conduct-research/self-efficacy-human-agency",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Self Efficacy Human Agency",
+          "url": "https://www.apa.org/research-practice/conduct-research/self-efficacy-human-agency",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (2023), self-confidence develops through experience, learning, and perseverance rather than flawless performance. https://www.apa.org/research-practice/conduct-research/self-efficacy-human-agency"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_fear_of_failure_011",
+      "audience": [
+        "student"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Fear of Failure",
+      "keywords": [
+        "fear of failure",
+        "fear",
+        "failure"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "It can be frightening to think about making mistakes or not meeting expectations, especially when something is important to you. However, every successful person has experienced setbacks and challenges along the way. Failure does not define your abilities-it provides opportunities to learn, improve, and grow. Instead of focusing on what might go wrong, try to recognize the effort you are making and the lessons you are gaining from every experience.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), setbacks and challenges are normal parts of growth and adaptation, and resilience can be developed through learning from difficult experiences. https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health Strengthening Our Response",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), setbacks and challenges are normal parts of growth and adaptation, and resilience can be developed through learning from difficult experiences. https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_workplace_stress_012",
+      "audience": [
+        "student"
+      ],
+      "domain": "general_support",
+      "topic": "Workplace Stress",
+      "keywords": [
+        "workplace stress",
+        "workplace",
+        "stress"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Managing responsibilities at work can sometimes feel exhausting, especially when deadlines, expectations, and multiple tasks compete for your attention. It is okay to acknowledge when you feel stressed. Remember that your value is not measured solely by productivity. Taking care of yourself and recognizing your accomplishments are important parts of maintaining balance and well-being.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), workload demands, deadlines, and role responsibilities are among the most common contributors to workplace stress and emotional strain. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health At Work",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), workload demands, deadlines, and role responsibilities are among the most common contributors to workplace stress and emotional strain. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_burnout_013",
+      "audience": [
+        "student"
+      ],
+      "domain": "stress_and_recovery",
+      "topic": "Burnout",
+      "keywords": [
+        "burnout"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "You may have been giving so much of your time and energy to your responsibilities that you have forgotten to care for yourself. Feeling emotionally drained or exhausted can be a sign that your mind and body need rest. Taking a break does not mean you are weak or unproductive-it means you are taking care of yourself so you can continue moving forward in a healthier way.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), burnout is associated with chronic stress that has not been successfully managed and may affect emotional, mental, and physical well-being. https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Burn Out An Occupational Phenomenon",
+          "url": "https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), burnout is associated with chronic stress that has not been successfully managed and may affect emotional, mental, and physical well-being. https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_difficulty_sleeping_014",
+      "audience": [
+        "student"
+      ],
+      "domain": "stress_and_recovery",
+      "topic": "Difficulty Sleeping",
+      "keywords": [
+        "difficulty sleeping",
+        "difficulty",
+        "sleeping"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Sleep difficulties can be frustrating, especially when your mind feels busy with worries or responsibilities. Remember that your body and mind need adequate rest to function at their best. Establishing healthy routines and creating moments of relaxation before bedtime may help improve sleep quality over time.",
+      "evidenceSummary": "According to the National Institute of Mental Health (NIMH, 2023), stress, anxiety, and emotional concerns can affect sleeping patterns and overall well-being. https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+      "sources": [
+        {
+          "publisher": "NIMH",
+          "year": "2023",
+          "title": "Caring For Your Mental Health",
+          "url": "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the National Institute of Mental Health (NIMH, 2023), stress, anxiety, and emotional concerns can affect sleeping patterns and overall well-being. https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_fatigue_015",
+      "audience": [
+        "student"
+      ],
+      "domain": "stress_and_recovery",
+      "topic": "Fatigue",
+      "keywords": [
+        "fatigue"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Feeling constantly tired can affect your energy, concentration, and motivation. Sometimes fatigue is your body's way of telling you that it needs rest and recovery. Allow yourself time to recharge and remember that taking care of your well-being is an important responsibility, not a luxury.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), adequate rest and healthy routines play an important role in maintaining physical and emotional wellness. https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Self Care Health Interventions",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), adequate rest and healthy routines play an important role in maintaining physical and emotional wellness. https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_feeling_angry_017",
+      "audience": [
+        "student"
+      ],
+      "domain": "emotional_wellbeing",
+      "topic": "Feeling Angry",
+      "keywords": [
+        "feeling angry",
+        "feeling",
+        "angry"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Anger is a normal emotional response, especially when something feels unfair, frustrating, or hurtful. What matters is not whether you feel angry but how you respond to that feeling. Taking time to understand what triggered your emotions can help you express yourself more calmly and constructively.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), understanding emotional triggers can help individuals manage anger more effectively and maintain healthier relationships. https://www.apa.org/topics/anger/strategies-controlling",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Strategies Controlling",
+          "url": "https://www.apa.org/topics/anger/strategies-controlling",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), understanding emotional triggers can help individuals manage anger more effectively and maintain healthier relationships. https://www.apa.org/topics/anger/strategies-controlling"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_worry_about_the_future_019",
+      "audience": [
+        "student"
+      ],
+      "domain": "emotional_wellbeing",
+      "topic": "Worry About the Future",
+      "keywords": [
+        "worry about the future",
+        "worry",
+        "about",
+        "the",
+        "future"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Thinking about the future can sometimes feel overwhelming, especially when many things seem uncertain. While you may not have all the answers today, focusing on the actions you can take right now can help reduce unnecessary worry. Trust that each step you take contributes to your growth and future opportunities.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), focusing on manageable and present-day actions can help individuals cope with uncertainty and stress. https://www.who.int/publications/i/item/9789240003927",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "9789240003927",
+          "url": "https://www.who.int/publications/i/item/9789240003927",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), focusing on manageable and present-day actions can help individuals cope with uncertainty and stress. https://www.who.int/publications/i/item/9789240003927"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_relationship_problems_020",
+      "audience": [
+        "student"
+      ],
+      "domain": "social_relationships",
+      "topic": "Relationship Problems",
+      "keywords": [
+        "relationship problems",
+        "relationship",
+        "problems"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Challenges in relationships can be emotionally difficult because relationships often play an important role in our lives. Misunderstandings and disagreements can happen, but healthy communication, patience, and mutual respect can help strengthen connections. Remember to prioritize both your emotional well-being and the well-being of others.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), healthy communication and understanding are essential components of positive interpersonal relationships. https://www.apa.org/monitor/2023/11/conversations-key-to-wellbeing",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Conversations Key To Wellbeing",
+          "url": "https://www.apa.org/monitor/2023/11/conversations-key-to-wellbeing",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), healthy communication and understanding are essential components of positive interpersonal relationships. https://www.apa.org/monitor/2023/11/conversations-key-to-wellbeing"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_low_self_esteem_023",
+      "audience": [
+        "student"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Low Self-Esteem",
+      "keywords": [
+        "low self-esteem",
+        "low",
+        "self",
+        "esteem"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "It can be difficult when you focus more on your weaknesses than your strengths. Remember that every person has unique abilities, qualities, and accomplishments. Building confidence takes time, patience, and self-compassion. Be kind to yourself and acknowledge the progress you have made.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), recognizing personal strengths and achievements can contribute to the development of a healthier self-image. https://www.apa.org/pubs/journals/releases/amp-amp0001591.pdf",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Amp Amp0001591.Pdf",
+          "url": "https://www.apa.org/pubs/journals/releases/amp-amp0001591.pdf",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), recognizing personal strengths and achievements can contribute to the development of a healthier self-image. https://www.apa.org/pubs/journals/releases/amp-amp0001591.pdf"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_academic_burnout_025",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Academic Burnout",
+      "keywords": [
+        "academic burnout",
+        "academic",
+        "burnout"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Constant academic demands can sometimes leave you feeling exhausted and disconnected from your studies. If school tasks have become difficult to manage, remember that taking care of your well-being is an important part of academic success. Rest and balance can help restore energy and motivation.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), maintaining a balance between academic responsibilities and self-care is important in preventing burnout and supporting long-term well-being. https://www.apa.org/ed/schools/primer/stress",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Stress",
+          "url": "https://www.apa.org/ed/schools/primer/stress",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), maintaining a balance between academic responsibilities and self-care is important in preventing burnout and supporting long-term well-being. https://www.apa.org/ed/schools/primer/stress"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_stress_from_deadlines_027",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Stress From Deadlines",
+      "keywords": [
+        "stress from deadlines",
+        "stress",
+        "from",
+        "deadlines"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Deadlines can create pressure, especially when several responsibilities need to be completed within a limited period. Try focusing on one task at a time and recognizing each step of progress. Small accomplishments can help reduce feelings of overwhelm.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), effective planning and realistic expectations can help reduce stress associated with demanding responsibilities. https://www.who.int/publications/i/item/9789240003927",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "9789240003927",
+          "url": "https://www.who.int/publications/i/item/9789240003927",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), effective planning and realistic expectations can help reduce stress associated with demanding responsibilities. https://www.who.int/publications/i/item/9789240003927"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_adjustment_difficulties_028",
+      "audience": [
+        "student"
+      ],
+      "domain": "general_support",
+      "topic": "Adjustment Difficulties",
+      "keywords": [
+        "adjustment difficulties",
+        "adjustment",
+        "difficulties"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Adapting to new environments, responsibilities, or life changes can take time. It is normal to feel uncertain while adjusting. Be patient with yourself and remember that growth often happens gradually as you gain experience and confidence.",
+      "evidenceSummary": "According to the Psychological Association of the Philippines (PAP, 2023), adjustment is a gradual process that varies among individuals and requires patience and self-understanding. https://www.pap.ph/specialty-divisions",
+      "sources": [
+        {
+          "publisher": "PAP",
+          "year": "2023",
+          "title": "Specialty Divisions",
+          "url": "https://www.pap.ph/specialty-divisions",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the Psychological Association of the Philippines (PAP, 2023), adjustment is a gradual process that varies among individuals and requires patience and self-understanding. https://www.pap.ph/specialty-divisions"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_feeling_nervous_029",
+      "audience": [
+        "student"
+      ],
+      "domain": "emotional_wellbeing",
+      "topic": "Feeling Nervous",
+      "keywords": [
+        "feeling nervous",
+        "feeling",
+        "nervous"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Feeling nervous often means that something is important to you. Whether it is a presentation, interview, examination, or new experience, nervousness is a common and natural reaction. Trust in your preparation and remind yourself that confidence develops through experience.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), nervousness often decreases as familiarity, preparation, and confidence increase. https://www.apa.org/topics/anxiety",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Anxiety",
+          "url": "https://www.apa.org/topics/anxiety",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), nervousness often decreases as familiarity, preparation, and confidence increase. https://www.apa.org/topics/anxiety"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_emotional_exhaustion_031",
+      "audience": [
+        "student"
+      ],
+      "domain": "stress_and_recovery",
+      "topic": "Emotional Exhaustion",
+      "keywords": [
+        "emotional exhaustion",
+        "emotional",
+        "exhaustion"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Emotional exhaustion can occur when you have been carrying stress and responsibilities for a long period without enough opportunities to rest. Give yourself permission to slow down, reflect, and reconnect with activities that help you feel supported and refreshed.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), rest, self-care, and social support are important factors in maintaining emotional well-being and resilience. https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Self Care Health Interventions",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), rest, self-care, and social support are important factors in maintaining emotional well-being and resilience. https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_feeling_pressured_032",
+      "audience": [
+        "student"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Feeling Pressured",
+      "keywords": [
+        "feeling pressured",
+        "feeling",
+        "pressured"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Pressure from expectations can sometimes feel overwhelming. While goals and responsibilities are important, it is equally important to recognize your limits and allow yourself room to learn and grow. You do not have to be perfect to be successful.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), setting realistic goals and recognizing personal limits can help individuals manage pressure more effectively. https://www.apa.org/pubs/highlights/spotlight/issue-101",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Issue 101",
+          "url": "https://www.apa.org/pubs/highlights/spotlight/issue-101",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), setting realistic goals and recognizing personal limits can help individuals manage pressure more effectively. https://www.apa.org/pubs/highlights/spotlight/issue-101"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "student_general_emotional_support_034",
+      "audience": [
+        "student"
+      ],
+      "domain": "general_support",
+      "topic": "General Emotional Support",
+      "keywords": [
+        "general emotional support",
+        "general",
+        "emotional",
+        "support"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_guidance",
+      "response": "Whatever you may be experiencing right now, your feelings are valid and deserve attention. Every person encounters challenges, setbacks, and moments of uncertainty. Taking time to understand your emotions and care for your well-being is an important act of self-care. Remember that growth takes time, and every small step toward understanding yourself is meaningful progress.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), mental well-being involves recognizing emotions, coping with life's challenges, and maintaining meaningful connections with others. https://www.who.int/data/gho/data/major-themes/health-and-well-being",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Health And Well Being",
+          "url": "https://www.who.int/data/gho/data/major-themes/health-and-well-being",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), mental well-being involves recognizing emotions, coping with life's challenges, and maintaining meaningful connections with others. https://www.who.int/data/gho/data/major-themes/health-and-well-being"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_work_overload_001",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Work Overload",
+      "keywords": [
+        "work overload",
+        "work",
+        "overload"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "It seems like you're carrying many responsibilities right now. When tasks continue to pile up, it's normal to feel mentally and physically exhausted. Remember that productivity is not measured by how much you can do at once, but by how consistently you can move forward. Taking one task at a time and recognizing your progress can help reduce feelings of overwhelm.",
+      "evidenceSummary": "According to the World Health Organization (WHO, 2022), excessive workload is one of the most common workplace stressors that can affect well-being and performance. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health At Work",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the World Health Organization (WHO, 2022), excessive workload is one of the most common workplace stressors that can affect well-being and performance. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_tight_deadlines_002",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Tight Deadlines",
+      "keywords": [
+        "tight deadlines",
+        "tight",
+        "deadlines"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Deadlines can create pressure, especially when multiple responsibilities compete for your attention. While it may feel urgent to accomplish everything immediately, remember that steady progress is often more effective than rushing. Every small step completed today contributes to your overall success.",
+      "evidenceSummary": "According to the American Psychological Association (APA, 2023), realistic planning and manageable goals can help reduce stress associated with demanding responsibilities. Source: APA. (2023). Stress in America. https://www.apa.org/topics/stress",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Stress",
+          "url": "https://www.apa.org/topics/stress",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the American Psychological Association (APA, 2023), realistic planning and manageable goals can help reduce stress associated with demanding responsibilities. Source: APA. (2023). Stress in America. https://www.apa.org/topics/stress"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_feeling_mentally_drained_003",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Feeling Mentally Drained",
+      "keywords": [
+        "feeling mentally drained",
+        "feeling",
+        "mentally",
+        "drained"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Constant demands can sometimes leave you feeling emotionally and mentally exhausted. Feeling drained does not mean you are incapable-it may simply be a sign that your mind and body need time to recover. Rest is not a reward for productivity; it is part of maintaining it.",
+      "evidenceSummary": "According to the National Institute of Mental Health (NIMH, 2023), adequate rest and self-care are important factors in maintaining emotional wellness. Source: NIMH. (2023). Caring for Your Mental Health. https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+      "sources": [
+        {
+          "publisher": "NIMH",
+          "year": "2023",
+          "title": "Caring For Your Mental Health",
+          "url": "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to the National Institute of Mental Health (NIMH, 2023), adequate rest and self-care are important factors in maintaining emotional wellness. Source: NIMH. (2023). Caring for Your Mental Health. https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_pressure_to_perform_004",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Pressure to Perform",
+      "keywords": [
+        "pressure to perform",
+        "pressure",
+        "perform"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Wanting to perform well is understandable, especially when you care about your responsibilities. However, perfection is not required for growth. Focus on doing your best rather than expecting yourself to be flawless. Progress is built through effort, learning, and continuous improvement.",
+      "evidenceSummary": "According to APA (2023), unrealistic expectations and perfectionism can contribute to increased stress and anxiety. Source: APA. (2023). Managing Stress. https://www.apa.org/topics/stress",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Stress",
+          "url": "https://www.apa.org/topics/stress",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to APA (2023), unrealistic expectations and perfectionism can contribute to increased stress and anxiety. Source: APA. (2023). Managing Stress. https://www.apa.org/topics/stress"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_difficult_co_workers_005",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Difficult Co-workers",
+      "keywords": [
+        "difficult co-workers",
+        "difficult",
+        "workers"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Working with different personalities can sometimes be challenging. Not every interaction will be easy, but maintaining professionalism, patience, and respectful communication can help create healthier workplace relationships. Remember that you cannot control others, but you can control how you respond.",
+      "evidenceSummary": "According to WHO (2022), supportive and respectful workplace relationships contribute to better mental well-being. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health At Work",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to WHO (2022), supportive and respectful workplace relationships contribute to better mental well-being. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_learning_new_responsibilities_008",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Learning New Responsibilities",
+      "keywords": [
+        "learning new responsibilities",
+        "learning",
+        "new",
+        "responsibilities"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Starting new responsibilities can feel overwhelming at first. Every expert was once a beginner. Allow yourself time to learn, ask questions, and make mistakes along the way. Growth often happens outside your comfort zone.",
+      "evidenceSummary": "According to APA (2023), learning and adaptation are important components of personal and professional growth. Source: APA. (2023). Building Resilience. https://www.apa.org/topics/resilience",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "2023",
+          "title": "Resilience",
+          "url": "https://www.apa.org/topics/resilience",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to APA (2023), learning and adaptation are important components of personal and professional growth. Source: APA. (2023). Building Resilience. https://www.apa.org/topics/resilience"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_fear_of_making_mistakes_009",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Fear of Making Mistakes",
+      "keywords": [
+        "fear of making mistakes",
+        "fear",
+        "making",
+        "mistakes"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Making mistakes can feel uncomfortable, especially when you want to perform well. However, mistakes are often opportunities to gain experience and improve future decisions. What matters most is your willingness to learn and continue moving forward.",
+      "evidenceSummary": "According to WHO (2022), resilience develops through adaptation and learning from challenges. Source: WHO. (2022). Mental Health: Strengthening Our Response. https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health Strengthening Our Response",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to WHO (2022), resilience develops through adaptation and learning from challenges. Source: WHO. (2022). Mental Health: Strengthening Our Response. https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_burnout_warning_010",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Burnout Warning",
+      "keywords": [
+        "burnout warning",
+        "burnout",
+        "warning"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "It sounds like you've been giving a lot of your energy for a long time. Burnout can occur when stress becomes chronic and difficult to manage. If possible, consider creating space for rest, reflection, and activities that help you recharge. Taking care of yourself is an important part of sustaining your ability to help others.",
+      "evidenceSummary": "According to WHO (2022), burnout is a syndrome resulting from chronic workplace stress that has not been successfully managed. Source: WHO. (2022). Burn-out an Occupational Phenomenon. https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Burn Out An Occupational Phenomenon",
+          "url": "https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to WHO (2022), burnout is a syndrome resulting from chronic workplace stress that has not been successfully managed. Source: WHO. (2022). Burn-out an Occupational Phenomenon. https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "workplace_lack_of_work_life_balance_011",
+      "audience": [
+        "teaching_staff",
+        "non_teaching_staff",
+        "employee"
+      ],
+      "domain": "workplace_wellbeing",
+      "topic": "Lack of Work-Life Balance",
+      "keywords": [
+        "lack of work-life balance",
+        "lack",
+        "work",
+        "life",
+        "balance"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "mindmate_says",
+      "response": "Balancing work, personal responsibilities, and self-care can be challenging. While responsibilities are important, your well-being matters too. Creating time for rest, hobbies, family, and personal interests can help support both productivity and emotional wellness.",
+      "evidenceSummary": "According to WHO (2022), maintaining balance between work demands and personal well-being contributes to better mental health outcomes. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2022",
+          "title": "Mental Health At Work",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+          "sourceType": "official_or_professional_source",
+          "evidenceSummary": "According to WHO (2022), maintaining balance between work demands and personal well-being contributes to better mental health outcomes. Source: WHO. (2022). Mental Health at Work. https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"
+        }
+      ],
+      "reviewStatus": "imported",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "safety_self_harm_crisis_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "crisis_safety",
+      "topic": "Self-Harm or Suicide Concern",
+      "keywords": [
+        "self harm",
+        "suicide",
+        "kill myself",
+        "end my life",
+        "hurt myself",
+        "crisis",
+        "hopeless",
+        "unsafe"
+      ],
+      "severityTier": "imminent",
+      "riskFlags": [
+        "self_harm",
+        "suicidal_ideation"
+      ],
+      "triageAction": "emergency",
+      "requiresHumanHandoff": true,
+      "responseType": "crisis_support",
+      "response": "I am really sorry you are feeling this much pain. Your safety matters right now. Please contact emergency services, go to the nearest emergency room, or reach out to a trusted person near you immediately. If this is happening inside the university, contact the guidance office, clinic, or security office right away.",
+      "evidenceSummary": "WHO identifies suicide as a major public-health concern, and NIMH provides structured suicide-risk screening resources. Crisis-related chatbot responses should prioritize immediate safety and human support.",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "2025",
+          "title": "Suicide",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/suicide",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "NIMH",
+          "year": "",
+          "title": "Ask Suicide-Screening Questions (ASQ) Toolkit",
+          "url": "https://www.nimh.nih.gov/research/research-conducted-at-nimh/asq-toolkit-materials",
+          "sourceType": "official_research_toolkit"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "anxiety_panic_attack_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "acute_anxiety",
+      "topic": "Panic Attack or Sudden Intense Fear",
+      "keywords": [
+        "panic attack",
+        "can’t breathe",
+        "cant breathe",
+        "heart racing",
+        "sudden fear",
+        "dizzy",
+        "panic"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "acute_anxiety"
+      ],
+      "triageAction": "seek_support",
+      "requiresHumanHandoff": false,
+      "responseType": "grounding_support",
+      "response": "A sudden wave of panic can feel scary, but it can pass. Try slowing your breathing, noticing five things around you, and sitting somewhere safe. If chest pain, fainting, injury, or severe physical symptoms are present, seek medical help immediately.",
+      "evidenceSummary": "NIMH describes panic disorder as involving sudden attacks of fear and physical symptoms, while NICE provides guidance for anxiety and panic management pathways.",
+      "sources": [
+        {
+          "publisher": "NIMH",
+          "year": "",
+          "title": "Panic Disorder: When Fear Overwhelms",
+          "url": "https://www.nimh.nih.gov/health/publications/panic-disorder-when-fear-overwhelms",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "NICE",
+          "year": "",
+          "title": "Generalised anxiety disorder and panic disorder in adults: management",
+          "url": "https://www.nice.org.uk/guidance/cg113",
+          "sourceType": "clinical_guideline"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "mood_persistent_low_mood_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "mood_support",
+      "topic": "Persistent Low Mood or Depression Concern",
+      "keywords": [
+        "depressed",
+        "depression",
+        "low mood",
+        "no interest",
+        "empty",
+        "worthless",
+        "sad for weeks"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "depression_concern"
+      ],
+      "triageAction": "professional_help",
+      "requiresHumanHandoff": false,
+      "responseType": "professional_referral_support",
+      "response": "Feeling low for a long time can be heavy, especially when it affects sleep, motivation, appetite, or daily functioning. You deserve support. Consider talking to a counselor, mental-health professional, or trusted university support office.",
+      "evidenceSummary": "NIMH explains that depression can affect mood, sleep, energy, interest, and functioning. NICE provides clinical guidance for depression treatment and management.",
+      "sources": [
+        {
+          "publisher": "NIMH",
+          "year": "",
+          "title": "Depression",
+          "url": "https://www.nimh.nih.gov/health/topics/depression",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "NICE",
+          "year": "",
+          "title": "Depression in adults: treatment and management",
+          "url": "https://www.nice.org.uk/guidance/ng222",
+          "sourceType": "clinical_guideline"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "trauma_violence_trauma_response_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "trauma_support",
+      "topic": "Trauma Response",
+      "keywords": [
+        "trauma",
+        "flashback",
+        "triggered",
+        "bad memory",
+        "ptsd",
+        "violence",
+        "assault"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "trauma"
+      ],
+      "triageAction": "professional_help",
+      "requiresHumanHandoff": false,
+      "responseType": "trauma_informed_support",
+      "response": "What happened to you matters, and your reaction is valid. You do not have to explain everything at once. Try to focus on safety, grounding, and reaching out to a trusted person or professional support when you are ready.",
+      "evidenceSummary": "SAMHSA describes trauma-informed approaches as recognizing the effects of trauma and supporting recovery, while NIMH provides information about PTSD symptoms and support.",
+      "sources": [
+        {
+          "publisher": "SAMHSA",
+          "year": "",
+          "title": "Trauma and Violence",
+          "url": "https://www.samhsa.gov/mental-health/trauma-violence",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "NIMH",
+          "year": "",
+          "title": "Post-Traumatic Stress Disorder",
+          "url": "https://www.nimh.nih.gov/health/publications/post-traumatic-stress-disorder-ptsd",
+          "sourceType": "official_public_health_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "safety_abuse_or_violence_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "personal_safety",
+      "topic": "Abuse, Harassment, or Violence",
+      "keywords": [
+        "abuse",
+        "harassment",
+        "threatened",
+        "violence",
+        "unsafe at home",
+        "unsafe relationship",
+        "assault"
+      ],
+      "severityTier": "high",
+      "riskFlags": [
+        "violence",
+        "abuse",
+        "safety_risk"
+      ],
+      "triageAction": "urgent_help",
+      "requiresHumanHandoff": true,
+      "responseType": "safety_support",
+      "response": "Your safety comes first. If someone may hurt you or you are in immediate danger, move to a safer place if possible and contact emergency services or a trusted authority. You deserve protection and support without blame.",
+      "evidenceSummary": "WHO identifies violence as a serious public-health issue with physical and mental-health consequences. Trauma-informed guidance recommends safety-oriented, non-blaming support.",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "",
+          "title": "Violence against women",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/violence-against-women",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "SAMHSA",
+          "year": "",
+          "title": "Trauma and Violence",
+          "url": "https://www.samhsa.gov/mental-health/trauma-violence",
+          "sourceType": "official_public_health_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "social_bullying_cyberbullying_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "social_safety",
+      "topic": "Bullying or Cyberbullying",
+      "keywords": [
+        "bullying",
+        "cyberbullying",
+        "teased",
+        "humiliated",
+        "online harassment",
+        "rumors",
+        "excluded"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "bullying"
+      ],
+      "triageAction": "seek_support",
+      "requiresHumanHandoff": false,
+      "responseType": "support_and_reporting_guidance",
+      "response": "Being bullied or humiliated can deeply affect your well-being. This is not your fault. Save evidence when it is safe, avoid responding to harmful messages, and reach out to a trusted teacher, adviser, supervisor, or support office.",
+      "evidenceSummary": "StopBullying.gov defines bullying as unwanted aggressive behavior involving a power imbalance and repetition or likelihood of repetition, including cyberbullying contexts.",
+      "sources": [
+        {
+          "publisher": "StopBullying.gov",
+          "year": "",
+          "title": "Facts About Bullying",
+          "url": "https://www.stopbullying.gov/resources/facts",
+          "sourceType": "official_government_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "coping_substance_use_concern_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "coping_and_substance_use",
+      "topic": "Substance Use as Coping",
+      "keywords": [
+        "drinking to cope",
+        "alcohol",
+        "drugs",
+        "substance",
+        "using to forget",
+        "addiction"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "substance_use"
+      ],
+      "triageAction": "professional_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_referral",
+      "response": "Using alcohol or substances to cope can feel like temporary relief, but it can make stress and safety risks worse over time. Consider speaking with a counselor, healthcare provider, or trusted support service for safer coping options.",
+      "evidenceSummary": "WHO discusses health and social harms related to alcohol, and SAMHSA provides referral resources for mental-health and substance-use concerns.",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "",
+          "title": "Alcohol",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/alcohol",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "SAMHSA",
+          "year": "",
+          "title": "National Helpline",
+          "url": "https://www.samhsa.gov/find-help/national-helpline",
+          "sourceType": "official_service_resource"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "academic_time_management_001",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Time Management Difficulty",
+      "keywords": [
+        "time management",
+        "late tasks",
+        "can’t manage time",
+        "cant manage time",
+        "schedule",
+        "prioritize"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "skill_building_support",
+      "response": "Managing time is easier when tasks are visible and small. Try listing your tasks, choosing the most urgent one, and working in short focused blocks with breaks. Progress matters more than doing everything perfectly at once.",
+      "evidenceSummary": "APA and WHO stress-management resources support realistic planning, manageable goals, rest, and coping strategies for daily demands.",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Stress",
+          "url": "https://www.apa.org/topics/stress",
+          "sourceType": "professional_association_source"
+        },
+        {
+          "publisher": "WHO",
+          "year": "",
+          "title": "Doing what matters in times of stress",
+          "url": "https://www.who.int/publications/i/item/9789240003927",
+          "sourceType": "official_public_health_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "academic_procrastination_001",
+      "audience": [
+        "student"
+      ],
+      "domain": "academic_wellbeing",
+      "topic": "Procrastination and Task Avoidance",
+      "keywords": [
+        "procrastination",
+        "task avoidance",
+        "putting off tasks",
+        "cramming",
+        "can’t start",
+        "cant start"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "skill_building_support",
+      "response": "Starting can be the hardest part. Try making the task smaller: open the file, write one sentence, or study for five minutes. A small start can reduce pressure and build momentum.",
+      "evidenceSummary": "Stress-management and self-care guidance from WHO and APA supports breaking demands into manageable actions and using practical coping strategies.",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "",
+          "title": "Doing what matters in times of stress",
+          "url": "https://www.who.int/publications/i/item/9789240003927",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Stress",
+          "url": "https://www.apa.org/topics/stress",
+          "sourceType": "professional_association_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "confidence_imposter_syndrome_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Imposter Feelings",
+      "keywords": [
+        "imposter syndrome",
+        "impostor syndrome",
+        "fraud",
+        "not good enough",
+        "don’t belong",
+        "dont belong"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "confidence_support",
+      "response": "Feeling like you do not belong can happen even when you are working hard and learning. Your doubts are not proof that you are failing. Try noticing evidence of effort, progress, and feedback instead of focusing only on mistakes.",
+      "evidenceSummary": "APA resources on self-esteem and self-efficacy discuss confidence, learning, and personal agency as skills that develop through experience.",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Self-esteem",
+          "url": "https://www.apa.org/topics/self-esteem",
+          "sourceType": "professional_association_source"
+        },
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Self-efficacy and human agency",
+          "url": "https://www.apa.org/research-practice/conduct-research/self-efficacy-human-agency",
+          "sourceType": "professional_association_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "grief_loss_support_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff",
+        "general"
+      ],
+      "domain": "grief_and_loss",
+      "topic": "Grief and Loss",
+      "keywords": [
+        "grief",
+        "loss",
+        "death",
+        "mourning",
+        "passed away",
+        "bereavement"
+      ],
+      "severityTier": "moderate",
+      "riskFlags": [
+        "grief"
+      ],
+      "triageAction": "seek_support",
+      "requiresHumanHandoff": false,
+      "responseType": "grief_support",
+      "response": "Losing someone or something important can affect your emotions, focus, sleep, and energy. There is no single correct way to grieve. Allow yourself support from trusted people, and consider professional help if grief feels unbearable or unsafe.",
+      "evidenceSummary": "NIMH caring-for-your-mental-health guidance encourages seeking support when emotional distress affects daily life; trauma-informed guidance supports compassionate, non-judgmental care.",
+      "sources": [
+        {
+          "publisher": "NIMH",
+          "year": "",
+          "title": "Caring for Your Mental Health",
+          "url": "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "SAMHSA",
+          "year": "",
+          "title": "Trauma and Violence",
+          "url": "https://www.samhsa.gov/mental-health/trauma-violence",
+          "sourceType": "official_public_health_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "performance_perfectionism_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff"
+      ],
+      "domain": "self_worth_and_confidence",
+      "topic": "Perfectionism",
+      "keywords": [
+        "perfectionism",
+        "perfect",
+        "mistakes",
+        "unrealistic expectations",
+        "high standards"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "supportive_reframing",
+      "response": "Wanting to do well can be healthy, but needing everything to be perfect can become exhausting. Try aiming for clear progress, realistic standards, and learning from mistakes instead of treating mistakes as failure.",
+      "evidenceSummary": "APA stress and resilience resources discuss realistic expectations, coping, and learning from challenges as part of well-being.",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Stress",
+          "url": "https://www.apa.org/topics/stress",
+          "sourceType": "professional_association_source"
+        },
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Resilience",
+          "url": "https://www.apa.org/topics/resilience",
+          "sourceType": "professional_association_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "academic_public_speaking_anxiety_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff"
+      ],
+      "domain": "anxiety_and_performance",
+      "topic": "Public Speaking Anxiety",
+      "keywords": [
+        "public speaking",
+        "presentation anxiety",
+        "reporting",
+        "stage fright",
+        "speaking in class"
+      ],
+      "severityTier": "low",
+      "riskFlags": [
+        "performance_anxiety"
+      ],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "performance_support",
+      "response": "Feeling nervous before speaking in front of others is common. Prepare your key points, practice in small steps, and focus on communicating one idea at a time. Confidence usually grows through repeated experience.",
+      "evidenceSummary": "APA anxiety resources describe anxiety as a common response and emphasize coping strategies and preparation for managing excessive worry.",
+      "sources": [
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Anxiety",
+          "url": "https://www.apa.org/topics/anxiety",
+          "sourceType": "professional_association_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    },
+    {
+      "id": "adjustment_transition_to_college_or_work_001",
+      "audience": [
+        "student",
+        "teaching_staff",
+        "non_teaching_staff"
+      ],
+      "domain": "adjustment_and_transition",
+      "topic": "Transition to College or Work",
+      "keywords": [
+        "new school",
+        "new job",
+        "transition",
+        "adjustment",
+        "first year",
+        "new environment"
+      ],
+      "severityTier": "low",
+      "riskFlags": [],
+      "triageAction": "self_help",
+      "requiresHumanHandoff": false,
+      "responseType": "adjustment_support",
+      "response": "Adjusting to a new environment takes time. It is normal to feel unsure while learning routines, expectations, and relationships. Build small habits, ask questions, and give yourself time to adapt.",
+      "evidenceSummary": "WHO and APA resilience resources describe adaptation, social support, and coping skills as important parts of well-being during change.",
+      "sources": [
+        {
+          "publisher": "WHO",
+          "year": "",
+          "title": "Mental health: strengthening our response",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+          "sourceType": "official_public_health_source"
+        },
+        {
+          "publisher": "APA",
+          "year": "",
+          "title": "Resilience",
+          "url": "https://www.apa.org/topics/resilience",
+          "sourceType": "professional_association_source"
+        }
+      ],
+      "reviewStatus": "added_verified_source_needed_review",
+      "qaFlags": [],
+      "clinicalDisclaimer": "This is supportive guidance only and does not replace assessment by a licensed mental-health professional."
+    }
+  ],
+  "sourceRegistry": [
+    {
+      "sourceId": "src_who_001",
+      "publisher": "WHO",
+      "title": "Mental Health Strengthening Our Response",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_002",
+      "publisher": "APA",
+      "title": "Anxiety",
+      "url": "https://www.apa.org/topics/anxiety",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_004",
+      "publisher": "WHO",
+      "title": "Stress",
+      "url": "https://www.who.int/news-room/questions-and-answers/item/stress",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_005",
+      "publisher": "APA",
+      "title": "Health",
+      "url": "https://www.apa.org/topics/stress/health",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_pap_007",
+      "publisher": "PAP",
+      "title": "Development And Initial Evaluation Of The Resiliencefocused Family Psychoeducation Rffp.Pdf",
+      "url": "https://www.pap.ph/assets/files/journals/development-and-initial-evaluation-of-the-resiliencefocused-family-psychoeducation-rffp.pdf",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_009",
+      "publisher": "APA",
+      "title": "Self Efficacy Human Agency",
+      "url": "https://www.apa.org/research-practice/conduct-research/self-efficacy-human-agency",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_010",
+      "publisher": "WHO",
+      "title": "Mental Health At Work",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_011",
+      "publisher": "WHO",
+      "title": "Burn Out An Occupational Phenomenon",
+      "url": "https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nimh_012",
+      "publisher": "NIMH",
+      "title": "Caring For Your Mental Health",
+      "url": "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_013",
+      "publisher": "WHO",
+      "title": "Self Care Health Interventions",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/self-care-health-interventions",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_015",
+      "publisher": "APA",
+      "title": "Strategies Controlling",
+      "url": "https://www.apa.org/topics/anger/strategies-controlling",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_pap_016",
+      "publisher": "PAP",
+      "title": "Resilience",
+      "url": "https://www.apa.org/topics/resilience",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_017",
+      "publisher": "WHO",
+      "title": "9789240003927",
+      "url": "https://www.who.int/publications/i/item/9789240003927",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_018",
+      "publisher": "APA",
+      "title": "Conversations Key To Wellbeing",
+      "url": "https://www.apa.org/monitor/2023/11/conversations-key-to-wellbeing",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_pap_020",
+      "publisher": "PAP",
+      "title": "Self Esteem",
+      "url": "https://www.apa.org/topics/self-esteem",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_021",
+      "publisher": "APA",
+      "title": "Amp Amp0001591.Pdf",
+      "url": "https://www.apa.org/pubs/journals/releases/amp-amp0001591.pdf",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_023",
+      "publisher": "APA",
+      "title": "Stress",
+      "url": "https://www.apa.org/ed/schools/primer/stress",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_pap_025",
+      "publisher": "PAP",
+      "title": "Specialty Divisions",
+      "url": "https://www.pap.ph/specialty-divisions",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_pmha_026",
+      "publisher": "PMHA",
+      "title": "Caring For Your Mental Health",
+      "url": "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_027",
+      "publisher": "APA",
+      "title": "Issue 101",
+      "url": "https://www.apa.org/pubs/highlights/spotlight/issue-101",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_028",
+      "publisher": "WHO",
+      "title": "Health And Well Being",
+      "url": "https://www.who.int/data/gho/data/major-themes/health-and-well-being",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_029",
+      "publisher": "APA",
+      "title": "Self Esteem",
+      "url": "https://www.apa.org/topics/self-esteem",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_030",
+      "publisher": "APA",
+      "title": "Stress",
+      "url": "https://www.apa.org/topics/stress",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_apa_032",
+      "publisher": "APA",
+      "title": "Resilience",
+      "url": "https://www.apa.org/topics/resilience",
+      "sourceType": "official_or_professional_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_033",
+      "publisher": "WHO",
+      "title": "Suicide",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/suicide",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nimh_034",
+      "publisher": "NIMH",
+      "title": "Ask Suicide-Screening Questions (ASQ) Toolkit",
+      "url": "https://www.nimh.nih.gov/research/research-conducted-at-nimh/asq-toolkit-materials",
+      "sourceType": "official_research_toolkit",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nimh_035",
+      "publisher": "NIMH",
+      "title": "Panic Disorder: When Fear Overwhelms",
+      "url": "https://www.nimh.nih.gov/health/publications/panic-disorder-when-fear-overwhelms",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nice_036",
+      "publisher": "NICE",
+      "title": "Generalised anxiety disorder and panic disorder in adults: management",
+      "url": "https://www.nice.org.uk/guidance/cg113",
+      "sourceType": "clinical_guideline",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nimh_037",
+      "publisher": "NIMH",
+      "title": "Depression",
+      "url": "https://www.nimh.nih.gov/health/topics/depression",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nice_038",
+      "publisher": "NICE",
+      "title": "Depression in adults: treatment and management",
+      "url": "https://www.nice.org.uk/guidance/ng222",
+      "sourceType": "clinical_guideline",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_samhsa_039",
+      "publisher": "SAMHSA",
+      "title": "Trauma and Violence",
+      "url": "https://www.samhsa.gov/mental-health/trauma-violence",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_nimh_040",
+      "publisher": "NIMH",
+      "title": "Post-Traumatic Stress Disorder",
+      "url": "https://www.nimh.nih.gov/health/publications/post-traumatic-stress-disorder-ptsd",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_041",
+      "publisher": "WHO",
+      "title": "Violence against women",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/violence-against-women",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_stopbullying_gov_042",
+      "publisher": "StopBullying.gov",
+      "title": "Facts About Bullying",
+      "url": "https://www.stopbullying.gov/resources/facts",
+      "sourceType": "official_government_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_who_043",
+      "publisher": "WHO",
+      "title": "Alcohol",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/alcohol",
+      "sourceType": "official_public_health_source",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    },
+    {
+      "sourceId": "src_samhsa_044",
+      "publisher": "SAMHSA",
+      "title": "National Helpline",
+      "url": "https://www.samhsa.gov/find-help/national-helpline",
+      "sourceType": "official_service_resource",
+      "accessDate": "2026-06-27",
+      "notes": "Imported or curated source. Recheck link and page title before production release."
+    }
+  ]
+}
