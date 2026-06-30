@@ -11,6 +11,8 @@ class MindAidMessage {
     required this.text,
     required this.createdAt,
     this.status,
+    this.categoryLabel,
+    this.supportCards = const [],
   });
 
   final String id;
@@ -18,6 +20,20 @@ class MindAidMessage {
   final String text;
   final DateTime createdAt;
   final String? status;
+  final String? categoryLabel;
+  final List<MindAidSupportCard> supportCards;
+}
+
+class MindAidSupportCard {
+  const MindAidSupportCard({
+    required this.title,
+    required this.description,
+    this.icon = Icons.auto_awesome_rounded,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
 }
 
 class MindAidSuggestion {
@@ -41,6 +57,7 @@ class MindAidScreen extends StatefulWidget {
     this.isAssistantTyping = false,
     this.onSendMessage,
     this.onSuggestionSelected,
+    this.onHomeTap,
     this.onNotificationTap,
   });
 
@@ -50,6 +67,7 @@ class MindAidScreen extends StatefulWidget {
   final bool isAssistantTyping;
   final ValueChanged<String>? onSendMessage;
   final ValueChanged<MindAidSuggestion>? onSuggestionSelected;
+  final VoidCallback? onHomeTap;
   final VoidCallback? onNotificationTap;
 
   @override
@@ -99,6 +117,7 @@ class _MindAidScreenState extends State<MindAidScreen> {
             _AnimatedMindAidSection(
               delay: 0,
               child: _MindAidHeader(
+                onHomeTap: widget.onHomeTap,
                 onNotificationTap: widget.onNotificationTap,
               ),
             ),
@@ -134,37 +153,59 @@ class _MindAidScreenState extends State<MindAidScreen> {
 }
 
 class _MindAidHeader extends StatelessWidget {
-  const _MindAidHeader({this.onNotificationTap});
+  const _MindAidHeader({this.onHomeTap, this.onNotificationTap});
 
+  final VoidCallback? onHomeTap;
   final VoidCallback? onNotificationTap;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 86,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      height: 82,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
       decoration: const BoxDecoration(
-        color: _MindAidColors.sun,
+        gradient: LinearGradient(
+          colors: [_MindAidColors.sun, _MindAidColors.sunLight],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 14,
-            offset: Offset(0, 6),
+            color: Color(0x26000000),
+            blurRadius: 15,
+            offset: Offset(0, 7),
           ),
         ],
       ),
       child: Row(
         children: [
+          Tooltip(
+            message: 'Back to Home',
+            child: IconButton(
+              onPressed: onHomeTap,
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(40),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(
+                Icons.home_rounded,
+                color: _MindAidColors.deepText,
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
           const _MindAidAssetImage(
-            assetName: 'logo.png 3.png',
-            width: 34,
-            height: 34,
+            assetName: 'creativity_15557951 1.png',
+            width: 38,
+            height: 38,
             fallbackIcon: Icons.psychology_alt_outlined,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 9),
           const _MindAidAssetImage(
             assetName: 'MindMate.png',
-            height: 30,
+            width: 114,
+            height: 27,
             fit: BoxFit.contain,
             fallbackText: 'MindMate',
           ),
@@ -173,10 +214,14 @@ class _MindAidHeader extends StatelessWidget {
             message: 'Notifications',
             child: IconButton(
               onPressed: onNotificationTap,
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(44),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               icon: const _MindAidAssetImage(
                 assetName: 'Notification.png',
-                width: 26,
-                height: 26,
+                width: 24,
+                height: 30,
                 fallbackIcon: Icons.notifications,
               ),
             ),
@@ -194,31 +239,30 @@ class _AssistantProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+      padding: const EdgeInsets.fromLTRB(26, 24, 24, 24),
       decoration: const BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 12,
-            offset: Offset(0, 5),
+            color: Color(0x13000000),
+            blurRadius: 15,
+            offset: Offset(0, 6),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 58,
+            height: 58,
             decoration: const BoxDecoration(
-              color: _MindAidColors.softCream,
+              color: _MindAidColors.disclaimer,
               shape: BoxShape.circle,
             ),
-            clipBehavior: Clip.antiAlias,
-            child: const _MindAidAssetImage(
-              assetName: 'Group 1383.png',
-              fit: BoxFit.cover,
-              fallbackIcon: Icons.support_agent_rounded,
+            child: const Icon(
+              Icons.support_agent_rounded,
+              color: _MindAidColors.deepText,
+              size: 30,
             ),
           ),
           const SizedBox(width: 14),
@@ -263,12 +307,9 @@ class _MindAidConversation extends StatelessWidget {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+          padding: const EdgeInsets.fromLTRB(12, 18, 12, 26),
           sliver: messages.isEmpty && !isAssistantTyping
-              ? const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyConversationSpace(),
-                )
+              ? const SliverToBoxAdapter(child: _WelcomeConversation())
               : SliverList.separated(
                   itemCount: messages.length + (isAssistantTyping ? 1 : 0),
                   separatorBuilder: (_, _) => const SizedBox(height: 18),
@@ -303,38 +344,42 @@ class _TypingBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: DecoratedBox(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
           color: _MindAidColors.aiBubble,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(4),
-            bottomRight: Radius.circular(16),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x20000000),
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: _MindAidShadows.bubble,
         ),
-        child: const Padding(
-          padding: EdgeInsets.fromLTRB(14, 12, 14, 10),
-          child: Text('MindAid is thinking...', style: _MindAidText.status),
-        ),
+        child: const Text('MindAid is thinking...', style: _MindAidText.status),
       ),
     );
   }
 }
 
-class _EmptyConversationSpace extends StatelessWidget {
-  const _EmptyConversationSpace();
+class _WelcomeConversation extends StatelessWidget {
+  const _WelcomeConversation();
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.expand();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 34),
+      child: _MessageBubble(
+        message: MindAidMessage(
+          id: 'welcome',
+          sender: MindAidSender.assistant,
+          text:
+              "Hi there! I'm your AI mental health companion. I'm here to:\n\n"
+              "- Suggest coping strategies for anxiety and stress\n"
+              "- Provide emotional support\n"
+              "- Guide you through relaxation exercises\n"
+              "- Listen without judgment\n\n"
+              "How are you feeling today?",
+          createdAt: DateTime(2026, 1, 1, 9, 12),
+          status: '09:12 AM',
+        ),
+      ),
+    );
   }
 }
 
@@ -347,46 +392,258 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_isUser) {
+      return _UserMessageBubble(message: message);
+    }
+    return _AssistantMessageBubble(message: message);
+  }
+}
+
+class _AssistantMessageBubble extends StatelessWidget {
+  const _AssistantMessageBubble({required this.message});
+
+  final MindAidMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+
     return Align(
-      alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * (_isUser ? .72 : .86),
+          maxWidth: width < 420 ? width - 34 : 380,
+          minWidth: width < 360 ? 0 : 260,
         ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: _isUser
-                ? _MindAidColors.userBubble
-                : _MindAidColors.aiBubble,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(_isUser ? 16 : 4),
-              bottomRight: Radius.circular(_isUser ? 4 : 16),
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x20000000),
-                blurRadius: 8,
-                offset: Offset(0, 4),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+              decoration: BoxDecoration(
+                color: _MindAidColors.aiBubble,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: _MindAidShadows.bubble,
               ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Column(
-              crossAxisAlignment: _isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _AssistantBubbleHeader(),
+                  const SizedBox(height: 20),
+                  Text(message.text, style: _MindAidText.message),
+                  if (message.supportCards.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    for (final card in message.supportCards.take(3)) ...[
+                      _MindAidSupportCardView(card: card),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                  const SizedBox(height: 12),
+                  _AssistantBubbleMeta(message: message),
+                ],
+              ),
+            ),
+            const Positioned(
+              bottom: -2,
+              right: 70,
+              child: _AssistantBubbleTail(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantBubbleMeta extends StatelessWidget {
+  const _AssistantBubbleMeta({required this.message});
+
+  final MindAidMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final category = message.categoryLabel?.trim();
+    final hasCategory = category != null && category.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasCategory) ...[
+          Text('Category: $category', style: _MindAidText.category),
+          const SizedBox(height: 4),
+        ],
+        Text(_messageTime(message), style: _MindAidText.status),
+      ],
+    );
+  }
+}
+
+class _AssistantBubbleHeader extends StatelessWidget {
+  const _AssistantBubbleHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.support_agent_rounded,
+          color: _MindAidColors.deepText,
+          size: 21,
+        ),
+        SizedBox(width: 8),
+        Text('MindAid', style: _MindAidText.bubbleName),
+      ],
+    );
+  }
+}
+
+class _AssistantBubbleTail extends StatelessWidget {
+  const _AssistantBubbleTail();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(46, 36),
+      painter: _AssistantBubbleTailPainter(),
+    );
+  }
+}
+
+class _AssistantBubbleTailPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shadowPaint = Paint()
+      ..color = const Color(0x22000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    final paint = Paint()..color = _MindAidColors.aiBubble;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..cubicTo(
+        size.width * .18,
+        2,
+        size.width * .28,
+        size.height,
+        size.width * .5,
+        size.height,
+      )
+      ..cubicTo(
+        size.width * .72,
+        size.height,
+        size.width * .82,
+        2,
+        size.width,
+        0,
+      )
+      ..close();
+
+    canvas.drawPath(path.shift(const Offset(0, 2)), shadowPaint);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _UserMessageBubble extends StatelessWidget {
+  const _UserMessageBubble({required this.message});
+
+  final MindAidMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 270),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(message.text, style: _MindAidText.message),
-                const SizedBox(height: 8),
-                if (message.status != null && message.status!.trim().isNotEmpty)
-                  Text(message.status!.trim(), style: _MindAidText.status),
+                Container(
+                  width: 28,
+                  height: 28,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: const BoxDecoration(
+                    color: _MindAidColors.sun,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x26000000),
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.person_outline_rounded,
+                    size: 18,
+                    color: _MindAidColors.deepText,
+                  ),
+                ),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _MindAidColors.userBubble,
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: _MindAidShadows.chip,
+                    ),
+                    child: Text(message.text, style: _MindAidText.userMessage),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(right: 18),
+              child: Text(_messageTime(message), style: _MindAidText.status),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MindAidSupportCardView extends StatelessWidget {
+  const _MindAidSupportCardView({required this.card});
+
+  final MindAidSupportCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _MindAidColors.cardBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(card.icon, size: 18, color: _MindAidColors.deepText),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(card.title, style: _MindAidText.cardTitle),
+                const SizedBox(height: 3),
+                Text(card.description, style: _MindAidText.cardBody),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -404,7 +661,7 @@ class _SuggestionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 22),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
       child: Column(
         children: [
           const Text(
@@ -412,17 +669,28 @@ class _SuggestionPanel extends StatelessWidget {
             style: _MindAidText.suggestionsTitle,
           ),
           const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              for (final suggestion in suggestions)
-                _SuggestionChip(
-                  suggestion: suggestion,
-                  onTap: () => onSuggestionSelected?.call(suggestion),
-                ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final itemWidth = constraints.maxWidth >= 320
+                  ? (constraints.maxWidth - 14) / 2
+                  : constraints.maxWidth;
+
+              return Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 14,
+                runSpacing: 10,
+                children: [
+                  for (final suggestion in suggestions.take(6))
+                    SizedBox(
+                      width: itemWidth.clamp(140, 176).toDouble(),
+                      child: _SuggestionChip(
+                        suggestion: suggestion,
+                        onTap: () => onSuggestionSelected?.call(suggestion),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -441,32 +709,37 @@ class _SuggestionChip extends StatelessWidget {
     return Material(
       color: _MindAidColors.chip,
       borderRadius: BorderRadius.circular(18),
-      elevation: 4,
-      shadowColor: const Color(0x26000000),
+      elevation: 0,
+      shadowColor: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 142, maxWidth: 170),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: _MindAidShadows.chip,
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (suggestion.iconAsset != null) ...[
+                if (_hasIconAsset) ...[
                   _MindAidAssetImage(
-                    assetName: suggestion.iconAsset!,
-                    width: 16,
-                    height: 16,
+                    assetName: suggestion.iconAsset!.trim(),
+                    width: 14,
+                    height: 14,
                     fallbackIcon: Icons.auto_awesome,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 5),
                 ],
                 Flexible(
                   child: Text(
                     suggestion.label,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: _MindAidText.suggestion,
                   ),
                 ),
@@ -476,6 +749,11 @@ class _SuggestionChip extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool get _hasIconAsset {
+    final asset = suggestion.iconAsset;
+    return asset != null && asset.trim().isNotEmpty;
   }
 }
 
@@ -488,9 +766,12 @@ class _DisclaimerPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
-      decoration: const BoxDecoration(color: _MindAidColors.disclaimer),
+      margin: const EdgeInsets.fromLTRB(0, 6, 0, 0),
+      padding: const EdgeInsets.fromLTRB(22, 13, 22, 13),
+      decoration: const BoxDecoration(
+        color: _MindAidColors.disclaimer,
+        border: Border(top: BorderSide(color: Color(0x0D000000))),
+      ),
       child: Text(text, style: _MindAidText.disclaimer),
     );
   }
@@ -539,19 +820,19 @@ class _MindAidComposer extends StatelessWidget {
                   hintStyle: _MindAidText.inputHint,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 13,
+                    vertical: 14,
                   ),
                   filled: true,
                   fillColor: Colors.white,
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(15),
                     borderSide: const BorderSide(
                       color: _MindAidColors.inputBorder,
                       width: 2,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(15),
                     borderSide: const BorderSide(
                       color: _MindAidColors.sun,
                       width: 2,
@@ -565,7 +846,11 @@ class _MindAidComposer extends StatelessWidget {
               message: 'Voice input',
               child: IconButton(
                 onPressed: null,
-                icon: const Icon(Icons.mic, size: 26),
+                icon: const Icon(
+                  Icons.mic_rounded,
+                  size: 26,
+                  color: _MindAidColors.mic,
+                ),
               ),
             ),
             const SizedBox(width: 2),
@@ -617,6 +902,19 @@ class _SendButton extends StatelessWidget {
       ),
     );
   }
+}
+
+String _messageTime(MindAidMessage message) {
+  final status = message.status?.trim();
+  if (status != null && status.isNotEmpty && status != 'sent') {
+    return status;
+  }
+
+  final hour = message.createdAt.hour;
+  final minute = message.createdAt.minute.toString().padLeft(2, '0');
+  final period = hour >= 12 ? 'PM' : 'AM';
+  final twelveHour = hour % 12 == 0 ? 12 : hour % 12;
+  return '$twelveHour:$minute $period';
 }
 
 class _MindAidAssetImage extends StatelessWidget {
@@ -692,15 +990,30 @@ class _MindAidColors {
 
   static const background = Color(0xFFFAFAFA);
   static const sun = Color(0xFFFFCD3A);
+  static const sunLight = Color(0xFFFFD84E);
   static const softSun = Color(0xFFFFE59A);
-  static const softCream = Color(0xFFFFF3CF);
-  static const aiBubble = Color(0xFFFFF6D9);
-  static const userBubble = Color(0xFFE2E2E2);
-  static const chip = Color(0xFFE1E1E1);
-  static const disclaimer = Color(0xFFFFFAEA);
+  static const aiBubble = Color(0xFFFFF4D8);
+  static const userBubble = Color(0xFFE0E0E0);
+  static const chip = Color(0xFFE2E2E2);
+  static const disclaimer = Color(0xFFFFFAEE);
   static const inputBorder = Color(0xFF9F9F9F);
   static const text = Color(0xFF6F5613);
+  static const deepText = Color(0xFF2D2308);
   static const muted = Color(0xFF8B8B8B);
+  static const mic = Color(0xFF9D9D9D);
+  static const cardBorder = Color(0x19A67C00);
+}
+
+class _MindAidShadows {
+  const _MindAidShadows._();
+
+  static const bubble = [
+    BoxShadow(color: Color(0x2A000000), blurRadius: 9, offset: Offset(0, 4)),
+  ];
+
+  static const chip = [
+    BoxShadow(color: Color(0x24000000), blurRadius: 7, offset: Offset(0, 3)),
+  ];
 }
 
 class _MindAidText {
@@ -714,7 +1027,7 @@ class _MindAidText {
 
   static const profileTitle = TextStyle(
     color: Color(0xFFFFB700),
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: FontWeight.w900,
   );
 
@@ -726,15 +1039,49 @@ class _MindAidText {
 
   static const message = TextStyle(
     color: _MindAidColors.text,
-    fontSize: 12,
-    height: 1.3,
+    fontSize: 11.6,
+    height: 1.34,
     fontWeight: FontWeight.w500,
+  );
+
+  static const userMessage = TextStyle(
+    color: _MindAidColors.text,
+    fontSize: 11,
+    height: 1.2,
+    fontWeight: FontWeight.w700,
+  );
+
+  static const bubbleName = TextStyle(
+    color: Color(0xFFFFB700),
+    fontSize: 11.5,
+    fontWeight: FontWeight.w900,
+  );
+
+  static const cardTitle = TextStyle(
+    color: _MindAidColors.deepText,
+    fontSize: 11.5,
+    height: 1.15,
+    fontWeight: FontWeight.w900,
+  );
+
+  static const cardBody = TextStyle(
+    color: _MindAidColors.text,
+    fontSize: 10.5,
+    height: 1.28,
+    fontWeight: FontWeight.w600,
   );
 
   static const status = TextStyle(
     color: _MindAidColors.muted,
     fontSize: 10,
     fontWeight: FontWeight.w500,
+  );
+
+  static const category = TextStyle(
+    color: _MindAidColors.muted,
+    fontSize: 9.5,
+    height: 1.15,
+    fontWeight: FontWeight.w600,
   );
 
   static const suggestionsTitle = TextStyle(
@@ -745,7 +1092,7 @@ class _MindAidText {
 
   static const suggestion = TextStyle(
     color: _MindAidColors.text,
-    fontSize: 11,
+    fontSize: 10.2,
     fontWeight: FontWeight.w600,
   );
 

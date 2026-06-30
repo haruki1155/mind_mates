@@ -1,6 +1,8 @@
 import '../../../models/mind_aid_message_model.dart';
 import '../../../models/mind_aid_suggestion_model.dart';
+import 'mind_aid_context.dart';
 import 'mind_aid_dataset_models.dart';
+import 'mind_aid_safety.dart';
 
 class MindAidIntentMatch {
   const MindAidIntentMatch({
@@ -27,6 +29,9 @@ class MindAidChatRequest {
     this.recentMessages = const [],
     this.moodLevel,
     this.assessmentScore,
+    this.assessment,
+    this.conversationSummary,
+    this.preferredSupportStyle,
     this.journalText,
   });
 
@@ -35,6 +40,9 @@ class MindAidChatRequest {
   final List<MindAidMessageModel> recentMessages;
   final int? moodLevel;
   final int? assessmentScore;
+  final MindAidAssessmentContext? assessment;
+  final String? conversationSummary;
+  final MindAidSupportStyle? preferredSupportStyle;
   final String? journalText;
 }
 
@@ -137,6 +145,7 @@ class MindAidChatResponse {
     required this.requiresEscalation,
     required this.conversationState,
     required this.status,
+    this.safetyLevel = MindAidSafetyLevel.safeSupport,
   });
 
   final String text;
@@ -148,6 +157,7 @@ class MindAidChatResponse {
   final bool requiresEscalation;
   final MindAidConversationState conversationState;
   final String status;
+  final MindAidSafetyLevel safetyLevel;
 
   String get primaryIntent => intentMatches.isEmpty
       ? 'general_support'

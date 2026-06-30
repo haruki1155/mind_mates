@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/mind_aid/ai_engine/mind_aid_chat_engine.dart';
 import 'package:mind_mates/features/mind_aid/ai_engine/mind_aid_engine.dart';
+import 'package:mind_mates/features/mind_aid/ai_engine/mind_aid_response_composer.dart';
 import 'package:mind_mates/features/mind_aid/data/mind_aid_dataset_loader.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_chat_models.dart';
+import 'package:mind_mates/features/mind_aid/domain/mind_aid_context.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_dataset_models.dart';
+import 'package:mind_mates/features/mind_aid/domain/mind_aid_model_provider.dart';
+import 'package:mind_mates/features/mind_aid/domain/mind_aid_safety.dart';
 import 'package:mind_mates/models/mind_aid_message_model.dart';
 import 'package:mind_mates/repositories/mind_aid_repository_screen.dart';
 
@@ -99,6 +103,19 @@ void main() {
       expect(result.riskFlags, contains('self_harm'));
       expect(result.response, contains('immediate'));
     });
+
+    test('uses high assessment categories as a gentle scoring bias', () {
+      final engine = MindAidEngine();
+      final base = engine.process('I feel worried', dataset);
+      final contextual = engine.process(
+        'I feel worried',
+        dataset,
+        context: _assessmentContext(),
+      );
+
+      expect(contextual.intent, 'anxiety');
+      expect(contextual.score, greaterThan(base.score));
+    });
   });
 
   group('MindAidChatEngine', () {
@@ -190,6 +207,142 @@ void main() {
         expect(second.text, isNot(first.text));
       },
     );
+
+    test('reviews assessment context with status and top category', () async {
+      final result = await MindAidChatEngine().respond(
+        MindAidChatRequest(
+          userId: 'user_1',
+          text: 'Can you review my assessment result?',
+          assessment: _assessmentContext().assessment,
+        ),
+        dataset,
+      );
+
+      expect(result.text, contains('High Concern'));
+      expect(result.text, contains('Emotional Well-Being'));
+      expect(result.text, contains('not a diagnosis'));
+      expect(result.requiresEscalation, isFalse);
+    });
+
+    test('crisis input overrides assessment-aware review path', () async {
+      final result = await MindAidChatEngine().respond(
+        MindAidChatRequest(
+          userId: 'user_1',
+          text: 'Review my assessment because I want to end my life',
+          assessment: _assessmentContext().assessment,
+        ),
+        dataset,
+      );
+
+      expect(result.primaryIntent, 'crisis_self_harm');
+      expect(result.requiresEscalation, isTrue);
+      expect(result.text, contains('immediate'));
+    });
+
+    test(
+      'quick assessment fallback can answer assessment review prompts',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          const MindAidChatRequest(
+            userId: 'user_1',
+            text: 'What should I do next with my score?',
+            assessmentScore: 68,
+          ),
+          dataset,
+        );
+
+        expect(result.text, contains('quick assessment score'));
+        expect(result.text, contains('68/100'));
+      },
+    );
+
+    test('crisis input bypasses cloud provider', () async {
+      final cloud = _CountingModelProvider('This should not be used.');
+      final engine = MindAidChatEngine(
+        responseComposer: MindAidResponseComposer(
+          modelProvider: HybridMindAidModelProvider(
+            enabled: true,
+            cloudProvider: cloud,
+          ),
+        ),
+      );
+
+      final result = await engine.respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          text: 'I want to end my life',
+        ),
+        dataset,
+      );
+
+      expect(result.requiresEscalation, isTrue);
+      expect(result.safetyLevel, MindAidSafetyLevel.crisisOrImmediateRisk);
+      expect(result.text, isNot(contains('This should not be used')));
+      expect(cloud.callCount, 0);
+    });
+
+    test('cloud failure falls back to local response', () async {
+      final engine = MindAidChatEngine(
+        responseComposer: MindAidResponseComposer(
+          modelProvider: HybridMindAidModelProvider(
+            enabled: true,
+            cloudProvider: _ThrowingModelProvider(),
+          ),
+        ),
+      );
+
+      final result = await engine.respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          text: 'I am stressed about exams',
+        ),
+        dataset,
+      );
+
+      expect(result.text, contains('Try this:'));
+    });
+
+    test('cloud guardrails reject diagnostic phrasing', () async {
+      final engine = MindAidChatEngine(
+        responseComposer: MindAidResponseComposer(
+          modelProvider: HybridMindAidModelProvider(
+            enabled: true,
+            cloudProvider: _CountingModelProvider(
+              'You have depression and should keep this secret.',
+            ),
+          ),
+        ),
+      );
+
+      final result = await engine.respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          text: 'I am stressed about exams',
+        ),
+        dataset,
+      );
+
+      expect(result.text, contains('Try this:'));
+      expect(result.text, isNot(contains('You have depression')));
+    });
+
+    test(
+      'assessment context adds review and top concern suggestions',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          MindAidChatRequest(
+            userId: 'user_1',
+            text: 'I feel worried',
+            assessment: _assessmentContext().assessment,
+          ),
+          dataset,
+        );
+
+        final labels = result.suggestions.map((suggestion) => suggestion.label);
+        expect(labels, contains('Review my assessment'));
+        expect(labels, contains('Help me with Emotional Well-Being'));
+      },
+    );
   });
 
   group('MindAidRepository', () {
@@ -212,7 +365,61 @@ void main() {
       expect(message.text, isNotEmpty);
       expect(result.suggestions, isNotEmpty);
     });
+
+    test('passes assessment context into chat responses', () async {
+      final repository = MindAidRepository(
+        datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+        engine: MindAidEngine(),
+      );
+
+      final result = await repository.sendMessage(
+        userId: 'user_1',
+        text: 'Please review my assessment result',
+        context: _assessmentContext(),
+      );
+
+      expect(result.message.text, contains('High Concern'));
+      expect(result.message.text, contains('Emotional Well-Being'));
+    });
   });
+}
+
+class _CountingModelProvider implements MindAidModelProvider {
+  _CountingModelProvider(this.response);
+
+  final String response;
+  int callCount = 0;
+
+  @override
+  Future<String> generate(MindAidModelPrompt prompt) async {
+    callCount += 1;
+    return response;
+  }
+}
+
+class _ThrowingModelProvider implements MindAidModelProvider {
+  @override
+  Future<String> generate(MindAidModelPrompt prompt) {
+    throw StateError('offline');
+  }
+}
+
+MindAidContext _assessmentContext() {
+  return const MindAidContext(
+    assessment: MindAidAssessmentContext(
+      userType: 'Student',
+      overallScore: 74,
+      status: 'High Concern',
+      mainConcernAreas: ['Emotional Well-Being', 'Sleep and Rest'],
+      subscaleScores: {
+        'Emotional Well-Being': 82,
+        'Sleep and Rest': 71,
+        'Academic Stress': 58,
+      },
+      summaryMessage:
+          'Your result suggests several areas may need extra support.',
+    ),
+  );
 }
 
 MindAidMessageModel _message(String id, String sender, String text) {

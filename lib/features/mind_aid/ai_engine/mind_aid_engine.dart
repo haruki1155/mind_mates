@@ -29,6 +29,9 @@ class MindAidEngine {
       ],
       moodLevel: context.moodLevel,
       assessmentScore: context.assessmentScore,
+      assessment: context.assessment,
+      conversationSummary: context.conversationSummary,
+      preferredSupportStyle: context.preferredSupportStyle,
       journalText: context.journalText,
     );
 

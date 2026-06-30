@@ -10,9 +10,9 @@ dependencies:
   cloud_firestore: ^6.6.0
   firebase_auth: ^6.5.4
   firebase_core: ^4.11.0
-  firebase_storage: ^13.4.3
   flutter:
     sdk: flutter
+  http: ^1.6.0
   provider: ^6.1.5+1
 
 dev_dependencies:
@@ -34,4 +34,10 @@ flutter:
     - assets/images/MESSAGE/
     - assets/images/PROFILE 1/
     - assets/images/SECRET CHAT/
+    - assets/images/Quick assesment/ENTER NAME/
+    - assets/images/Quick assesment/QUESTION 1/
+    - assets/images/Quick assesment/QUESTION 2/
+    - assets/images/Quick assesment/QUESTION 3/
+    - assets/images/Quick assesment/QUESTION 4/
+    - assets/images/Quick assesment/QUESTION 5/
     - assets/data/mind_aid/

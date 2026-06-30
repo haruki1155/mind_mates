@@ -25,6 +25,26 @@
                         "id":  "self_harm_or_suicide_concern",
                         "label":  "Self-Harm or Suicide Concern",
                         "iconAsset":  ""
+                    },
+                    {
+                        "id":  "review_assessment",
+                        "label":  "Review my assessment",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "two_minute_coping",
+                        "label":  "Give me a 2-minute coping step",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "make_a_plan",
+                        "label":  "Help me make a plan",
+                        "iconAsset":  ""
+                    },
+                    {
+                        "id":  "talk_to_pacc",
+                        "label":  "Talk to PACC",
+                        "iconAsset":  ""
                     }
                 ]
 }

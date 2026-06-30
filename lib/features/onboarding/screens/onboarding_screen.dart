@@ -52,7 +52,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _next() {
     if (_currentPage == _pages.length - 1) {
-      Navigator.of(context).pushReplacementNamed(RouteNames.login);
+      Navigator.of(
+        context,
+      ).pushReplacementNamed(RouteNames.quickAssessmentRole);
       return;
     }
 

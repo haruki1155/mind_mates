@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -40,9 +44,56 @@ class _LoginBodyState extends State<_LoginBody> {
     super.dispose();
   }
 
-  void _handleSignIn() {
+  Future<void> _handleSignIn() async {
     FocusScope.of(context).unfocus();
-    Navigator.of(context).pushReplacementNamed(RouteNames.home);
+    final email = _identificationController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Enter your email and password.')),
+        );
+      return;
+    }
+
+    final authProvider = context.read<AuthProvider>();
+    final userProvider = context.read<UserProvider>();
+    final userId = await authProvider.signIn(email: email, password: password);
+
+    if (!mounted) return;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              authProvider.errorMessage ?? 'Unable to sign in. Try again.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    await _savePendingQuickAssessment(userId);
+    await userProvider.loadProfile(userId);
+
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
+  }
+
+  Future<void> _savePendingQuickAssessment(String userId) async {
+    try {
+      await context.read<AssessmentProvider>().saveQuickAssessmentForUser(
+        userId,
+      );
+    } catch (error) {
+      debugPrint('Quick assessment sync failed after login: $error');
+    }
   }
 
   void _openForgotPassword() {
@@ -80,12 +131,17 @@ class _LoginBodyState extends State<_LoginBody> {
                     SizedBox(height: compactHeight ? 18 : 24),
                     const _LoginIntro(),
                     const SizedBox(height: 18),
-                    _LoginFormCard(
-                      identificationController: _identificationController,
-                      passwordController: _passwordController,
-                      onForgotPassword: _openForgotPassword,
-                      onCreateAccount: _openSignup,
-                      onSignIn: _handleSignIn,
+                    Consumer<AuthProvider>(
+                      builder: (context, authProvider, _) {
+                        return _LoginFormCard(
+                          identificationController: _identificationController,
+                          passwordController: _passwordController,
+                          isLoading: authProvider.isLoading,
+                          onForgotPassword: _openForgotPassword,
+                          onCreateAccount: _openSignup,
+                          onSignIn: _handleSignIn,
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -162,6 +218,7 @@ class _LoginFormCard extends StatelessWidget {
   const _LoginFormCard({
     required this.identificationController,
     required this.passwordController,
+    required this.isLoading,
     required this.onForgotPassword,
     required this.onCreateAccount,
     required this.onSignIn,
@@ -169,9 +226,10 @@ class _LoginFormCard extends StatelessWidget {
 
   final TextEditingController identificationController;
   final TextEditingController passwordController;
+  final bool isLoading;
   final VoidCallback onForgotPassword;
   final VoidCallback onCreateAccount;
-  final VoidCallback onSignIn;
+  final Future<void> Function() onSignIn;
 
   @override
   Widget build(BuildContext context) {
@@ -197,9 +255,9 @@ class _LoginFormCard extends StatelessWidget {
           const SizedBox(height: 22),
           _LoginField(
             controller: identificationController,
-            label: 'Identification Number',
+            label: 'Email',
             assetIconPath: 'assets/images/Login/mail.png',
-            keyboardType: TextInputType.text,
+            keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 16),
@@ -209,7 +267,9 @@ class _LoginFormCard extends StatelessWidget {
             icon: Icons.lock_outline_rounded,
             obscureText: true,
             textInputAction: TextInputAction.done,
-            onSubmitted: (_) => onSignIn(),
+            onSubmitted: (_) {
+              if (!isLoading) onSignIn();
+            },
           ),
           const SizedBox(height: 8),
           Align(
@@ -230,7 +290,7 @@ class _LoginFormCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _SignInButton(onPressed: onSignIn),
+          _SignInButton(onPressed: isLoading ? null : onSignIn),
           const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -392,7 +452,7 @@ class _LoginFieldIcon extends StatelessWidget {
 class _SignInButton extends StatelessWidget {
   const _SignInButton({required this.onPressed});
 
-  final VoidCallback onPressed;
+  final Future<void> Function()? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -409,12 +469,23 @@ class _SignInButton extends StatelessWidget {
           ),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_rounded, size: 18),
-            SizedBox(width: 10),
-            Text('Sign in'),
+            if (onPressed == null) ...[
+              SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _LoginColors.text,
+                ),
+              ),
+            ] else ...[
+              Icon(Icons.lock_rounded, size: 18),
+              SizedBox(width: 10),
+              Text('Sign in'),
+            ],
           ],
         ),
       ),

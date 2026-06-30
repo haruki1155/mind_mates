@@ -42,6 +42,11 @@ class MindAidDatasetRecord {
     required this.recommendations,
     required this.followUpQuestions,
     required this.escalation,
+    this.allowedUserTypes = const [],
+    this.assessmentCategories = const [],
+    this.supportStyle,
+    this.minConcernScore,
+    this.resourceIds = const [],
   });
 
   final String id;
@@ -56,6 +61,11 @@ class MindAidDatasetRecord {
   final List<String> recommendations;
   final List<String> followUpQuestions;
   final MindAidEscalation escalation;
+  final List<String> allowedUserTypes;
+  final List<String> assessmentCategories;
+  final String? supportStyle;
+  final int? minConcernScore;
+  final List<String> resourceIds;
 
   bool get requiresEscalation =>
       escalation.required || severity == MindAidSeverity.crisis;
@@ -76,6 +86,11 @@ class MindAidDatasetRecord {
       escalation: MindAidEscalation.fromMap(
         map['escalation'] as Map<String, dynamic>?,
       ),
+      allowedUserTypes: _stringList(map['allowedUserTypes']),
+      assessmentCategories: _stringList(map['assessmentCategories']),
+      supportStyle: (map['supportStyle'] as String?)?.trim(),
+      minConcernScore: _intValue(map['minConcernScore']),
+      resourceIds: _stringList(map['resourceIds']),
     );
   }
 }
@@ -178,4 +193,12 @@ List<String> _stringList(Object? value) {
         return item.isNotEmpty;
       })
       .toList(growable: false);
+}
+
+int? _intValue(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.round();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
 }

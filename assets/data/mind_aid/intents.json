@@ -1753,6 +1753,159 @@
                                            "required":  false,
                                            "message":  ""
                                        }
+                    },
+                    {
+                        "id":  "support_two_minute_coping_001",
+                        "intent":  "two_minute_coping_step",
+                        "category":  "stress_and_recovery",
+                        "keywords":  [
+                                         "two minute coping",
+                                         "2 minute coping",
+                                         "coping step",
+                                         "calm down",
+                                         "grounding",
+                                         "breathing exercise"
+                                     ],
+                        "phrases":  [
+                                        "give me a 2-minute coping step",
+                                        "two minute coping",
+                                        "help me calm down"
+                                    ],
+                        "severity":  "low",
+                        "riskFlags":  [],
+                        "responses":  [
+                                          "Let us make this very small. For the next two minutes, breathe in for four counts, hold for two, and breathe out for six. Then name one thing you can see and one thing you can physically feel. You do not need to solve everything right now-just help your body feel a little safer."
+                                      ],
+                        "copingSteps":  [
+                                            "two_minute_breathing",
+                                            "grounding_5_4_3_2_1"
+                                        ],
+                        "recommendations":  [
+                                                "resource_stress_and_recovery"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Do you want a calming step or a practical next step after this?"
+                                              ],
+                        "escalation":  {
+                                           "required":  false,
+                                           "message":  ""
+                                       },
+                        "supportStyle":  "calming",
+                        "assessmentCategories":  [
+                                                     "Emotional Well-Being",
+                                                     "Sleep and Rest"
+                                                 ]
+                    },
+                    {
+                        "id":  "support_make_a_plan_001",
+                        "intent":  "make_support_plan",
+                        "category":  "general_support",
+                        "keywords":  [
+                                         "make a plan",
+                                         "help me make a plan",
+                                         "what should i do next",
+                                         "next step",
+                                         "action plan"
+                                     ],
+                        "phrases":  [
+                                        "help me make a plan",
+                                        "what should i do next",
+                                        "make a plan"
+                                    ],
+                        "severity":  "low",
+                        "riskFlags":  [],
+                        "responses":  [
+                                          "We can turn this into a simple plan: choose one concern, choose one action that takes less than five minutes, and choose one person or service you can contact if it still feels heavy. The goal is progress, not perfection."
+                                      ],
+                        "copingSteps":  [
+                                            "task_breakdown"
+                                        ],
+                        "recommendations":  [
+                                                "resource_general_support"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "What is the one concern you want the plan to focus on?"
+                                              ],
+                        "escalation":  {
+                                           "required":  false,
+                                           "message":  ""
+                                       },
+                        "supportStyle":  "practical"
+                    },
+                    {
+                        "id":  "support_talk_to_pacc_001",
+                        "intent":  "connect_to_pacc",
+                        "category":  "help_seeking",
+                        "keywords":  [
+                                         "talk to pacc",
+                                         "pacc",
+                                         "counselor",
+                                         "counselling",
+                                         "counseling",
+                                         "support service",
+                                         "professional support"
+                                     ],
+                        "phrases":  [
+                                        "talk to pacc",
+                                        "connect me to support",
+                                        "professional support"
+                                    ],
+                        "severity":  "low",
+                        "riskFlags":  [],
+                        "responses":  [
+                                          "Reaching out to PACC or another trusted support service can be a strong next step, especially if this has been affecting your sleep, focus, safety, or daily functioning. You can start with a simple message: \"I have been struggling and I would like to talk to someone.\""
+                                      ],
+                        "copingSteps":  [
+                                            "reach_support_service"
+                                        ],
+                        "recommendations":  [
+                                                "pacc-counseling",
+                                                "resource_general_support"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Would you like help wording what to say when asking for support?"
+                                              ],
+                        "escalation":  {
+                                           "required":  false,
+                                           "message":  ""
+                                       },
+                        "supportStyle":  "practical"
+                    },
+                    {
+                        "id":  "support_review_score_001",
+                        "intent":  "assessment_score_support",
+                        "category":  "assessment_support",
+                        "keywords":  [
+                                         "assessment",
+                                         "score",
+                                         "result",
+                                         "review my assessment",
+                                         "explain my score"
+                                     ],
+                        "phrases":  [
+                                        "review my assessment",
+                                        "explain my score",
+                                        "what does my result mean"
+                                    ],
+                        "severity":  "low",
+                        "riskFlags":  [],
+                        "responses":  [
+                                          "Your assessment can be a helpful starting point for reflection, not a diagnosis. It can show which areas may deserve more care, then we can choose one practical next step based on what feels most urgent today."
+                                      ],
+                        "copingSteps":  [
+                                            "task_breakdown"
+                                        ],
+                        "recommendations":  [
+                                                "pacc-counseling"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Would you like me to focus on your top concern area or your overall score?"
+                                              ],
+                        "escalation":  {
+                                           "required":  false,
+                                           "message":  ""
+                                       },
+                        "supportStyle":  "reflective"
                     }
                 ]
 }

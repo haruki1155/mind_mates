@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../quick_assessment/models/quick_assessment_models.dart';
+import '../../../models/user_model.dart';
+import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
+import '../../../routes/route_names.dart';
 
 class SignupScreen extends StatelessWidget {
   const SignupScreen({super.key});
@@ -81,7 +89,7 @@ class _SignupBodyState extends State<_SignupBody> {
     return null;
   }
 
-  void _handleSignUp() {
+  Future<void> _handleSignUp() async {
     FocusScope.of(context).unfocus();
     final formIsValid = _formKey.currentState?.validate() ?? false;
 
@@ -98,17 +106,77 @@ class _SignupBodyState extends State<_SignupBody> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Account details saved for setup.')),
-      );
+    final assessmentProvider = context.read<AssessmentProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final userProvider = context.read<UserProvider>();
+    final userId = await authProvider.signUp(
+      email: _emailController.text,
+      password: _passwordController.text,
+      firstName: _firstNameController.text,
+      lastName: _lastNameController.text,
+      schoolId: _schoolIdController.text,
+      department: _departmentController.text,
+      middleName: _middleNameController.text,
+      role: assessmentProvider.selectedRole,
+    );
 
-    Future<void>.delayed(const Duration(milliseconds: 700), () {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    });
+    if (!mounted) return;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              authProvider.errorMessage ?? 'Unable to create account.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    await _savePendingQuickAssessment(assessmentProvider, userId);
+    userProvider.setUser(
+      _localProfileFromRegistration(
+        userId: userId,
+        role: assessmentProvider.selectedRole,
+      ),
+    );
+    await userProvider.loadProfile(userId);
+
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
+  }
+
+  UserModel _localProfileFromRegistration({
+    required String userId,
+    required AssessmentRole? role,
+  }) {
+    return UserModel(
+      id: userId,
+      email: _emailController.text.trim(),
+      firstName: _firstNameController.text.trim(),
+      middleName: _middleNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      schoolId: _schoolIdController.text.trim(),
+      department: _departmentController.text.trim(),
+      role: role?.name,
+      createdAt: DateTime.now(),
+      dayStreak: 0,
+    );
+  }
+
+  Future<void> _savePendingQuickAssessment(
+    AssessmentProvider assessmentProvider,
+    String userId,
+  ) async {
+    try {
+      await assessmentProvider.saveQuickAssessmentForUser(userId);
+    } catch (error) {
+      debugPrint('Quick assessment sync failed after signup: $error');
+    }
   }
 
   @override
@@ -127,24 +195,29 @@ class _SignupBodyState extends State<_SignupBody> {
               const SizedBox(height: 16),
               const _NoticePanel(),
               const SizedBox(height: 12),
-              _SignupFormCard(
-                formKey: _formKey,
-                firstNameController: _firstNameController,
-                middleNameController: _middleNameController,
-                lastNameController: _lastNameController,
-                schoolIdController: _schoolIdController,
-                departmentController: _departmentController,
-                emailController: _emailController,
-                passwordController: _passwordController,
-                confirmPasswordController: _confirmPasswordController,
-                acceptedTerms: _acceptedTerms,
-                onTermsChanged: (value) {
-                  setState(() => _acceptedTerms = value ?? false);
+              Consumer<AuthProvider>(
+                builder: (context, authProvider, _) {
+                  return _SignupFormCard(
+                    formKey: _formKey,
+                    firstNameController: _firstNameController,
+                    middleNameController: _middleNameController,
+                    lastNameController: _lastNameController,
+                    schoolIdController: _schoolIdController,
+                    departmentController: _departmentController,
+                    emailController: _emailController,
+                    passwordController: _passwordController,
+                    confirmPasswordController: _confirmPasswordController,
+                    acceptedTerms: _acceptedTerms,
+                    isLoading: authProvider.isLoading,
+                    onTermsChanged: (value) {
+                      setState(() => _acceptedTerms = value ?? false);
+                    },
+                    onSignUp: _handleSignUp,
+                    requiredValidator: _requiredValidator,
+                    emailValidator: _emailValidator,
+                    confirmPasswordValidator: _confirmPasswordValidator,
+                  );
                 },
-                onSignUp: _handleSignUp,
-                requiredValidator: _requiredValidator,
-                emailValidator: _emailValidator,
-                confirmPasswordValidator: _confirmPasswordValidator,
               ),
             ],
           ),
@@ -204,6 +277,7 @@ class _SignupFormCard extends StatelessWidget {
     required this.passwordController,
     required this.confirmPasswordController,
     required this.acceptedTerms,
+    required this.isLoading,
     required this.onTermsChanged,
     required this.onSignUp,
     required this.requiredValidator,
@@ -221,8 +295,9 @@ class _SignupFormCard extends StatelessWidget {
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
   final bool acceptedTerms;
+  final bool isLoading;
   final ValueChanged<bool?> onTermsChanged;
-  final VoidCallback onSignUp;
+  final Future<void> Function() onSignUp;
   final String? Function(String?, String) requiredValidator;
   final String? Function(String?) emailValidator;
   final String? Function(String?) confirmPasswordValidator;
@@ -320,7 +395,7 @@ class _SignupFormCard extends StatelessWidget {
               onChanged: onTermsChanged,
             ),
             const SizedBox(height: 23),
-            _SignUpButton(onPressed: onSignUp),
+            _SignUpButton(onPressed: isLoading ? null : onSignUp),
           ],
         ),
       ),
@@ -447,10 +522,7 @@ class _SignupFieldIcon extends StatelessWidget {
 }
 
 class _TermsCheckbox extends StatelessWidget {
-  const _TermsCheckbox({
-    required this.acceptedTerms,
-    required this.onChanged,
-  });
+  const _TermsCheckbox({required this.acceptedTerms, required this.onChanged});
 
   final bool acceptedTerms;
   final ValueChanged<bool?> onChanged;
@@ -490,7 +562,7 @@ class _TermsCheckbox extends StatelessWidget {
 class _SignUpButton extends StatelessWidget {
   const _SignUpButton({required this.onPressed});
 
-  final VoidCallback onPressed;
+  final Future<void> Function()? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -505,7 +577,16 @@ class _SignUpButton extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
         ),
-        child: const Text('Sign Up'),
+        child: onPressed == null
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _SignupColors.text,
+                ),
+              )
+            : const Text('Sign Up'),
       ),
     );
   }

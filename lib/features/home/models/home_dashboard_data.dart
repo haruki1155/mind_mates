@@ -6,56 +6,44 @@ class HomeDashboardData {
     required this.user,
     required this.days,
     required this.assessment,
-    required this.streak,
     required this.services,
     required this.insights,
-    required this.affirmation,
     required this.mentalHealthCheck,
     required this.resources,
     required this.toolkitItems,
+    this.streak,
+    this.affirmation,
+    this.activityDates = const [],
   });
 
   final String headerTitle;
   final HomeUserData user;
   final List<HomeDayData> days;
   final HomeAssessmentPromptData assessment;
-  final HomeStreakData streak;
+  final HomeStreakData? streak;
   final List<HomeServiceData> services;
   final List<HomeInsightData> insights;
-  final HomeAffirmationData affirmation;
+  final HomeAffirmationData? affirmation;
   final HomeMentalHealthCheckData mentalHealthCheck;
   final List<HomeResourceData> resources;
   final List<HomeToolkitData> toolkitItems;
+  final List<DateTime> activityDates;
 
   factory HomeDashboardData.mock() {
-    return const HomeDashboardData(
-      headerTitle: 'April 20',
-      user: HomeUserData(
-        displayName: 'Leo',
-        role: 'Student - Urdaneta City University',
-      ),
-      days: [
-        HomeDayData(label: 'S', date: '19'),
-        HomeDayData(label: 'M', date: '20'),
-        HomeDayData(label: 'T', date: '21'),
-        HomeDayData(label: 'W', date: '22'),
-        HomeDayData(label: 'Th', date: '23'),
-        HomeDayData(label: 'F', date: '24'),
-        HomeDayData(label: 'Sat', date: '25'),
-      ],
-      assessment: HomeAssessmentPromptData(
+    final today = DateTime.now();
+
+    return HomeDashboardData(
+      headerTitle: _formatHeaderTitle(today),
+      user: const HomeUserData(displayName: '', role: 'Choose your category'),
+      days: _weekAround(today),
+      assessment: const HomeAssessmentPromptData(
         title: 'Time for Your Stress Assessment',
         description:
-            'Take your first stress assessment to establish a baseline.',
+            'Availability will sync with your account when backend tracking is connected.',
         actionLabel: 'Start Assessment',
+        maxAttemptsPerMonth: 2,
       ),
-      streak: HomeStreakData(
-        title: 'Your Streak',
-        days: 20,
-        description: "You're doing great! Keep logging daily.",
-        linkLabel: 'Learn about building consistency',
-      ),
-      services: [
+      services: const [
         HomeServiceData(
           title: 'Testing Services',
           subtitle: 'Psychological assessment',
@@ -81,7 +69,7 @@ class HomeDashboardData {
           colors: [Color(0xFF72E4B8), Color(0xFF008A61)],
         ),
       ],
-      insights: [
+      insights: const [
         HomeInsightData.action(title: 'Log your mood', icon: Icons.add),
         HomeInsightData.photo(
           title: 'Time for a wellness check?',
@@ -94,18 +82,14 @@ class HomeDashboardData {
           imageName: 'Rectangle 255.png',
         ),
       ],
-      affirmation: HomeAffirmationData(
-        title: "Today's affirmation",
-        quote: '"My mental health is a priority."',
-      ),
-      mentalHealthCheck: HomeMentalHealthCheckData(
+      mentalHealthCheck: const HomeMentalHealthCheckData(
         title: 'How are you today',
         description:
             'Take our comprehensive mental health check to get personalized insights and recommendations.',
         durationLabel: 'Takes ~5 minutes',
         actionLabel: 'Take Assessment',
       ),
-      resources: [
+      resources: const [
         HomeResourceData(
           title: 'Talk to AI companion',
           subtitle: 'Get instant support anytime',
@@ -139,7 +123,7 @@ class HomeDashboardData {
           color: Color(0xFFB4C6FF),
         ),
       ],
-      toolkitItems: [
+      toolkitItems: const [
         HomeToolkitData(
           title: 'Breathing exercise',
           subtitle: '5 min guided session',
@@ -155,6 +139,59 @@ class HomeDashboardData {
       ],
     );
   }
+
+  static String _formatHeaderTitle(DateTime date) {
+    return '${_monthName(date.month)} ${date.day}';
+  }
+
+  static List<HomeDayData> _weekAround(
+    DateTime date, {
+    List<DateTime> activityDates = const [],
+  }) {
+    final today = DateTime(date.year, date.month, date.day);
+    return List.generate(7, (index) {
+      final day = today.add(Duration(days: index - 3));
+      return HomeDayData(
+        label: _weekdayLabel(day.weekday),
+        date: '${day.day}',
+        dateValue: day,
+        isToday: _isSameDay(day, today),
+        isPast: day.isBefore(today),
+        hasActivity:
+            _isSameDay(day, today) ||
+            activityDates.any((activityDate) => _isSameDay(day, activityDate)),
+      );
+    });
+  }
+
+  static bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  static String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return months[month - 1];
+  }
+
+  static String _weekdayLabel(int weekday) {
+    const labels = ['M', 'T', 'W', 'Th', 'F', 'Sat', 'S'];
+    return labels[weekday - 1];
+  }
 }
 
 class HomeUserData {
@@ -165,10 +202,21 @@ class HomeUserData {
 }
 
 class HomeDayData {
-  const HomeDayData({required this.label, required this.date});
+  const HomeDayData({
+    required this.label,
+    required this.date,
+    this.dateValue,
+    this.isToday = false,
+    this.hasActivity = false,
+    this.isPast = false,
+  });
 
   final String label;
   final String date;
+  final DateTime? dateValue;
+  final bool isToday;
+  final bool hasActivity;
+  final bool isPast;
 }
 
 class HomeAssessmentPromptData {
@@ -176,11 +224,19 @@ class HomeAssessmentPromptData {
     required this.title,
     required this.description,
     required this.actionLabel,
+    this.attemptsUsedThisMonth,
+    this.maxAttemptsPerMonth,
+    this.nextAvailableAt,
+    this.canTakeAssessment,
   });
 
   final String title;
   final String description;
   final String actionLabel;
+  final int? attemptsUsedThisMonth;
+  final int? maxAttemptsPerMonth;
+  final DateTime? nextAvailableAt;
+  final bool? canTakeAssessment;
 }
 
 class HomeStreakData {
@@ -189,12 +245,18 @@ class HomeStreakData {
     required this.days,
     required this.description,
     required this.linkLabel,
+    this.lastActiveAt,
+    this.missedDays,
+    this.wasReset,
   });
 
   final String title;
   final int days;
   final String description;
   final String linkLabel;
+  final DateTime? lastActiveAt;
+  final int? missedDays;
+  final bool? wasReset;
 }
 
 class HomeServiceData {
@@ -237,10 +299,17 @@ class HomeInsightData {
 }
 
 class HomeAffirmationData {
-  const HomeAffirmationData({required this.title, required this.quote});
+  const HomeAffirmationData({
+    required this.title,
+    required this.quote,
+    this.author,
+    this.activeDate,
+  });
 
   final String title;
   final String quote;
+  final String? author;
+  final DateTime? activeDate;
 }
 
 class HomeMentalHealthCheckData {

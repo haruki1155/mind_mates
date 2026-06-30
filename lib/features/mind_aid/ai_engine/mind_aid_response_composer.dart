@@ -1,13 +1,15 @@
 import '../domain/mind_aid_chat_models.dart';
+import '../domain/mind_aid_context.dart';
 import '../domain/mind_aid_dataset_models.dart';
 import '../domain/mind_aid_model_provider.dart';
+import '../domain/mind_aid_safety.dart';
 import 'mind_aid_dialogue_manager.dart';
 import 'response_builder.dart';
 
 class MindAidResponseComposer {
-  const MindAidResponseComposer({
-    this.modelProvider = const LocalMindAidModelProvider(),
-  });
+  MindAidResponseComposer({MindAidModelProvider? modelProvider})
+    : modelProvider =
+          modelProvider ?? HybridMindAidModelProvider.fromEnvironment();
 
   final MindAidModelProvider modelProvider;
 
@@ -18,7 +20,15 @@ class MindAidResponseComposer {
     required List<MindAidIntentMatch> matches,
     required MindAidDatasetBundle dataset,
     required MindAidConversationState state,
+    required MindAidContext context,
+    required MindAidSafetyLevel safetyLevel,
   }) async {
+    if (action != MindAidDialogueAction.escalate &&
+        _isAssessmentReviewRequest(normalizedInput) &&
+        context.hasAssessment) {
+      return _assessmentReview(context);
+    }
+
     final modelText = await modelProvider.generate(
       MindAidModelPrompt(
         userText: originalInput,
@@ -26,6 +36,8 @@ class MindAidResponseComposer {
         state: state,
         dataset: dataset,
         requiresEscalation: action == MindAidDialogueAction.escalate,
+        context: context,
+        safetyLevel: safetyLevel,
       ),
     );
     if (modelText.trim().isNotEmpty) return modelText.trim();
@@ -42,7 +54,7 @@ class MindAidResponseComposer {
           normalizedInput: normalizedInput,
         );
       case MindAidDialogueAction.answer:
-        return _answer(normalizedInput, matches, dataset, state);
+        return _answer(normalizedInput, matches, dataset, state, context);
     }
   }
 
@@ -51,6 +63,7 @@ class MindAidResponseComposer {
     List<MindAidIntentMatch> matches,
     MindAidDatasetBundle dataset,
     MindAidConversationState state,
+    MindAidContext context,
   ) {
     final primary = matches.first.record;
     final buffer = StringBuffer(
@@ -70,7 +83,94 @@ class MindAidResponseComposer {
       );
     }
 
+    final assessmentLine = _assessmentSupportLine(context, primary.intent);
+    if (assessmentLine != null) {
+      buffer.write('\n\n$assessmentLine');
+    }
+
     return buffer.toString();
+  }
+
+  String _assessmentReview(MindAidContext context) {
+    final assessment = context.assessment;
+    if (assessment == null) {
+      final score = context.effectiveAssessmentScore;
+      final scoreText = score == null ? '' : ' of $score/100';
+      return 'I can keep your quick assessment score$scoreText in mind. It suggests checking in with what feels most urgent today, then choosing one small support step. What part of your result do you want to understand first?';
+    }
+
+    final top = assessment.highestCategory;
+    final topCategories = assessment.topCategories
+        .map((entry) => '${entry.key} (${entry.value.round()}%)')
+        .join(', ');
+    final concernText = assessment.mainConcernAreas.isEmpty
+        ? top?.key
+        : assessment.mainConcernAreas.take(2).join(' and ');
+    final buffer = StringBuffer(
+      'I reviewed your latest ${assessment.userType.toLowerCase()} assessment. '
+      'Your overall score is ${assessment.overallScore.round()}/100, with a status of ${assessment.status}. '
+      'This is not a diagnosis, but it may indicate areas that deserve extra care.',
+    );
+
+    if (top != null) {
+      buffer.write(
+        '\n\nThe strongest area showing up is ${top.key} at ${top.value.round()}%.',
+      );
+      if (topCategories.isNotEmpty) {
+        buffer.write(' Your top categories are $topCategories.');
+      }
+    }
+
+    if (concernText != null && concernText.trim().isNotEmpty) {
+      buffer.write(
+        '\n\nA helpful next step could be to focus on $concernText first: choose one small action today, then consider talking with PACC or someone you trust if this has been affecting your daily functioning.',
+      );
+    } else {
+      buffer.write(
+        '\n\nA helpful next step could be to choose one area that feels most disruptive today and work on one small, realistic support action.',
+      );
+    }
+
+    buffer.write('\n\nWhat part of this result feels most true for you?');
+    return buffer.toString();
+  }
+
+  String? _assessmentSupportLine(MindAidContext context, String intent) {
+    final assessment = context.assessment;
+    if (assessment == null || assessment.subscaleScores.isEmpty) return null;
+
+    final top = assessment.highestCategory;
+    if (top == null || top.value < 55) return null;
+
+    final topLabel = top.key.toLowerCase();
+    final readableIntent = _readable(intent);
+    final isRelevant =
+        topLabel.contains(readableIntent) ||
+        readableIntent.contains('stress') && topLabel.contains('stress') ||
+        readableIntent.contains('burnout') &&
+            (topLabel.contains('well-being') || topLabel.contains('rest')) ||
+        readableIntent.contains('anxiety') && topLabel.contains('emotional');
+
+    if (!isRelevant) return null;
+
+    return 'I am also keeping your assessment in mind: ${top.key} was one of the higher areas, so it could help to make the next step small and specific rather than trying to fix everything at once.';
+  }
+
+  bool _isAssessmentReviewRequest(String value) {
+    if (value.isEmpty) return false;
+    final mentionsAssessment =
+        value.contains('assessment') ||
+        value.contains('result') ||
+        value.contains('score');
+    final asksForReview =
+        value.contains('review') ||
+        value.contains('think') ||
+        value.contains('mean') ||
+        value.contains('help') ||
+        value.contains('what should i do') ||
+        value.contains('next');
+
+    return mentionsAssessment && asksForReview;
   }
 
   String _followUp(

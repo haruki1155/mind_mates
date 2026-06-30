@@ -100,6 +100,97 @@
                                            "required":  true,
                                            "message":  "This may need immediate human support. Please contact PACC Counseling Services, a trusted person, or local emergency services if there is immediate danger."
                                        }
+                    },
+                    {
+                        "id":  "safety_immediate_unsafe_001",
+                        "intent":  "immediate_safety_concern",
+                        "category":  "crisis_safety",
+                        "keywords":  [
+                                         "unsafe right now",
+                                         "not safe right now",
+                                         "i am unsafe",
+                                         "someone might hurt me",
+                                         "danger",
+                                         "emergency",
+                                         "personal_safety",
+                                         "crisis_support"
+                                     ],
+                        "phrases":  [
+                                        "unsafe right now",
+                                        "not safe right now",
+                                        "someone might hurt me"
+                                    ],
+                        "severity":  "high",
+                        "riskFlags":  [
+                                          "safety_risk",
+                                          "immediate_support"
+                                      ],
+                        "responses":  [
+                                          "Your safety matters first. If you are not safe right now, move toward a safer place if you can and contact emergency services, campus security, PACC, or a trusted person immediately."
+                                      ],
+                        "copingSteps":  [
+                                            "safety_reach_out",
+                                            "grounding_5_4_3_2_1"
+                                        ],
+                        "recommendations":  [
+                                                "resource_crisis_safety",
+                                                "urgent-support",
+                                                "pacc-counseling"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Are you somewhere safe right now?",
+                                                  "Can you contact a trusted person or campus support immediately?"
+                                              ],
+                        "escalation":  {
+                                           "required":  true,
+                                           "message":  "This may need immediate human support. Please contact PACC Counseling Services, campus security, a trusted person, or local emergency services if there is immediate danger."
+                                       }
+                    },
+                    {
+                        "id":  "safety_severe_panic_distress_001",
+                        "intent":  "severe_panic_or_distress",
+                        "category":  "acute_anxiety",
+                        "keywords":  [
+                                         "panic attack",
+                                         "can't breathe",
+                                         "cannot breathe",
+                                         "out of control",
+                                         "breaking down",
+                                         "severe panic",
+                                         "acute_anxiety",
+                                         "high_distress"
+                                     ],
+                        "phrases":  [
+                                        "panic attack",
+                                        "can't breathe",
+                                        "cannot breathe",
+                                        "out of control"
+                                    ],
+                        "severity":  "high",
+                        "riskFlags":  [
+                                          "high_distress",
+                                          "panic"
+                                      ],
+                        "responses":  [
+                                          "This sounds very intense. Try to get near a safe person or a calm place now. If breathing or panic feels unmanageable or you might be in danger, contact immediate human support. For the next few seconds, breathe out slowly and name one thing you can see."
+                                      ],
+                        "copingSteps":  [
+                                            "two_minute_breathing",
+                                            "grounding_5_4_3_2_1",
+                                            "safety_reach_out"
+                                        ],
+                        "recommendations":  [
+                                                "resource_acute_anxiety",
+                                                "pacc-counseling"
+                                            ],
+                        "followUpQuestions":  [
+                                                  "Are you somewhere safe right now?",
+                                                  "Is there someone nearby you can ask to stay with you?"
+                                              ],
+                        "escalation":  {
+                                           "required":  true,
+                                           "message":  "This may need immediate human support if symptoms feel unmanageable or safety is at risk."
+                                       }
                     }
                 ]
 }

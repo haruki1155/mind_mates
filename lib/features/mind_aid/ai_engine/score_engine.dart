@@ -39,10 +39,34 @@ class ScoreEngine {
       score += 0.25;
     }
 
-    if (context.assessmentScore != null &&
-        context.assessmentScore! >= 8 &&
+    final assessmentScore = context.effectiveAssessmentScore;
+    if (assessmentScore != null &&
+        assessmentScore >= 70 &&
         record.severity == MindAidSeverity.medium) {
       score += 0.25;
+    }
+
+    final assessment = context.assessment;
+    if (assessment != null && assessment.subscaleScores.isNotEmpty) {
+      for (final entry in assessment.subscaleScores.entries) {
+        if (entry.value < 55) continue;
+        if (_categoryRelatesToRecord(entry.key, record) ||
+            _metadataCategoryRelatesTo(entry.key, record)) {
+          score += entry.value >= 70 ? 0.45 : 0.25;
+        }
+      }
+    }
+
+    final supportStyle = context.preferredSupportStyle;
+    if (supportStyle != null && record.supportStyle == supportStyle.label) {
+      score += 0.2;
+    }
+
+    if (record.minConcernScore case final minConcernScore?) {
+      final effectiveScore = context.effectiveAssessmentScore;
+      if (effectiveScore != null && effectiveScore >= minConcernScore) {
+        score += 0.25;
+      }
     }
 
     return score;
@@ -68,5 +92,52 @@ class ScoreEngine {
     if (term.contains(' ')) return text.contains(term);
     final escaped = RegExp.escape(term);
     return RegExp('(^|\\s)${escaped}s?(\\s|\$)').hasMatch(text);
+  }
+
+  static bool _categoryRelatesToRecord(
+    String assessmentCategory,
+    MindAidDatasetRecord record,
+  ) {
+    final category = normalize(assessmentCategory);
+    final intent = normalize(record.intent.replaceAll('_', ' '));
+    final recordCategory = normalize(record.category);
+    final haystack = '$intent $recordCategory';
+
+    if (category.contains('academic') && haystack.contains('academic')) {
+      return true;
+    }
+    if (category.contains('stress') && haystack.contains('stress')) {
+      return true;
+    }
+    if (category.contains('sleep') &&
+        (haystack.contains('sleep') || haystack.contains('burnout'))) {
+      return true;
+    }
+    if (category.contains('emotional') &&
+        (haystack.contains('anxiety') || haystack.contains('emotion'))) {
+      return true;
+    }
+    if (category.contains('social') &&
+        (haystack.contains('social') || haystack.contains('loneliness'))) {
+      return true;
+    }
+    if (category.contains('support') && haystack.contains('support')) {
+      return true;
+    }
+    if (category.contains('workplace') && haystack.contains('work')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool _metadataCategoryRelatesTo(
+    String assessmentCategory,
+    MindAidDatasetRecord record,
+  ) {
+    final category = normalize(assessmentCategory);
+    return record.assessmentCategories.any((item) {
+      return normalize(item) == category;
+    });
   }
 }

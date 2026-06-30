@@ -89,16 +89,12 @@ class HomeCalendarHeader extends StatelessWidget {
     super.key,
     required this.title,
     required this.days,
-    required this.selectedDayIndex,
-    required this.onDaySelected,
     required this.onProfileTap,
     required this.onCalendarTap,
   });
 
   final String title;
   final List<HomeDayData> days;
-  final int selectedDayIndex;
-  final ValueChanged<int> onDaySelected;
   final VoidCallback onProfileTap;
   final VoidCallback onCalendarTap;
 
@@ -150,13 +146,7 @@ class HomeCalendarHeader extends StatelessWidget {
           Row(
             children: List.generate(days.length, (index) {
               return Expanded(
-                child: Center(
-                  child: _DayChip(
-                    day: days[index],
-                    isSelected: selectedDayIndex == index,
-                    onTap: () => onDaySelected(index),
-                  ),
-                ),
+                child: Center(child: _DayChip(day: days[index])),
               );
             }),
           ),
@@ -167,66 +157,68 @@ class HomeCalendarHeader extends StatelessWidget {
 }
 
 class _DayChip extends StatelessWidget {
-  const _DayChip({
-    required this.day,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _DayChip({required this.day});
 
   final HomeDayData day;
-  final bool isSelected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: isSelected ? HomePalette.gold : Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x26000000),
-                blurRadius: 8,
-                offset: Offset(0, 4),
+    final isFuture = !day.isPast && !day.isToday;
+    final backgroundColor = day.isToday
+        ? HomePalette.gold
+        : day.hasActivity && day.isPast
+        ? const Color(0xFFFFE8A3)
+        : isFuture
+        ? const Color(0xFFF2EEE4)
+        : Colors.white;
+    final textColor = isFuture ? HomePalette.muted : HomePalette.text;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+        border: day.hasActivity && day.isPast
+            ? Border.all(color: HomePalette.gold, width: 1.5)
+            : null,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                day.label,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 10,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                day.date,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 12,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ],
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    day.label,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    day.date,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
@@ -315,13 +307,18 @@ class HomeWelcomeCard extends StatelessWidget {
   });
 
   final HomeUserData user;
-  final HomeStreakData streak;
+  final HomeStreakData? streak;
   final VoidCallback onNotificationTap;
   final VoidCallback onStreakTap;
   final VoidCallback onMoodTap;
 
   @override
   Widget build(BuildContext context) {
+    final displayName = user.displayName.trim();
+    final welcomeText = displayName.isEmpty
+        ? 'Welcome back!'
+        : 'Welcome back, $displayName!';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: HomeDecor.card(),
@@ -335,7 +332,7 @@ class HomeWelcomeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome back, ${user.displayName}!',
+                      welcomeText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -391,11 +388,13 @@ class HomeWelcomeCard extends StatelessWidget {
 class _StreakCard extends StatelessWidget {
   const _StreakCard({required this.data, required this.onTap});
 
-  final HomeStreakData data;
+  final HomeStreakData? data;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final streak = data;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -417,43 +416,74 @@ class _StreakCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(data.title, style: HomeTextStyles.cardTitle),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.end,
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        const HomeDashboardAssetImage(
-                          assetName: 'Breath.png',
-                          width: 42,
-                          height: 42,
-                        ),
-                        Text(
-                          '${data.days}',
-                          style: const TextStyle(
-                            color: HomePalette.text,
-                            fontSize: 36,
-                            height: .9,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 4),
-                          child: Text('days', style: HomeTextStyles.body),
-                        ),
-                      ],
+                    Text(
+                      streak?.title ?? 'Your Streak',
+                      style: HomeTextStyles.cardTitle,
                     ),
+                    const SizedBox(height: 10),
+                    if (streak == null)
+                      const Row(
+                        children: [
+                          HomeDashboardAssetImage(
+                            assetName: 'Breath.png',
+                            width: 42,
+                            height: 42,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Ready to sync',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: HomePalette.text,
+                                fontSize: 24,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.end,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          const HomeDashboardAssetImage(
+                            assetName: 'Breath.png',
+                            width: 42,
+                            height: 42,
+                          ),
+                          Text(
+                            '${streak.days}',
+                            style: const TextStyle(
+                              color: HomePalette.text,
+                              fontSize: 36,
+                              height: .9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 4),
+                            child: Text('days', style: HomeTextStyles.body),
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 8),
                     Text(
-                      data.description,
+                      streak?.description ??
+                          'Your streak will appear here after activity is synced.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: HomeTextStyles.body,
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '${data.linkLabel} ->',
+                      streak == null
+                          ? 'Backend-ready for account activity'
+                          : '${streak.linkLabel} ->',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -608,7 +638,7 @@ class HomeDailyInsightsSection extends StatelessWidget {
   });
 
   final List<HomeInsightData> insights;
-  final HomeAffirmationData affirmation;
+  final HomeAffirmationData? affirmation;
   final ValueChanged<String> onOpen;
 
   @override
@@ -646,7 +676,7 @@ class HomeDailyInsightsSection extends StatelessWidget {
         const SizedBox(height: 18),
         _AffirmationCard(
           data: affirmation,
-          onTap: () => onOpen(affirmation.title),
+          onTap: () => onOpen(affirmation?.title ?? "Today's affirmation"),
         ),
       ],
     );
@@ -780,11 +810,13 @@ class _PhotoInsightCard extends StatelessWidget {
 class _AffirmationCard extends StatelessWidget {
   const _AffirmationCard({required this.data, required this.onTap});
 
-  final HomeAffirmationData data;
+  final HomeAffirmationData? data;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final affirmation = data;
+
     return Material(
       color: const Color(0xFFE6E7EC),
       borderRadius: BorderRadius.circular(14),
@@ -808,9 +840,9 @@ class _AffirmationCard extends StatelessWidget {
                     color: Color(0xFF1CA3C7),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
+                  const Expanded(
                     child: Text(
-                      data.title,
+                      "Today's affirmation",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: HomeTextStyles.cardTitle,
@@ -819,21 +851,43 @@ class _AffirmationCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
-              Center(
-                child: Text(
-                  data.quote,
-                  textAlign: TextAlign.center,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: HomePalette.text,
-                    fontSize: 15,
-                    height: 1.3,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w900,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeOutCubic,
+                child: Center(
+                  key: ValueKey(affirmation?.quote ?? 'pending-affirmation'),
+                  child: Text(
+                    affirmation?.quote ?? 'Daily affirmation will appear here.',
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: affirmation == null
+                          ? HomePalette.muted
+                          : HomePalette.text,
+                      fontSize: 15,
+                      height: 1.3,
+                      fontStyle: affirmation == null
+                          ? FontStyle.normal
+                          : FontStyle.italic,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ),
+              if (affirmation?.author != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '- ${affirmation!.author}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HomeTextStyles.caption,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

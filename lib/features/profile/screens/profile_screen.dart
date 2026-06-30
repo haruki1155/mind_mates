@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../models/user_model.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
+import '../../../routes/route_names.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.data});
@@ -14,8 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ambientController;
-
-  ProfileViewData? get _profileData => widget.data ?? _loadProfileData();
+  bool _requestedProfile = false;
 
   static const List<ProfileActionItem> _actions = [
     ProfileActionItem(
@@ -45,6 +49,20 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_requestedProfile || widget.data != null) return;
+
+    final authProvider = Provider.maybeOf<AuthProvider>(context, listen: false);
+    final userId = authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    final userProvider = context.read<UserProvider>();
+    if (userId != null && userProvider.user == null) {
+      _requestedProfile = true;
+      userProvider.loadProfile(userId);
+    }
+  }
+
+  @override
   void dispose() {
     _ambientController.dispose();
     super.dispose();
@@ -52,86 +70,168 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final data = _profileData;
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, _) {
+        final authProvider = widget.data == null && userProvider.user == null
+            ? Provider.maybeOf<AuthProvider>(context, listen: false)
+            : null;
+        final data =
+            widget.data ??
+            _profileDataFromUser(
+              userProvider.user,
+              fallbackUserId: authProvider.userId,
+              fallbackEmail: authProvider.currentUserEmail,
+            );
 
-    return Scaffold(
-      backgroundColor: _ProfileColors.background,
-      body: Stack(
-        children: [
-          _FloatingProfileBackground(animation: _ambientController),
-          SafeArea(
-            bottom: false,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _ProfileHeader(
-                    onNotificationTap: () =>
-                        _openPlaceholder(context, 'Notifications'),
-                  ),
+        return Scaffold(
+          backgroundColor: _ProfileColors.background,
+          body: Stack(
+            children: [
+              _FloatingProfileBackground(animation: _ambientController),
+              SafeArea(
+                bottom: false,
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _ProfileHeader(
+                        onNotificationTap: () =>
+                            _openPlaceholder(context, 'Notifications'),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                      sliver: SliverList.list(
+                        children: [
+                          const _AnimatedProfileSection(
+                            delay: 0,
+                            child: Text(
+                              'Your Profile',
+                              style: _ProfileText.title,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _AnimatedProfileSection(
+                            delay: 60,
+                            child: _ProfileSummaryCard(
+                              data: data,
+                              isLoading: userProvider.isLoading,
+                              onEditTap: () =>
+                                  _openEditProfile(context, userProvider.user),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          _AnimatedProfileSection(
+                            delay: 120,
+                            child: _ActionListCard(
+                              actions: _actions,
+                              onActionTap: (action) =>
+                                  _openPlaceholder(context, action.label),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          _AnimatedProfileSection(
+                            delay: 180,
+                            child: _MentalHealthSummaryCard(
+                              data: data?.summary ?? _defaultSummary,
+                              onReportTap: () => Navigator.of(
+                                context,
+                              ).pushNamed(RouteNames.mentalHealthReport),
+                              onInsightsTap: () => Navigator.of(
+                                context,
+                              ).pushNamed(RouteNames.mentalHealthInsights),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const _AnimatedProfileSection(
+                            delay: 240,
+                            child: _AboutMindMateCard(),
+                          ),
+                          const SizedBox(height: 18),
+                          const _AnimatedProfileSection(
+                            delay: 300,
+                            child: _DataProtectionCard(),
+                          ),
+                          const SizedBox(height: 26),
+                          const _AnimatedProfileSection(
+                            delay: 360,
+                            child: _ProfileFooter(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                  sliver: SliverList.list(
-                    children: [
-                      const _AnimatedProfileSection(
-                        delay: 0,
-                        child: Text('Your Profile', style: _ProfileText.title),
-                      ),
-                      const SizedBox(height: 10),
-                      _AnimatedProfileSection(
-                        delay: 60,
-                        child: _ProfileSummaryCard(data: data),
-                      ),
-                      const SizedBox(height: 18),
-                      _AnimatedProfileSection(
-                        delay: 120,
-                        child: _ActionListCard(
-                          actions: _actions,
-                          onActionTap: (action) =>
-                              _openPlaceholder(context, action.label),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      _AnimatedProfileSection(
-                        delay: 180,
-                        child: _MentalHealthSummaryCard(
-                          data: data?.summary,
-                          onReportTap: () =>
-                              _openPlaceholder(context, 'Full Report'),
-                          onInsightsTap: () =>
-                              _openPlaceholder(context, 'Insights'),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      const _AnimatedProfileSection(
-                        delay: 240,
-                        child: _AboutMindMateCard(),
-                      ),
-                      const SizedBox(height: 18),
-                      const _AnimatedProfileSection(
-                        delay: 300,
-                        child: _DataProtectionCard(),
-                      ),
-                      const SizedBox(height: 26),
-                      const _AnimatedProfileSection(
-                        delay: 360,
-                        child: _ProfileFooter(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  ProfileViewData? _loadProfileData() {
-    // Backend integration point: return fetched profile data here later.
-    return null;
+  static const _defaultSummary = ProfileSummaryData(
+    title: 'Mental Health Summary',
+    description: "This week's positive moods",
+  );
+
+  ProfileViewData? _profileDataFromUser(
+    UserModel? user, {
+    String? fallbackUserId,
+    String? fallbackEmail,
+  }) {
+    final effectiveUser =
+        user ??
+        ((fallbackUserId != null || fallbackEmail != null)
+            ? UserModel(
+                id: fallbackUserId ?? '',
+                email: fallbackEmail ?? '',
+                role: null,
+              )
+            : null);
+    if (effectiveUser == null) return null;
+
+    return ProfileViewData(
+      displayName: effectiveUser.displayName,
+      role: effectiveUser.roleLabel,
+      avatarAssetName: effectiveUser.avatarAssetName,
+      metrics: [
+        ProfileMetricData(
+          label: 'Day Streak',
+          value: '${effectiveUser.dayStreak}',
+          icon: Icons.local_fire_department,
+        ),
+        const ProfileMetricData(
+          label: 'Sleep',
+          value: '--/10',
+          icon: Icons.sentiment_satisfied_alt,
+        ),
+        const ProfileMetricData(
+          label: 'Stress',
+          value: '--/10',
+          icon: Icons.bar_chart,
+        ),
+      ],
+      summary: _defaultSummary,
+    );
+  }
+
+  Future<void> _openEditProfile(BuildContext context, UserModel? user) async {
+    if (user == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Profile is still loading.')),
+        );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditProfileSheet(user: user),
+    );
   }
 
   void _openPlaceholder(BuildContext context, String title) {
@@ -145,6 +245,10 @@ class ProfileViewData {
   const ProfileViewData({
     this.displayName,
     this.role,
+    this.email,
+    this.schoolId,
+    this.department,
+    this.memberSince,
     this.avatarAssetName,
     this.metrics = const [],
     this.summary,
@@ -152,6 +256,10 @@ class ProfileViewData {
 
   final String? displayName;
   final String? role;
+  final String? email;
+  final String? schoolId;
+  final String? department;
+  final String? memberSince;
   final String? avatarAssetName;
   final List<ProfileMetricData> metrics;
   final ProfileSummaryData? summary;
@@ -231,9 +339,15 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _ProfileSummaryCard extends StatelessWidget {
-  const _ProfileSummaryCard({required this.data});
+  const _ProfileSummaryCard({
+    required this.data,
+    required this.isLoading,
+    required this.onEditTap,
+  });
 
   final ProfileViewData? data;
+  final bool isLoading;
+  final VoidCallback onEditTap;
 
   @override
   Widget build(BuildContext context) {
@@ -284,18 +398,22 @@ class _ProfileSummaryCard extends StatelessWidget {
                       ),
               ),
               Tooltip(
-                message: 'Open profile details',
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward,
-                    color: _ProfileColors.sun,
-                    size: 20,
+                message: 'Edit profile',
+                child: Material(
+                  color: Colors.black,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: isLoading ? null : onEditTap,
+                    child: const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(
+                        Icons.arrow_forward,
+                        color: _ProfileColors.sun,
+                        size: 20,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -328,9 +446,9 @@ class _AvatarSlot extends StatelessWidget {
         color: Color(0xFFFFE587),
         shape: BoxShape.circle,
       ),
-      child: assetName == null
+      child: assetName == null || assetName!.trim().isEmpty
           ? const Center(
-              child: _SkeletonCircle(size: 38, color: Color(0x66FFFFFF)),
+              child: Icon(Icons.person_rounded, size: 34, color: Colors.black),
             )
           : ClipOval(
               child: _ProfileAssetImage(
@@ -499,7 +617,7 @@ class _MentalHealthSummaryCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _SkeletonAwareButton(
-                  label: data == null ? null : 'Full Report',
+                  label: 'Full Report',
                   icon: Icons.bar_chart,
                   color: _ProfileColors.sun,
                   onTap: onReportTap,
@@ -508,7 +626,7 @@ class _MentalHealthSummaryCard extends StatelessWidget {
               const SizedBox(width: 14),
               Expanded(
                 child: _SkeletonAwareButton(
-                  label: data == null ? null : 'View Insights',
+                  label: 'View Insights',
                   icon: Icons.insights,
                   color: _ProfileColors.periwinkle,
                   onTap: onInsightsTap,
@@ -874,6 +992,275 @@ class _SkeletonBoxState extends State<_SkeletonBox>
       ),
     );
   }
+}
+
+class _EditProfileSheet extends StatefulWidget {
+  const _EditProfileSheet({required this.user});
+
+  final UserModel user;
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _firstNameController;
+  late final TextEditingController _middleNameController;
+  late final TextEditingController _lastNameController;
+  late final TextEditingController _schoolIdController;
+  late final TextEditingController _departmentController;
+  late String _role;
+
+  static const _roles = ['student', 'faculty', 'staff'];
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController(
+      text: widget.user.firstName ?? '',
+    );
+    _middleNameController = TextEditingController(
+      text: widget.user.middleName ?? '',
+    );
+    _lastNameController = TextEditingController(
+      text: widget.user.lastName ?? '',
+    );
+    _schoolIdController = TextEditingController(
+      text: widget.user.schoolId ?? '',
+    );
+    _departmentController = TextEditingController(
+      text: widget.user.department ?? '',
+    );
+    final currentRole = (widget.user.role ?? 'student').toLowerCase();
+    _role = _roles.contains(currentRole) ? currentRole : 'student';
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _middleNameController.dispose();
+    _lastNameController.dispose();
+    _schoolIdController.dispose();
+    _departmentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final isSaving = context.watch<UserProvider>().isSaving;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: _ProfileColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD7CBA7),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text('Edit Profile', style: _ProfileText.title),
+                  const SizedBox(height: 14),
+                  _EditField(
+                    controller: _firstNameController,
+                    label: 'First name',
+                    textInputAction: TextInputAction.next,
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 10),
+                  _EditField(
+                    controller: _middleNameController,
+                    label: 'Middle name',
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 10),
+                  _EditField(
+                    controller: _lastNameController,
+                    label: 'Last name',
+                    textInputAction: TextInputAction.next,
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 10),
+                  _EditField(
+                    controller: _schoolIdController,
+                    label: 'School ID',
+                    textInputAction: TextInputAction.next,
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 10),
+                  _EditField(
+                    controller: _departmentController,
+                    label: 'College or Department',
+                    textInputAction: TextInputAction.done,
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: _role,
+                    decoration: _editDecoration('Role'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'student',
+                        child: Text('Student'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'faculty',
+                        child: Text('Faculty'),
+                      ),
+                      DropdownMenuItem(value: 'staff', child: Text('Staff')),
+                    ],
+                    onChanged: isSaving
+                        ? null
+                        : (value) {
+                            if (value != null) setState(() => _role = value);
+                          },
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: isSaving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _ProfileColors.sun,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black,
+                              ),
+                            )
+                          : const Text('Save Profile'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _required(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Required';
+    return null;
+  }
+
+  Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final updated = widget.user.copyWith(
+      firstName: _firstNameController.text.trim(),
+      middleName: _middleNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      schoolId: _schoolIdController.text.trim(),
+      department: _departmentController.text.trim(),
+      role: _role,
+    );
+    final success = await context.read<UserProvider>().updateProfile(updated);
+
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Profile updated.')));
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<UserProvider>().errorMessage ??
+                'Unable to update profile.',
+          ),
+        ),
+      );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  const _EditField({
+    required this.controller,
+    required this.label,
+    this.textInputAction,
+    this.validator,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final TextInputAction? textInputAction;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      textInputAction: textInputAction,
+      validator: validator,
+      decoration: _editDecoration(label),
+      style: const TextStyle(
+        color: _ProfileColors.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+InputDecoration _editDecoration(String label) {
+  return InputDecoration(
+    labelText: label,
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: _ProfileColors.divider),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: _ProfileColors.divider),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: _ProfileColors.sun, width: 1.5),
+    ),
+  );
 }
 
 class _BlankProfilePage extends StatelessWidget {

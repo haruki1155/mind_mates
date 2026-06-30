@@ -5,6 +5,7 @@ import '../domain/mind_aid_dataset_models.dart';
 import 'mind_aid_dialogue_manager.dart';
 import 'mind_aid_knowledge_retriever.dart';
 import 'mind_aid_response_composer.dart';
+import 'mind_aid_safety_classifier.dart';
 import 'score_engine.dart';
 
 class MindAidChatEngine {
@@ -12,13 +13,16 @@ class MindAidChatEngine {
     MindAidKnowledgeRetriever? retriever,
     MindAidDialogueManager? dialogueManager,
     MindAidResponseComposer? responseComposer,
+    MindAidSafetyClassifier? safetyClassifier,
   }) : _retriever = retriever ?? const MindAidKnowledgeRetriever(),
        _dialogueManager = dialogueManager ?? const MindAidDialogueManager(),
-       _responseComposer = responseComposer ?? const MindAidResponseComposer();
+       _responseComposer = responseComposer ?? MindAidResponseComposer(),
+       _safetyClassifier = safetyClassifier ?? const MindAidSafetyClassifier();
 
   final MindAidKnowledgeRetriever _retriever;
   final MindAidDialogueManager _dialogueManager;
   final MindAidResponseComposer _responseComposer;
+  final MindAidSafetyClassifier _safetyClassifier;
   MindAidConversationState _state = const MindAidConversationState();
 
   Future<MindAidChatResponse> respond(
@@ -36,12 +40,19 @@ class MindAidChatEngine {
           .toList(growable: false),
       moodLevel: request.moodLevel,
       assessmentScore: request.assessmentScore,
+      assessment: request.assessment,
+      conversationSummary: request.conversationSummary,
+      preferredSupportStyle: request.preferredSupportStyle,
       journalText: request.journalText,
     );
 
     final matches = normalizedInput.isEmpty
         ? <MindAidIntentMatch>[]
         : _retriever.retrieve(normalizedInput, dataset, context: context);
+    final safety = _safetyClassifier.classify(
+      normalizedInput: normalizedInput,
+      matches: matches,
+    );
     final activeFollowUpMatch = state.activeIntent == null
         ? null
         : _retriever.matchByIntent(state.activeIntent!, dataset);
@@ -58,6 +69,8 @@ class MindAidChatEngine {
       matches: decision.matches,
       dataset: dataset,
       state: state,
+      context: context,
+      safetyLevel: safety.level,
     );
     final severity = _highestSeverity(decision.matches);
     final followUps = _followUpsFor(decision, state);
@@ -73,7 +86,7 @@ class MindAidChatEngine {
       text: responseText,
       intentMatches: decision.matches,
       severity: severity,
-      suggestions: _suggestionsFor(followUps, dataset),
+      suggestions: _suggestionsFor(followUps, dataset, context, decision),
       followUpQuestions: followUps,
       recommendations: _recommendationsFor(decision.matches, dataset),
       requiresEscalation:
@@ -83,6 +96,7 @@ class MindAidChatEngine {
       status: decision.action == MindAidDialogueAction.escalate
           ? 'urgent'
           : 'sent',
+      safetyLevel: safety.level,
     );
   }
 
@@ -150,7 +164,10 @@ class MindAidChatEngine {
   ) {
     final resources = <MindAidResource>[];
     for (final match in matches) {
-      for (final id in match.record.recommendations) {
+      for (final id in [
+        ...match.record.recommendations,
+        ...match.record.resourceIds,
+      ]) {
         final resource = dataset.resourceById(id);
         if (resource != null &&
             !resources.any((item) => item.id == resource.id)) {
@@ -164,18 +181,73 @@ class MindAidChatEngine {
   List<MindAidSuggestionModel> _suggestionsFor(
     List<String> followUps,
     MindAidDatasetBundle dataset,
+    MindAidContext context,
+    MindAidDialogueDecision decision,
   ) {
     if (followUps.isNotEmpty) {
-      return followUps
-          .take(3)
-          .map(
-            (question) => MindAidSuggestionModel(
-              id: 'follow_up_${question.hashCode.abs()}',
-              label: question,
+      final contextual = _contextualSuggestions(context, decision);
+      return [
+        ...contextual,
+        ...followUps
+            .take(3)
+            .map(
+              (question) => MindAidSuggestionModel(
+                id: 'follow_up_${question.hashCode.abs()}',
+                label: question,
+              ),
             ),
-          )
+      ].take(5).toList(growable: false);
+    }
+    return [
+      ..._contextualSuggestions(context, decision),
+      ...dataset.suggestions,
+    ].take(5).toList(growable: false);
+  }
+
+  List<MindAidSuggestionModel> _contextualSuggestions(
+    MindAidContext context,
+    MindAidDialogueDecision decision,
+  ) {
+    final suggestions = <MindAidSuggestionModel>[];
+
+    if (context.hasAssessment) {
+      suggestions.add(
+        MindAidSuggestionModel(
+          id: 'review_assessment',
+          label: 'Review my assessment',
+        ),
+      );
+
+      final topConcern = context.assessment?.highestCategory?.key;
+      if (topConcern != null && topConcern.trim().isNotEmpty) {
+        suggestions.add(
+          MindAidSuggestionModel(
+            id: 'top_concern_${topConcern.hashCode.abs()}',
+            label: 'Help me with $topConcern',
+          ),
+        );
+      }
+    }
+
+    suggestions.addAll([
+      MindAidSuggestionModel(
+        id: 'two_minute_coping',
+        label: 'Give me a 2-minute coping step',
+      ),
+      MindAidSuggestionModel(id: 'make_a_plan', label: 'Help me make a plan'),
+      MindAidSuggestionModel(id: 'talk_to_pacc', label: 'Talk to PACC'),
+    ]);
+
+    if (decision.action == MindAidDialogueAction.escalate) {
+      return suggestions
+          .where((suggestion) => suggestion.id == 'talk_to_pacc')
           .toList(growable: false);
     }
-    return dataset.suggestions.take(5).toList(growable: false);
+
+    final unique = <String, MindAidSuggestionModel>{};
+    for (final suggestion in suggestions) {
+      unique.putIfAbsent(suggestion.id, () => suggestion);
+    }
+    return unique.values.toList(growable: false);
   }
 }
