@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/mood_provider.dart';
+import '../../../providers/report_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../models/home_dashboard_data.dart';
 import '../widgets/home_dashboard_widgets.dart';
@@ -25,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _showBottomNav = true;
   _HomeNavDestination _activeDestination = _HomeNavDestination.today;
+  String? _loadedBackendUserId;
 
   HomeDashboardData get _data => widget.data ?? HomeDashboardData.mock();
 
@@ -42,8 +46,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final user = context.read<UserProvider>().user;
+    final userId = user?.id;
+    if (userId == null || userId.isEmpty || _loadedBackendUserId == userId) {
+      return;
+    }
+
+    _loadedBackendUserId = userId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _readProviderOrNull<MoodProvider>(context)?.loadRecentMoods(userId);
+      final reportProvider = _readProviderOrNull<ReportProvider>(context);
+      if (reportProvider == null) return;
+      reportProvider.loadLatestReport(userId).then((_) {
+        if (!mounted) return;
+        reportProvider.ensureWeeklyPlaceholder(userId);
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final data = _data;
+    final data = _dashboardDataFromProviders(context);
     final assessmentProvider = context.watch<AssessmentProvider>();
     final user = _userFor(data, assessmentProvider);
 
@@ -155,6 +181,71 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  HomeDashboardData _dashboardDataFromProviders(BuildContext context) {
+    final base = _data;
+    final user = context.watch<UserProvider>().user;
+    final latestReport = _watchProviderOrNull<ReportProvider>(
+      context,
+    )?.latestReport;
+    final moods =
+        _watchProviderOrNull<MoodProvider>(context)?.moods ?? const [];
+
+    final activityDates = moods.map((mood) => mood.createdAt).toList();
+    final displayName = user?.displayName.trim();
+    final role = user?.roleLabel;
+
+    return base.copyWith(
+      user: HomeUserData(
+        displayName: (displayName == null || displayName.isEmpty)
+            ? base.user.displayName
+            : displayName,
+        role: role ?? base.user.role,
+      ),
+      streak: user == null
+          ? base.streak
+          : HomeStreakData(
+              title: 'Day streak',
+              days: user.dayStreak,
+              description: user.dayStreak == 0
+                  ? 'Start with one check-in today'
+                  : 'Keep your wellness rhythm going',
+              linkLabel: 'View',
+            ),
+      days: activityDates.isEmpty
+          ? base.days
+          : HomeDashboardData.weekAround(
+              DateTime.now(),
+              activityDates: activityDates,
+            ),
+      mentalHealthCheck: latestReport == null
+          ? base.mentalHealthCheck
+          : HomeMentalHealthCheckData(
+              title: latestReport.title,
+              description: latestReport.description,
+              durationLabel: latestReport.hasEnoughData
+                  ? 'Updated this week'
+                  : 'Ready for your data',
+              actionLabel: 'View Summary',
+            ),
+    );
+  }
+
+  T? _readProviderOrNull<T>(BuildContext context) {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  T? _watchProviderOrNull<T>(BuildContext context) {
+    try {
+      return context.watch<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 
   HomeUserData _userFor(

@@ -77,7 +77,10 @@ class _LoginBodyState extends State<_LoginBody> {
       return;
     }
 
-    await _savePendingQuickAssessment(userId);
+    final savedQuickAssessment = await _savePendingQuickAssessment(userId);
+    if (savedQuickAssessment) {
+      await userProvider.markActivity(userId);
+    }
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
@@ -86,13 +89,15 @@ class _LoginBodyState extends State<_LoginBody> {
     ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
   }
 
-  Future<void> _savePendingQuickAssessment(String userId) async {
+  Future<bool> _savePendingQuickAssessment(String userId) async {
     try {
-      await context.read<AssessmentProvider>().saveQuickAssessmentForUser(
-        userId,
-      );
+      final payload = await context
+          .read<AssessmentProvider>()
+          .saveQuickAssessmentForUser(userId);
+      return payload != null;
     } catch (error) {
       debugPrint('Quick assessment sync failed after login: $error');
+      return false;
     }
   }
 

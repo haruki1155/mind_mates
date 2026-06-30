@@ -96,6 +96,14 @@ class StudentAssessmentAnswer {
 
   final String questionId;
   final LikertAnswer answer;
+
+  Map<String, Object> toJson() {
+    return {
+      'questionId': questionId,
+      'answer': answer.name,
+      'value': answer.value,
+    };
+  }
 }
 
 class StudentAssessmentResult {

@@ -13,6 +13,7 @@ import 'package:mind_mates/features/mind_aid/domain/mind_aid_model_provider.dart
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_safety.dart';
 import 'package:mind_mates/models/mind_aid_message_model.dart';
 import 'package:mind_mates/repositories/mind_aid_repository_screen.dart';
+import 'package:mind_mates/services/firebase/firestore_service.dart';
 
 void main() {
   group('MindAidDatasetLoader', () {
@@ -381,7 +382,46 @@ void main() {
       expect(result.message.text, contains('High Concern'));
       expect(result.message.text, contains('Emotional Well-Being'));
     });
+
+    test('stores user id and assistant safety metadata', () async {
+      final firestore = _CapturingFirestoreService();
+      final repository = MindAidRepository(
+        datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+        engine: MindAidEngine(),
+        firestoreService: firestore,
+      );
+
+      await repository.sendMessage(
+        userId: 'auth_user_1',
+        text: 'I feel anxious',
+      );
+
+      expect(firestore.createdDocuments, hasLength(2));
+      expect(firestore.createdDocuments.first['userId'], 'auth_user_1');
+      expect(firestore.createdDocuments.first['sender'], 'user');
+      expect(firestore.createdDocuments.last['userId'], 'auth_user_1');
+      expect(firestore.createdDocuments.last['sender'], 'assistant');
+      expect(firestore.createdDocuments.last['safetyLevel'], isNotEmpty);
+      expect(firestore.createdDocuments.last['primaryIntent'], isNotEmpty);
+      expect(
+        firestore.createdDocuments.last['requiresEscalation'],
+        isA<bool>(),
+      );
+    });
   });
+}
+
+class _CapturingFirestoreService extends FirestoreService {
+  final createdDocuments = <Map<String, dynamic>>[];
+
+  @override
+  Future<String> createDocument(
+    String collection,
+    Map<String, dynamic> data,
+  ) async {
+    createdDocuments.add({'collection': collection, ...data});
+    return 'doc_${createdDocuments.length}';
+  }
 }
 
 class _CountingModelProvider implements MindAidModelProvider {

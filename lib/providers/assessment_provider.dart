@@ -240,7 +240,11 @@ class AssessmentProvider extends ChangeNotifier {
     final result = _studentResult;
     if (result == null) return Future.value();
 
-    return _repository.saveStudentAssessment(userId: userId, result: result);
+    return _repository.saveStudentAssessment(
+      userId: userId,
+      result: result,
+      answers: _studentAnswers,
+    );
   }
 
   List<StudentAssessmentQuestion> _questionsForActiveRole() {

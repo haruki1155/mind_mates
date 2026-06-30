@@ -1,3 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../database/firestore_collections.dart';
 import '../features/mind_aid/ai_engine/mind_aid_chat_engine.dart';
 import '../features/mind_aid/ai_engine/mind_aid_engine.dart';
 import '../features/mind_aid/data/mind_aid_dataset_loader.dart';
@@ -6,6 +9,7 @@ import '../features/mind_aid/domain/mind_aid_context.dart';
 import '../features/mind_aid/domain/mind_aid_engine_result.dart';
 import '../models/mind_aid_message_model.dart';
 import '../models/mind_aid_suggestion_model.dart';
+import '../services/firebase/firestore_service.dart';
 
 class MindAidSendResult {
   const MindAidSendResult({
@@ -24,17 +28,32 @@ class MindAidRepository {
     MindAidDatasetLoader? datasetLoader,
     MindAidEngine? engine,
     MindAidChatEngine? chatEngine,
+    FirestoreService? firestoreService,
   }) : _datasetLoader = datasetLoader ?? MindAidDatasetLoader(),
        _engine = engine ?? MindAidEngine(),
-       _chatEngine = chatEngine ?? MindAidChatEngine();
+       _chatEngine = chatEngine ?? MindAidChatEngine(),
+       _firestoreService = firestoreService ?? FirestoreService();
 
   final MindAidDatasetLoader _datasetLoader;
   final MindAidEngine _engine;
   final MindAidChatEngine _chatEngine;
+  final FirestoreService _firestoreService;
 
   Future<List<MindAidMessageModel>> fetchMessages(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    return [];
+    try {
+      final docs = await _firestoreService.getDocuments(
+        FirestoreCollections.mindAidMessages,
+        whereEquals: {'userId': userId},
+        orderBy: 'createdAt',
+        descending: false,
+        limit: 50,
+      );
+      return docs
+          .map((doc) => MindAidMessageModel.fromMap(doc))
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<MindAidSendResult> sendMessage({
@@ -43,9 +62,19 @@ class MindAidRepository {
     List<MindAidMessageModel> recentMessages = const [],
     MindAidContext context = const MindAidContext(),
   }) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-
     final dataset = await _datasetLoader.load();
+    await _trySaveMessage(
+      userId: userId,
+      message: MindAidMessageModel(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        conversationId: userId,
+        sender: 'user',
+        text: text,
+        createdAt: DateTime.now(),
+        status: 'sent',
+      ),
+    );
+
     final result = await _chatEngine.respond(
       MindAidChatRequest(
         userId: userId,
@@ -68,7 +97,12 @@ class MindAidRepository {
       text: result.text,
       createdAt: DateTime.now(),
       status: result.status,
+      safetyLevel: result.safetyLevel.name,
+      primaryIntent: result.primaryIntent,
+      requiresEscalation: result.requiresEscalation,
     );
+
+    await _trySaveMessage(userId: userId, message: message);
 
     return MindAidSendResult(
       message: message,
@@ -88,5 +122,31 @@ class MindAidRepository {
   Future<List<MindAidSuggestionModel>> fetchSuggestions() async {
     final dataset = await _datasetLoader.load();
     return dataset.suggestions;
+  }
+
+  Future<void> _saveMessage({
+    required String userId,
+    required MindAidMessageModel message,
+  }) {
+    return _firestoreService.createDocument(
+      FirestoreCollections.mindAidMessages,
+      {
+        'userId': userId,
+        ...message.toMap(),
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  Future<void> _trySaveMessage({
+    required String userId,
+    required MindAidMessageModel message,
+  }) async {
+    try {
+      await _saveMessage(userId: userId, message: message);
+    } catch (_) {
+      // Chat support remains available even while backend persistence is being
+      // configured.
+    }
   }
 }

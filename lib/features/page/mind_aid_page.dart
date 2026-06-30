@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '/providers/mind_aid_provider.dart';
 import '/providers/assessment_provider.dart';
+import '/providers/auth_provider.dart';
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
 import '/routes/route_names.dart';
@@ -15,15 +16,16 @@ class MindAidPage extends StatefulWidget {
 }
 
 class _MindAidPageState extends State<MindAidPage> {
-  final userId = "user_1";
   String? _loadedContextKey;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<MindAidProvider>();
     final assessmentProvider = context.watch<AssessmentProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final userId = authProvider.userId ?? 'guest';
     final mindAidContext = _buildMindAidContext(assessmentProvider);
-    _loadChatWhenContextChanges(mindAidContext);
+    _loadChatWhenContextChanges(userId, mindAidContext);
 
     return MindAidScreen(
       messages: provider.messages,
@@ -68,8 +70,8 @@ class _MindAidPageState extends State<MindAidPage> {
     return const MindAidContext();
   }
 
-  void _loadChatWhenContextChanges(MindAidContext contextValue) {
-    final key = _contextKey(contextValue);
+  void _loadChatWhenContextChanges(String userId, MindAidContext contextValue) {
+    final key = '$userId:${_contextKey(contextValue)}';
     if (_loadedContextKey == key) return;
 
     _loadedContextKey = key;

@@ -1,7 +1,16 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../database/firestore_collections.dart';
 import '../models/secret_chat_model.dart';
+import '../services/firebase/firestore_service.dart';
 
 class SecretChatRepository {
-  SecretChatRepository() {
+  SecretChatRepository({
+    FirestoreService? firestoreService,
+    FirebaseAuth? firebaseAuth,
+  }) : _firestoreService = firestoreService ?? FirestoreService(),
+       _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance {
     _posts = List<SecretChatModel>.from(_mockPosts);
     _comments = {
       for (final post in _posts)
@@ -22,11 +31,34 @@ class SecretChatRepository {
     };
   }
 
+  final FirestoreService _firestoreService;
+  final FirebaseAuth _firebaseAuth;
   late List<SecretChatModel> _posts;
   late Map<String, List<SecretChatComment>> _comments;
 
+  String get _currentUserId => _firebaseAuth.currentUser?.uid ?? 'guest';
+
   Future<List<SecretChatModel>> fetchPosts() async {
-    await Future<void>.delayed(const Duration(milliseconds: 220));
+    try {
+      final docs = await _firestoreService.getDocuments(
+        FirestoreCollections.secretChats,
+        whereEquals: {'moderationStatus': 'active'},
+        orderBy: 'createdAt',
+        limit: 50,
+      );
+      final posts = docs
+          .map(
+            (doc) => SecretChatModel.fromJson(
+              doc,
+              id: doc['id']?.toString(),
+              currentUserId: _currentUserId,
+            ),
+          )
+          .toList(growable: false);
+      _posts = posts.isEmpty ? _posts : posts;
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+    }
     return List<SecretChatModel>.from(_posts);
   }
 
@@ -41,29 +73,77 @@ class SecretChatRepository {
       createdAt: DateTime.now(),
       likeCount: 0,
       commentCount: 0,
+      authorId: _currentUserId,
       isMine: true,
     );
+    try {
+      final id = await _firestoreService
+          .createDocument(FirestoreCollections.secretChats, {
+            'authorId': _currentUserId,
+            'message': message.trim(),
+            'category': category,
+            'createdAt': FieldValue.serverTimestamp(),
+            'likeCount': 0,
+            'commentCount': 0,
+            'moderationStatus': 'active',
+          });
+      final saved = post.copyWith(id: id);
+      _posts = [saved, ..._posts];
+      _comments[saved.id] = [];
+      return saved;
+    } catch (_) {
+      // Keep the current local behavior when Firestore is not available yet.
+    }
     _posts = [post, ..._posts];
     _comments[post.id] = [];
     return post;
   }
 
   Future<SecretChatModel> toggleLike(String postId) async {
-    return _updatePost(postId, (post) {
+    final updated = await _updatePost(postId, (post) {
       final nextLiked = !post.isLiked;
       return post.copyWith(
         isLiked: nextLiked,
         likeCount: post.likeCount + (nextLiked ? 1 : -1),
       );
     });
+    await _syncInteraction(
+      postId: postId,
+      field: 'liked',
+      value: updated.isLiked,
+    );
+    return updated;
   }
 
   Future<SecretChatModel> toggleSave(String postId) async {
-    return _updatePost(postId, (post) => post.copyWith(isSaved: !post.isSaved));
+    final updated = await _updatePost(
+      postId,
+      (post) => post.copyWith(isSaved: !post.isSaved),
+    );
+    await _syncInteraction(
+      postId: postId,
+      field: 'saved',
+      value: updated.isSaved,
+    );
+    return updated;
   }
 
   Future<List<SecretChatComment>> fetchComments(String postId) async {
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    try {
+      final docs = await _firestoreService.getDocuments(
+        FirestoreCollections.secretChatComments,
+        whereEquals: {'postId': postId},
+        orderBy: 'createdAt',
+        descending: false,
+      );
+      _comments[postId] = docs
+          .map(
+            (doc) => SecretChatComment.fromJson(doc, id: doc['id']?.toString()),
+          )
+          .toList(growable: false);
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
     return List<SecretChatComment>.from(_comments[postId] ?? const []);
   }
 
@@ -77,12 +157,68 @@ class SecretChatRepository {
       message: message,
       createdAt: DateTime.now(),
     );
+    try {
+      final id = await _firestoreService
+          .createDocument(FirestoreCollections.secretChatComments, {
+            'postId': postId,
+            'authorId': _currentUserId,
+            'message': message.trim(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+      await _firestoreService.updateDocument(
+        FirestoreCollections.secretChats,
+        postId,
+        {'commentCount': FieldValue.increment(1)},
+      );
+      final saved = SecretChatComment(
+        id: id,
+        postId: postId,
+        message: message,
+        createdAt: DateTime.now(),
+      );
+      _comments[postId] = [saved, ...?_comments[postId]];
+      await _updatePost(
+        postId,
+        (post) => post.copyWith(commentCount: post.commentCount + 1),
+      );
+      return saved;
+    } catch (_) {
+      // Fall back to local comments while backend rules are settling.
+    }
     _comments[postId] = [comment, ...?_comments[postId]];
     await _updatePost(
       postId,
       (post) => post.copyWith(commentCount: post.commentCount + 1),
     );
     return comment;
+  }
+
+  Future<void> _syncInteraction({
+    required String postId,
+    required String field,
+    required bool value,
+  }) async {
+    try {
+      final interactionId = '${_currentUserId}_$postId';
+      await _firestoreService.setDocument(
+        FirestoreCollections.secretChatInteractions,
+        interactionId,
+        {
+          'userId': _currentUserId,
+          'postId': postId,
+          field: value,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        merge: true,
+      );
+      if (field == 'liked') {
+        await _firestoreService.updateDocument(
+          FirestoreCollections.secretChats,
+          postId,
+          {'likeCount': FieldValue.increment(value ? 1 : -1)},
+        );
+      }
+    } catch (_) {}
   }
 
   Future<SecretChatModel> _updatePost(

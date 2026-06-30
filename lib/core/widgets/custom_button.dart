@@ -29,10 +29,7 @@ class CustomButton extends StatelessWidget {
 
     return SizedBox(
       height: AppSizes.buttonHeight,
-      child: FilledButton(
-        onPressed: onPressed,
-        child: child,
-      ),
+      child: FilledButton(onPressed: onPressed, child: child),
     );
   }
 }

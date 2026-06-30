@@ -92,6 +92,22 @@ void main() {
       expect(provider.errorMessage, 'Unable to update profile.');
       expect(provider.isSaving, isFalse);
     });
+
+    test('marks activity and increments local day streak', () async {
+      final repository = _FakeUserRepository(
+        user: const UserModel(
+          id: 'user_1',
+          email: 'leo@example.com',
+          dayStreak: 2,
+        ),
+      );
+      final provider = UserProvider(repository)..setUser(repository.user);
+
+      await provider.markActivity('user_1');
+
+      expect(repository.markedActivityUid, 'user_1');
+      expect(provider.user?.dayStreak, 3);
+    });
   });
 }
 
@@ -100,6 +116,7 @@ class _FakeUserRepository extends UserRepository {
 
   UserModel? user;
   UserModel? updatedUser;
+  String? markedActivityUid;
   bool failUpdate;
 
   @override
@@ -110,5 +127,10 @@ class _FakeUserRepository extends UserRepository {
     if (failUpdate) throw StateError('failed');
     updatedUser = user;
     this.user = user;
+  }
+
+  @override
+  Future<void> markUserActivity(String uid) async {
+    markedActivityUid = uid;
   }
 }

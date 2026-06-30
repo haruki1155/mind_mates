@@ -217,8 +217,9 @@ class _FakeFirestoreService extends FirestoreService {
   Future<void> setDocument(
     String collection,
     String documentId,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    bool merge = false,
+  }) async {
     setDocumentData = data;
   }
 }

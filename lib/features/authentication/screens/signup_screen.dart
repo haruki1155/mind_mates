@@ -135,13 +135,19 @@ class _SignupBodyState extends State<_SignupBody> {
       return;
     }
 
-    await _savePendingQuickAssessment(assessmentProvider, userId);
+    final savedQuickAssessment = await _savePendingQuickAssessment(
+      assessmentProvider,
+      userId,
+    );
     userProvider.setUser(
       _localProfileFromRegistration(
         userId: userId,
         role: assessmentProvider.selectedRole,
       ),
     );
+    if (savedQuickAssessment) {
+      await userProvider.markActivity(userId);
+    }
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
@@ -168,14 +174,18 @@ class _SignupBodyState extends State<_SignupBody> {
     );
   }
 
-  Future<void> _savePendingQuickAssessment(
+  Future<bool> _savePendingQuickAssessment(
     AssessmentProvider assessmentProvider,
     String userId,
   ) async {
     try {
-      await assessmentProvider.saveQuickAssessmentForUser(userId);
+      final payload = await assessmentProvider.saveQuickAssessmentForUser(
+        userId,
+      );
+      return payload != null;
     } catch (error) {
       debugPrint('Quick assessment sync failed after signup: $error');
+      return false;
     }
   }
 

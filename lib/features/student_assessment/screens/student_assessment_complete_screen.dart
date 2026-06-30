@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/widgets/quick_assessment_widgets.dart';
 import '../models/student_assessment_models.dart';
@@ -18,6 +20,7 @@ class _StudentAssessmentCompleteScreenState
     extends State<StudentAssessmentCompleteScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _backgroundController;
+  bool _requestedSave = false;
 
   @override
   void initState() {
@@ -52,6 +55,8 @@ class _StudentAssessmentCompleteScreenState
             ),
           );
         }
+
+        _saveResultIfNeeded(provider);
 
         return Scaffold(
           backgroundColor: QuickAssessmentPalette.background,
@@ -126,6 +131,26 @@ class _StudentAssessmentCompleteScreenState
         );
       },
     );
+  }
+
+  void _saveResultIfNeeded(AssessmentProvider provider) {
+    if (_requestedSave || provider.studentResult == null) return;
+    _requestedSave = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      if (userId == null || userId.isEmpty) return;
+
+      try {
+        await provider.saveStudentAssessmentForUser(userId);
+        if (!mounted) return;
+        await context.read<UserProvider>().markActivity(userId);
+      } catch (error) {
+        debugPrint('Student assessment sync failed: $error');
+      }
+    });
   }
 }
 

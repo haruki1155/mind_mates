@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 
@@ -20,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ambientController;
   bool _requestedProfile = false;
+  bool _requestedReport = false;
 
   static const List<ProfileActionItem> _actions = [
     ProfileActionItem(
@@ -53,12 +55,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.didChangeDependencies();
     if (_requestedProfile || widget.data != null) return;
 
-    final authProvider = Provider.maybeOf<AuthProvider>(context, listen: false);
+    final authProvider = _authProviderOrNull(context);
     final userId = authProvider?.userId ?? authProvider?.hydrateCurrentUser();
     final userProvider = context.read<UserProvider>();
     if (userId != null && userProvider.user == null) {
       _requestedProfile = true;
       userProvider.loadProfile(userId);
+    }
+    if (userId != null && !_requestedReport) {
+      _requestedReport = true;
+      final reportProvider = _reportProviderOrNull(context);
+      reportProvider?.loadLatestReport(userId).then((_) {
+        if (!mounted) return;
+        reportProvider.ensureWeeklyPlaceholder(userId);
+      });
     }
   }
 
@@ -72,15 +82,22 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, _) {
+        final reportProvider = _watchReportProviderOrNull(context);
         final authProvider = widget.data == null && userProvider.user == null
-            ? Provider.maybeOf<AuthProvider>(context, listen: false)
+            ? _authProviderOrNull(context)
             : null;
         final data =
             widget.data ??
             _profileDataFromUser(
               userProvider.user,
-              fallbackUserId: authProvider.userId,
-              fallbackEmail: authProvider.currentUserEmail,
+              fallbackUserId: authProvider?.userId,
+              fallbackEmail: authProvider?.currentUserEmail,
+              summary: reportProvider?.latestReport == null
+                  ? null
+                  : ProfileSummaryData(
+                      title: reportProvider!.latestReport!.title,
+                      description: reportProvider.latestReport!.description,
+                    ),
             );
 
         return Scaffold(
@@ -170,6 +187,30 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  AuthProvider? _authProviderOrNull(BuildContext context) {
+    try {
+      return context.read<AuthProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  ReportProvider? _reportProviderOrNull(BuildContext context) {
+    try {
+      return context.read<ReportProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  ReportProvider? _watchReportProviderOrNull(BuildContext context) {
+    try {
+      return context.watch<ReportProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
   static const _defaultSummary = ProfileSummaryData(
     title: 'Mental Health Summary',
     description: "This week's positive moods",
@@ -179,6 +220,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     UserModel? user, {
     String? fallbackUserId,
     String? fallbackEmail,
+    ProfileSummaryData? summary,
   }) {
     final effectiveUser =
         user ??
@@ -212,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           icon: Icons.bar_chart,
         ),
       ],
-      summary: _defaultSummary,
+      summary: summary ?? _defaultSummary,
     );
   }
 

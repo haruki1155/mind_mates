@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../database/firestore_collections.dart';
@@ -61,7 +62,9 @@ class AuthRepository {
             if (role != null) 'role': role.name,
             'dayStreak': 0,
             'avatarAssetName': '',
-            'createdAt': DateTime.now().toIso8601String(),
+            'lastActiveAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
           },
         );
       } catch (error, stackTrace) {

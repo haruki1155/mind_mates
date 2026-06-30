@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../providers/report_provider.dart';
 
 class MentalHealthReportScreen extends StatelessWidget {
   const MentalHealthReportScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const _MentalHealthPlaceholderScreen(
+    final report = _reportProviderOrNull(context)?.latestReport;
+    return _MentalHealthPlaceholderScreen(
       title: 'Full Report',
       icon: Icons.bar_chart_rounded,
-      message:
-          'Your mental health report will appear here once assessments, moods, sleep, and stress tracking are connected.',
+      message: report == null
+          ? 'Your mental health report will appear here once assessments, moods, sleep, and stress tracking are connected.'
+          : report.hasEnoughData
+          ? report.description
+          : 'Your report space is ready. Keep using assessments and mood check-ins so MindMate can build a useful weekly view.',
+      details: report?.recommendedNextActions ?? const [],
     );
+  }
+
+  ReportProvider? _reportProviderOrNull(BuildContext context) {
+    try {
+      return context.watch<ReportProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 }
 
@@ -19,11 +35,13 @@ class _MentalHealthPlaceholderScreen extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.message,
+    this.details = const [],
   });
 
   final String title;
   final IconData icon;
   final String message;
+  final List<String> details;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +97,35 @@ class _MentalHealthPlaceholderScreen extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    for (final detail in details.take(3))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 16,
+                              color: Color(0xFFFFCA24),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                detail,
+                                style: const TextStyle(
+                                  color: Color(0xFF6E6658),
+                                  fontSize: 12,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),

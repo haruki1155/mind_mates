@@ -9,16 +9,12 @@ class RouteGenerator {
     final builder = AppPages.routes[settings.name];
 
     if (builder != null) {
-      return MaterialPageRoute(
-        builder: builder,
-        settings: settings,
-      );
+      return MaterialPageRoute(builder: builder, settings: settings);
     }
 
     return MaterialPageRoute(
-      builder: (_) => const Scaffold(
-        body: Center(child: Text('Page not found')),
-      ),
+      builder: (_) =>
+          const Scaffold(body: Center(child: Text('Page not found'))),
       settings: settings,
     );
   }

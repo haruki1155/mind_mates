@@ -60,4 +60,17 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> markActivity(String uid) async {
+    try {
+      await _repository.markUserActivity(uid);
+      final current = _user;
+      if (current != null && current.id == uid) {
+        _user = current.copyWith(dayStreak: current.dayStreak + 1);
+        notifyListeners();
+      }
+    } catch (_) {
+      // Streak sync should never block the user from completing an action.
+    }
+  }
 }

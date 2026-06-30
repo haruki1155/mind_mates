@@ -7,11 +7,17 @@ import 'firebase_options.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/mind_aid_provider.dart';
+import 'providers/journal_provider.dart';
+import 'providers/mood_provider.dart';
+import 'providers/report_provider.dart';
 import 'providers/secret_chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'repositories/assessment_repository.dart';
 import 'repositories/auth_repository.dart';
+import 'repositories/journal_repository.dart';
 import 'repositories/mind_aid_repository_screen.dart';
+import 'repositories/mood_repository.dart';
+import 'repositories/report_repository.dart';
 import 'repositories/secret_chat_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/auth/auth_service.dart';
@@ -27,6 +33,13 @@ Future<void> main() async {
           create: (_) => AuthProvider(AuthRepository(AuthService())),
         ),
         ChangeNotifierProvider(create: (_) => UserProvider(UserRepository())),
+        ChangeNotifierProvider(create: (_) => MoodProvider(MoodRepository())),
+        ChangeNotifierProvider(
+          create: (_) => JournalProvider(JournalRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ReportProvider(ReportRepository()),
+        ),
         ChangeNotifierProvider(
           create: (_) => MindAidProvider(MindAidRepository()),
         ),

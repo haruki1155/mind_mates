@@ -20,9 +20,13 @@ class FirestoreService {
   Future<void> setDocument(
     String collection,
     String documentId,
-    Map<String, dynamic> data,
-  ) {
-    return firestore.collection(collection).doc(documentId).set(data);
+    Map<String, dynamic> data, {
+    bool merge = false,
+  }) {
+    return firestore
+        .collection(collection)
+        .doc(documentId)
+        .set(data, SetOptions(merge: merge));
   }
 
   Future<Map<String, dynamic>?> getDocument(
@@ -34,6 +38,61 @@ class FirestoreService {
         .doc(documentId)
         .get();
     return snapshot.data();
+  }
+
+  Future<List<Map<String, dynamic>>> getDocuments(
+    String collection, {
+    Map<String, Object?> whereEquals = const {},
+    String? orderBy,
+    bool descending = true,
+    int? limit,
+  }) async {
+    Query<Map<String, dynamic>> query = firestore.collection(collection);
+
+    for (final entry in whereEquals.entries) {
+      query = query.where(entry.key, isEqualTo: entry.value);
+    }
+
+    if (orderBy != null) {
+      query = query.orderBy(orderBy, descending: descending);
+    }
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    final snapshot = await query.get();
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList(growable: false);
+  }
+
+  Stream<List<Map<String, dynamic>>> watchDocuments(
+    String collection, {
+    Map<String, Object?> whereEquals = const {},
+    String? orderBy,
+    bool descending = true,
+    int? limit,
+  }) {
+    Query<Map<String, dynamic>> query = firestore.collection(collection);
+
+    for (final entry in whereEquals.entries) {
+      query = query.where(entry.key, isEqualTo: entry.value);
+    }
+
+    if (orderBy != null) {
+      query = query.orderBy(orderBy, descending: descending);
+    }
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    return query.snapshots().map(
+      (snapshot) => snapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data()})
+          .toList(growable: false),
+    );
   }
 
   Stream<Map<String, dynamic>?> watchDocument(

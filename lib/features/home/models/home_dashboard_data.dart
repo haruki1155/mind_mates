@@ -140,6 +140,36 @@ class HomeDashboardData {
     );
   }
 
+  HomeDashboardData copyWith({
+    String? headerTitle,
+    HomeUserData? user,
+    List<HomeDayData>? days,
+    HomeAssessmentPromptData? assessment,
+    HomeStreakData? streak,
+    List<HomeServiceData>? services,
+    List<HomeInsightData>? insights,
+    HomeAffirmationData? affirmation,
+    HomeMentalHealthCheckData? mentalHealthCheck,
+    List<HomeResourceData>? resources,
+    List<HomeToolkitData>? toolkitItems,
+    List<DateTime>? activityDates,
+  }) {
+    return HomeDashboardData(
+      headerTitle: headerTitle ?? this.headerTitle,
+      user: user ?? this.user,
+      days: days ?? this.days,
+      assessment: assessment ?? this.assessment,
+      streak: streak ?? this.streak,
+      services: services ?? this.services,
+      insights: insights ?? this.insights,
+      affirmation: affirmation ?? this.affirmation,
+      mentalHealthCheck: mentalHealthCheck ?? this.mentalHealthCheck,
+      resources: resources ?? this.resources,
+      toolkitItems: toolkitItems ?? this.toolkitItems,
+      activityDates: activityDates ?? this.activityDates,
+    );
+  }
+
   static String _formatHeaderTitle(DateTime date) {
     return '${_monthName(date.month)} ${date.day}';
   }
@@ -162,6 +192,13 @@ class HomeDashboardData {
             activityDates.any((activityDate) => _isSameDay(day, activityDate)),
       );
     });
+  }
+
+  static List<HomeDayData> weekAround(
+    DateTime date, {
+    List<DateTime> activityDates = const [],
+  }) {
+    return _weekAround(date, activityDates: activityDates);
   }
 
   static bool _isSameDay(DateTime first, DateTime second) {
