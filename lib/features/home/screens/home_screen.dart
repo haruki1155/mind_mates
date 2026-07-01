@@ -24,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _navVisibilityThreshold = 24;
 
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey _insightsKey = GlobalKey();
 
   bool _showBottomNav = true;
   _HomeNavDestination _activeDestination = _HomeNavDestination.today;
@@ -125,15 +124,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      KeyedSubtree(
-                        key: _insightsKey,
-                        child: HomeAnimatedSection(
-                          delay: 170,
-                          child: HomeDailyInsightsSection(
-                            insights: data.insights,
-                            affirmation: data.affirmation,
-                            onOpen: _openPlaceholder,
-                          ),
+                      HomeAnimatedSection(
+                        delay: 170,
+                        child: HomeDailyInsightsSection(
+                          insights: data.insights,
+                          affirmation: data.affirmation,
+                          onOpen: _openPlaceholder,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -287,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case _HomeNavDestination.secretChat:
         Navigator.of(context).pushNamed(RouteNames.secretChat);
       case _HomeNavDestination.insight:
-        _scrollToInsights();
+        Navigator.of(context).pushNamed(RouteNames.mentalHealthInsights);
       case _HomeNavDestination.messages:
         Navigator.of(context).pushNamed(RouteNames.mindAid);
       case _HomeNavDestination.profile:
@@ -309,22 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _scrollToInsights() {
-    setState(() {
-      _activeDestination = _HomeNavDestination.insight;
-    });
-
-    final context = _insightsKey.currentContext;
-    if (context == null) return;
-
-    Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 520),
-      curve: Curves.easeOutCubic,
-      alignment: 0.08,
-    );
-  }
-
   void _openProfile() {
     Navigator.of(context).pushNamed(RouteNames.profile);
   }
@@ -340,6 +320,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openResource(HomeResourceData resource) {
     if (resource.title == 'Talk to AI companion') {
       Navigator.of(context).pushNamed(RouteNames.mindAid);
+      return;
+    }
+
+    if (resource.title == 'View your insights') {
+      Navigator.of(context).pushNamed(RouteNames.mentalHealthInsights);
       return;
     }
 

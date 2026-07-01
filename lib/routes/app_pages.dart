@@ -42,6 +42,7 @@ class AppPages {
     RouteNames.services: (_) => const ServicesScreen(),
     RouteNames.mindAid: (_) => const MindAidPage(),
     RouteNames.secretChat: (_) => const SecretChatPage(),
+    RouteNames.insights: (_) => const MentalHealthInsightsScreen(),
     RouteNames.profile: (_) => const ProfileScreen(),
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),

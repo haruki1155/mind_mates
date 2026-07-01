@@ -5,13 +5,16 @@ import 'package:mind_mates/models/mood_model.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
+import 'package:mind_mates/providers/insights_provider.dart';
 import 'package:mind_mates/providers/mood_provider.dart';
 import 'package:mind_mates/providers/report_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
+import 'package:mind_mates/repositories/insights_repository.dart';
 import 'package:mind_mates/repositories/mood_repository.dart';
 import 'package:mind_mates/repositories/report_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
+import 'package:mind_mates/routes/app_pages.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -54,11 +57,15 @@ void main() {
           ChangeNotifierProvider<MoodProvider>.value(value: moodProvider),
           ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
           ChangeNotifierProvider(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
             create: (_) => AssessmentProvider(AssessmentRepository()),
           ),
         ],
         child: MaterialApp(
           theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
           home: const HomeScreen(),
         ),
       ),
@@ -72,6 +79,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('This week is ready for review'), findsOneWidget);
   });
+
+  testWidgets('home Insight destination opens the insights screen', (
+    tester,
+  ) async {
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AssessmentProvider(AssessmentRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Insight'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Search insights...'), findsOneWidget);
+  });
+}
+
+Map<String, WidgetBuilder> _testRoutes() {
+  return Map<String, WidgetBuilder>.of(AppPages.routes)
+    ..remove(Navigator.defaultRouteName);
 }
 
 class _FakeUserRepository extends UserRepository {}

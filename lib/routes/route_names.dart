@@ -16,6 +16,7 @@ class RouteNames {
   static const services = '/services';
   static const mindAid = '/mind-aid';
   static const secretChat = '/secret-chat';
+  static const insights = '/insights';
   static const profile = '/profile';
   static const mentalHealthReport = '/profile/mental-health-report';
   static const mentalHealthInsights = '/profile/mental-health-insights';
