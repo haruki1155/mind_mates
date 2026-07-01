@@ -161,7 +161,7 @@ void main() {
       provider.selectRole(AssessmentRole.faculty);
       provider.startStudentAssessment();
 
-      expect(provider.activeAssessmentTitle, 'Faculty Assessment');
+      expect(provider.activeAssessmentTitle, 'Teaching Assessment');
       expect(
         provider.currentStudentQuestion?.section,
         AssessmentSection.workplaceStressCore,
@@ -173,7 +173,7 @@ void main() {
       provider.selectRole(AssessmentRole.staff);
       provider.startStudentAssessment();
 
-      expect(provider.activeAssessmentTitle, 'Staff Assessment');
+      expect(provider.activeAssessmentTitle, 'Non-Teaching Assessment');
       expect(
         provider.currentStudentQuestion?.section,
         AssessmentSection.workplaceResponsibilityCore,

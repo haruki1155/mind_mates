@@ -151,9 +151,10 @@ class _SignupBodyState extends State<_SignupBody> {
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      RouteNames.quickAssessmentCategory,
+      (route) => false,
+    );
   }
 
   UserModel _localProfileFromRegistration({

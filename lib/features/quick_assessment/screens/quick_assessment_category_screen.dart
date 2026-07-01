@@ -88,7 +88,7 @@ class _DecisionContent extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Quick Check Complete',
+            'Full Assessment Optional',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: QuickAssessmentPalette.text,
@@ -118,7 +118,7 @@ class _DecisionContent extends StatelessWidget {
               border: Border.all(color: QuickAssessmentPalette.softBorder),
             ),
             child: Text(
-              'The full ${role.label.toLowerCase()} assessment is optional and gives deeper personalized insights based on your role.',
+              'You can answer the full ${role.label.toLowerCase()} assessment now for deeper insights, or skip it and take it later from your dashboard.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: QuickAssessmentPalette.mutedText,
@@ -184,6 +184,6 @@ class _DecisionContent extends StatelessWidget {
     final name = provider.name.trim();
     final prefix = name.isEmpty ? 'Your' : '$name, your';
 
-    return '$prefix quick assessment is done. You can continue with the ${role.label.toLowerCase()} assessment now, or come back to it later.';
+    return '$prefix quick assessment is saved. Your ${role.label.toLowerCase()} answers will choose the right full assessment question set.';
   }
 }

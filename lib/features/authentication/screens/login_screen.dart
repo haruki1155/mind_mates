@@ -84,9 +84,10 @@ class _LoginBodyState extends State<_LoginBody> {
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      RouteNames.quickAssessmentCategory,
+      (route) => false,
+    );
   }
 
   Future<bool> _savePendingQuickAssessment(String userId) async {

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/quick_assessment/models/quick_assessment_models.dart';
+
 class UserModel {
   const UserModel({
     required this.id,
@@ -48,16 +50,7 @@ class UserModel {
   }
 
   String get roleLabel {
-    switch ((role ?? '').trim().toLowerCase()) {
-      case 'student':
-        return 'Student';
-      case 'faculty':
-        return 'Faculty';
-      case 'staff':
-        return 'Staff';
-      default:
-        return 'User';
-    }
+    return AssessmentRole.fromStoredValue(role)?.label ?? 'User';
   }
 
   UserModel copyWith({

@@ -8,9 +8,9 @@ enum AssessmentRole {
       case AssessmentRole.student:
         return 'Student';
       case AssessmentRole.faculty:
-        return 'Faculty';
+        return 'Teaching';
       case AssessmentRole.staff:
-        return 'Staff';
+        return 'Non-Teaching';
     }
   }
 
@@ -22,6 +22,26 @@ enum AssessmentRole {
         return 'Teaching workload, professional support & work-life balance';
       case AssessmentRole.staff:
         return 'Workplace responsibilities, support & emotional well-being';
+    }
+  }
+
+  static AssessmentRole? fromStoredValue(String? value) {
+    final normalized = value?.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+
+    switch (normalized) {
+      case 'student':
+        return AssessmentRole.student;
+      case 'faculty':
+      case 'teaching':
+        return AssessmentRole.faculty;
+      case 'staff':
+      case 'nonteaching':
+        return AssessmentRole.staff;
+      default:
+        return null;
     }
   }
 }

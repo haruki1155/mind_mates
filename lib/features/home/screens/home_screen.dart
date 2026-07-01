@@ -6,6 +6,7 @@ import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
+import '../../quick_assessment/models/quick_assessment_models.dart';
 import '../models/home_dashboard_data.dart';
 import '../widgets/home_dashboard_widgets.dart';
 
@@ -313,8 +314,43 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).pushNamed(RouteNames.services);
   }
 
-  void _openStudentAssessment() {
-    Navigator.of(context).pushNamed(RouteNames.quickAssessmentRole);
+  Future<void> _openStudentAssessment() async {
+    final shouldStart = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Start Assessment?'),
+          content: const Text(
+            'This will open your role-based assessment questions. You can skip questions while answering.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Start'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldStart != true || !mounted) return;
+
+    final assessmentProvider = context.read<AssessmentProvider>();
+    final savedRole = context.read<UserProvider>().user?.role;
+    final role =
+        assessmentProvider.selectedRole ??
+        AssessmentRole.fromStoredValue(savedRole) ??
+        AssessmentRole.student;
+
+    if (assessmentProvider.selectedRole != role) {
+      assessmentProvider.selectRole(role);
+    }
+
+    Navigator.of(context).pushNamed(RouteNames.studentAssessment);
   }
 
   void _openResource(HomeResourceData resource) {

@@ -7,6 +7,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
+import '../../quick_assessment/models/quick_assessment_models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.data});
@@ -1074,7 +1075,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     _departmentController = TextEditingController(
       text: widget.user.department ?? '',
     );
-    final currentRole = (widget.user.role ?? 'student').toLowerCase();
+    final currentRole =
+        AssessmentRole.fromStoredValue(widget.user.role)?.name ?? 'student';
     _role = _roles.contains(currentRole) ? currentRole : 'student';
   }
 
@@ -1167,9 +1169,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                       ),
                       DropdownMenuItem(
                         value: 'faculty',
-                        child: Text('Faculty'),
+                        child: Text('Teaching'),
                       ),
-                      DropdownMenuItem(value: 'staff', child: Text('Staff')),
+                      DropdownMenuItem(
+                        value: 'staff',
+                        child: Text('Non-Teaching'),
+                      ),
                     ],
                     onChanged: isSaving
                         ? null

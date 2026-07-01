@@ -67,7 +67,7 @@ void main() {
           email: 'b@example.com',
           role: 'faculty',
         ).roleLabel,
-        'Faculty',
+        'Teaching',
       );
       expect(
         const UserModel(
@@ -75,18 +75,26 @@ void main() {
           email: 'c@example.com',
           role: 'staff',
         ).roleLabel,
-        'Staff',
+        'Non-Teaching',
       );
       expect(
         const UserModel(
           id: '4',
           email: 'd@example.com',
+          role: 'non-teaching',
+        ).roleLabel,
+        'Non-Teaching',
+      );
+      expect(
+        const UserModel(
+          id: '5',
+          email: 'e@example.com',
           role: 'guest',
         ).roleLabel,
         'User',
       );
       expect(
-        const UserModel(id: '5', email: 'e@example.com').roleLabel,
+        const UserModel(id: '6', email: 'f@example.com').roleLabel,
         'User',
       );
     });

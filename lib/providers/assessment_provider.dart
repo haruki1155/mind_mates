@@ -70,9 +70,9 @@ class AssessmentProvider extends ChangeNotifier {
       case AssessmentUserType.student:
         return 'Student Assessment';
       case AssessmentUserType.faculty:
-        return 'Faculty Assessment';
+        return 'Teaching Assessment';
       case AssessmentUserType.staff:
-        return 'Staff Assessment';
+        return 'Non-Teaching Assessment';
     }
   }
 
