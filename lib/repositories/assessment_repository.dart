@@ -74,4 +74,25 @@ class AssessmentRepository {
         .get();
     return snapshot.docs.length;
   }
+
+  Future<bool> hasFullAssessmentThisWeek(String userId, {DateTime? now}) async {
+    final weekStart = _weekStartFor(now ?? DateTime.now());
+    final weekEndExclusive = weekStart.add(const Duration(days: 7));
+    final snapshot = await _firestoreService.firestore
+        .collection(FirestoreCollections.assessments)
+        .where('userId', isEqualTo: userId)
+        .where(
+          'createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(weekStart),
+        )
+        .where('createdAt', isLessThan: Timestamp.fromDate(weekEndExclusive))
+        .get();
+
+    return snapshot.docs.any((doc) => doc.data()['type'] != 'quick');
+  }
+
+  DateTime _weekStartFor(DateTime date) {
+    final local = DateTime(date.year, date.month, date.day);
+    return local.subtract(Duration(days: local.weekday - 1));
+  }
 }

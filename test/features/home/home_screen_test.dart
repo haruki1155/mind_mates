@@ -170,6 +170,58 @@ void main() {
     expect(find.text('Emergency Reset Breath'), findsOneWidget);
     expect(find.text('Mindful Breathing'), findsOneWidget);
   });
+
+  testWidgets('home blocks main assessment when completed this week', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(
+        const UserModel(
+          id: 'user_1',
+          email: 'leo@example.com',
+          role: 'student',
+        ),
+      );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AssessmentProvider(
+              _FakeAssessmentRepository(hasFullThisWeek: true),
+            ),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Start Assessment'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Assessment already completed'), findsOneWidget);
+    expect(find.text('Start Assessment?'), findsNothing);
+  });
 }
 
 Map<String, WidgetBuilder> _testRoutes() {
@@ -206,3 +258,14 @@ class _FakeReportRepository extends ReportRepository {
 }
 
 class _FakeBreathingRepository extends BreathingRepository {}
+
+class _FakeAssessmentRepository extends AssessmentRepository {
+  _FakeAssessmentRepository({this.hasFullThisWeek = false});
+
+  final bool hasFullThisWeek;
+
+  @override
+  Future<bool> hasFullAssessmentThisWeek(String userId, {DateTime? now}) async {
+    return hasFullThisWeek;
+  }
+}

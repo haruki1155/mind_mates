@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
@@ -334,6 +335,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openStudentAssessment() async {
+    final userId = _currentUserId();
+    if (userId != null && userId.isNotEmpty) {
+      final canStart = await context
+          .read<AssessmentProvider>()
+          .canStartFullAssessmentThisWeek(userId);
+      if (!mounted) return;
+      if (!canStart) {
+        await _showWeeklyAssessmentLimitDialog();
+        return;
+      }
+    }
+
     final shouldStart = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -407,6 +420,64 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+  }
+
+  String? _currentUserId() {
+    final userId = context.read<UserProvider>().user?.id;
+    if (userId != null && userId.isNotEmpty) return userId;
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+      return authProvider.userId ?? authProvider.hydrateCurrentUser();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  Future<void> _showWeeklyAssessmentLimitDialog() {
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: HomePalette.sun, width: 1.2),
+          ),
+          title: const Text(
+            'Assessment already completed',
+            style: TextStyle(
+              color: HomePalette.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: const Text(
+            'You can take the main assessment once per week. Your next assessment opens next Monday.',
+            style: TextStyle(
+              color: HomePalette.blueText,
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: FilledButton.styleFrom(
+                backgroundColor: HomePalette.sun,
+                foregroundColor: HomePalette.text,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text('Got it'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _openResource(HomeResourceData resource) {

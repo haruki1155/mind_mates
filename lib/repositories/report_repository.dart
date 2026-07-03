@@ -94,7 +94,7 @@ class ReportRepository {
         breathingSummary.sessionCount > 0 ||
         currentStreak > 0;
 
-    return _firestoreService.createDocument(FirestoreCollections.reports, {
+    final reportPayload = {
       'userId': userId,
       'title': 'Mental Health Summary',
       'description': _description(
@@ -132,7 +132,25 @@ class ReportRepository {
         breathingSessionCount: breathingSummary.sessionCount,
       ),
       'hasEnoughData': hasEnoughData,
-    });
+    };
+
+    final reportId = await _firestoreService.createDocument(
+      FirestoreCollections.reports,
+      reportPayload,
+    );
+    await _syncAdminStatusSummary(
+      userId: userId,
+      userDoc: userDoc,
+      latestAssessmentStatus: latestAssessmentStatus,
+      mentalStatusSignal: mentalStatusSignal,
+      topConcernAreas: topConcernAreas,
+      activeDayCount: activeDateKeys.length,
+      assessmentCount: weeklyAssessments.length,
+      mindAidMessageCount: mindAidMessageCount,
+      breathingSessionCount: breathingSummary.sessionCount,
+      hasEnoughData: hasEnoughData,
+    );
+    return reportId;
   }
 
   DateTime _weekStartFor(DateTime date) {
@@ -372,6 +390,89 @@ class ReportRepository {
         text.contains('anxiety') ||
         text.contains('sleep') ||
         text.contains('overwhelm');
+  }
+
+  Future<void> _syncAdminStatusSummary({
+    required String userId,
+    required Map<String, dynamic>? userDoc,
+    required String? latestAssessmentStatus,
+    required String? mentalStatusSignal,
+    required List<String> topConcernAreas,
+    required int activeDayCount,
+    required int assessmentCount,
+    required int mindAidMessageCount,
+    required int breathingSessionCount,
+    required bool hasEnoughData,
+  }) {
+    final status = _adminStatusFor(
+      latestAssessmentStatus: latestAssessmentStatus,
+      mentalStatusSignal: mentalStatusSignal,
+      hasEnoughData: hasEnoughData,
+    );
+    return _firestoreService
+        .setDocument(FirestoreCollections.adminStatusSummaries, userId, {
+          'userId': userId,
+          'userLabel': _userLabel(userId, userDoc),
+          'role': userDoc?['role']?.toString().trim() ?? '',
+          'status': status,
+          'statusRank': _statusRank(status),
+          'latestAssessmentStatus': latestAssessmentStatus ?? '',
+          'mentalStatusSignal': mentalStatusSignal ?? '',
+          'topConcernAreas': topConcernAreas,
+          'activeDayCount': activeDayCount,
+          'assessmentCount': assessmentCount,
+          'mindAidMessageCount': mindAidMessageCount,
+          'breathingSessionCount': breathingSessionCount,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, merge: true);
+  }
+
+  String _adminStatusFor({
+    required String? latestAssessmentStatus,
+    required String? mentalStatusSignal,
+    required bool hasEnoughData,
+  }) {
+    final status = (latestAssessmentStatus ?? '').toLowerCase();
+    final signal = (mentalStatusSignal ?? '').toLowerCase();
+    if (status.contains('severe') ||
+        status.contains('very high') ||
+        status.contains('high') ||
+        signal == 'highsupport' ||
+        signal == 'elevated') {
+      return 'severe';
+    }
+    if (status.contains('moderate') || signal == 'watchful') {
+      return 'moderate';
+    }
+    if (!hasEnoughData) return 'normal';
+    return 'normal';
+  }
+
+  int _statusRank(String status) {
+    switch (status) {
+      case 'severe':
+        return 0;
+      case 'moderate':
+        return 1;
+      default:
+        return 2;
+    }
+  }
+
+  String _userLabel(String userId, Map<String, dynamic>? userDoc) {
+    final name = userDoc?['name']?.toString().trim();
+    if (name != null && name.isNotEmpty) return name;
+    final firstName = userDoc?['firstName']?.toString().trim();
+    final lastName = userDoc?['lastName']?.toString().trim();
+    final parts = [
+      if (firstName != null && firstName.isNotEmpty) firstName,
+      if (lastName != null && lastName.isNotEmpty) lastName,
+    ];
+    if (parts.isNotEmpty) return parts.join(' ');
+    final email = userDoc?['email']?.toString().trim();
+    if (email != null && email.isNotEmpty) return email.split('@').first;
+    if (userId.length <= 8) return 'User $userId';
+    return 'User ${userId.substring(0, 8)}';
   }
 }
 

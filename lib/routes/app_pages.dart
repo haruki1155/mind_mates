@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/admin/screens/admin_status_dashboard_screen.dart';
 import '../features/authentication/screens/forgot_password_screen.dart';
 import '../features/authentication/screens/login_screen.dart';
 import '../features/authentication/screens/signup_screen.dart';
@@ -48,5 +49,6 @@ class AppPages {
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),
     RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
+    RouteNames.adminStatus: (_) => const AdminStatusDashboardScreen(),
   };
 }

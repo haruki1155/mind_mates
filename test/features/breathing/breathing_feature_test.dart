@@ -83,6 +83,10 @@ void main() {
 
     await tester.tap(find.text('Emergency Reset Breath'));
     await tester.pump();
+    expect(find.text('Ready to begin?'), findsOneWidget);
+
+    await tester.tap(find.text('Start breathing'));
+    await tester.pump();
     expect(find.text('Session complete'), findsNothing);
 
     await tester.pump(const Duration(seconds: 31));

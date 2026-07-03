@@ -77,6 +77,17 @@ void main() {
       expect(repository.createdForUserId, 'user_1');
       expect(provider.latestReport?.id, 'placeholder_1');
     });
+
+    test('refreshes weekly report and reloads latest report', () async {
+      final repository = _FakeReportRepository();
+      final provider = ReportProvider(repository);
+
+      await provider.refreshWeeklyReport('user_1');
+
+      expect(repository.generatedForUserId, 'user_1');
+      expect(provider.latestReport?.id, 'generated_1');
+      expect(provider.latestReport?.hasEnoughData, isTrue);
+    });
   });
 }
 
@@ -128,6 +139,7 @@ class _FakeReportRepository extends ReportRepository {
 
   ReportModel? latest;
   String? createdForUserId;
+  String? generatedForUserId;
 
   @override
   Future<ReportModel?> fetchLatestReport(String userId) async => latest;
@@ -141,5 +153,18 @@ class _FakeReportRepository extends ReportRepository {
       generatedAt: DateTime(2026, 6, 30),
     );
     return 'placeholder_1';
+  }
+
+  @override
+  Future<String> generateWeeklyReport(String userId, {DateTime? now}) async {
+    generatedForUserId = userId;
+    latest = ReportModel(
+      id: 'generated_1',
+      userId: userId,
+      generatedAt: DateTime(2026, 7, 3),
+      description: 'Latest full assessment shows Moderate Concern concern.',
+      hasEnoughData: true,
+    );
+    return 'generated_1';
   }
 }

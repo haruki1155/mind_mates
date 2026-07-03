@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../models/quick_assessment_models.dart';
 import '../widgets/quick_assessment_widgets.dart';
@@ -133,9 +135,7 @@ class _DecisionContent extends StatelessWidget {
             width: double.infinity,
             height: 46,
             child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed(RouteNames.studentAssessment);
-              },
+              onPressed: () => _openFullAssessment(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: QuickAssessmentPalette.primary,
                 foregroundColor: QuickAssessmentPalette.text,
@@ -185,5 +185,57 @@ class _DecisionContent extends StatelessWidget {
     final prefix = name.isEmpty ? 'Your' : '$name, your';
 
     return '$prefix quick assessment is saved. Your ${role.label.toLowerCase()} answers will choose the right full assessment question set.';
+  }
+
+  Future<void> _openFullAssessment(BuildContext context) async {
+    final userId = _currentUserId(context);
+    if (userId == null || userId.isEmpty) {
+      Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+      return;
+    }
+
+    final canStart = await context
+        .read<AssessmentProvider>()
+        .canStartFullAssessmentThisWeek(userId);
+    if (!context.mounted) return;
+
+    if (!canStart) {
+      await _showWeeklyLimitDialog(context);
+      return;
+    }
+
+    Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+  }
+
+  String? _currentUserId(BuildContext context) {
+    try {
+      final authProvider = context.read<AuthProvider>();
+      return authProvider.userId ?? authProvider.hydrateCurrentUser();
+    } on ProviderNotFoundException {
+      try {
+        return context.read<UserProvider>().user?.id;
+      } on ProviderNotFoundException {
+        return null;
+      }
+    }
+  }
+
+  Future<void> _showWeeklyLimitDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: QuickAssessmentPalette.card,
+        title: const Text('Assessment already completed'),
+        content: const Text(
+          'You can take the main assessment once per week. Your next assessment opens next Monday.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
   }
 }

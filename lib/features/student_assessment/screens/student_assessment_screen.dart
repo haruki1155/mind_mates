@@ -357,14 +357,12 @@ class _LikertOptionState extends State<_LikertOption> {
 
   @override
   Widget build(BuildContext context) {
-    final isNeutral = widget.answer == LikertAnswer.sometimes;
-
     return AnimatedScale(
       scale: _pressed ? 0.97 : 1,
       duration: const Duration(milliseconds: 80),
       curve: Curves.easeOutCubic,
       child: Material(
-        color: isNeutral
+        color: _pressed
             ? QuickAssessmentPalette.selectedFill
             : _StudentPalette.card,
         borderRadius: BorderRadius.circular(10),

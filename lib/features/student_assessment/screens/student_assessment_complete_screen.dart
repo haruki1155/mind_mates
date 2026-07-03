@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/widgets/quick_assessment_widgets.dart';
@@ -139,18 +140,44 @@ class _StudentAssessmentCompleteScreenState
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      final userId = _currentUserId();
       if (userId == null || userId.isEmpty) return;
 
       try {
-        await provider.saveStudentAssessmentForUser(userId);
+        final payload = await provider.saveStudentAssessmentForUser(userId);
+        if (payload == null) return;
         if (!mounted) return;
         await context.read<UserProvider>().markFullAssessment(userId);
+        if (!mounted) return;
+        await _reportProviderOrNull()?.refreshWeeklyReport(userId);
       } catch (error) {
         debugPrint('Student assessment sync failed: $error');
       }
     });
+  }
+
+  ReportProvider? _reportProviderOrNull() {
+    try {
+      return context.read<ReportProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  String? _currentUserId() {
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      if (userId != null && userId.isNotEmpty) return userId;
+    } on ProviderNotFoundException {
+      // Tests and preview surfaces may provide only UserProvider.
+    }
+
+    try {
+      return context.read<UserProvider>().user?.id;
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 }
 
@@ -162,13 +189,13 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 480,
+      height: 508,
       decoration: const BoxDecoration(color: QuickAssessmentPalette.primary),
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
           Positioned(
-            top: 352,
+            top: 380,
             left: -80,
             right: -80,
             child: Container(

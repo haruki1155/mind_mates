@@ -42,4 +42,20 @@ class ReportProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> refreshWeeklyReport(String userId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _repository.generateWeeklyReport(userId);
+      _latestReport = await _repository.fetchLatestReport(userId);
+    } catch (_) {
+      _errorMessage = 'Unable to refresh mental health summary.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

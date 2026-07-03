@@ -42,6 +42,12 @@ service cloud.firestore {
       allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
+    match /admin_status_summaries/{userId} {
+      allow read: if true;
+      allow create, update: if isOwner(request.resource.data.userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /user_activities/{activityId} {
       allow create: if isOwner(request.resource.data.userId);
       allow read, delete: if isOwner(resource.data.userId) || isAdmin();
