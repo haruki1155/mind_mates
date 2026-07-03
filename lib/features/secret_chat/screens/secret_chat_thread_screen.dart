@@ -1,0 +1,404 @@
+import 'package:flutter/material.dart';
+
+import '../../../models/secret_chat_model.dart';
+import '../../../providers/secret_chat_provider.dart';
+import '../domain/secret_chat_safety_validator.dart';
+import '../widgets/secret_chat_background.dart';
+import '../widgets/secret_chat_post_card.dart';
+
+class SecretChatThreadScreen extends StatefulWidget {
+  const SecretChatThreadScreen({
+    super.key,
+    required this.post,
+    required this.categoryColor,
+    required this.fetchComments,
+    required this.addComment,
+    required this.onToggleLike,
+    required this.onToggleSave,
+  });
+
+  final SecretChatModel post;
+  final Color categoryColor;
+  final Future<List<SecretChatComment>> Function(String postId) fetchComments;
+  final Future<void> Function({required String postId, required String message})
+  addComment;
+  final ValueChanged<String> onToggleLike;
+  final ValueChanged<String> onToggleSave;
+
+  @override
+  State<SecretChatThreadScreen> createState() => _SecretChatThreadScreenState();
+}
+
+class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
+  final _controller = TextEditingController();
+  final _validator = const SecretChatSafetyValidator();
+  late Future<List<SecretChatComment>> _commentsFuture;
+  SecretChatValidationResult? _validation;
+  bool _isSending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentsFuture = widget.fetchComments(widget.post.id);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Scaffold(
+      backgroundColor: SecretChatPalette.background,
+      appBar: AppBar(
+        title: const Text('Anonymous Thread'),
+        backgroundColor: SecretChatPalette.sun,
+        foregroundColor: SecretChatPalette.text,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                    sliver: SliverToBoxAdapter(
+                      child: SecretChatPostCard(
+                        post: widget.post,
+                        index: 0,
+                        categoryColor: widget.categoryColor,
+                        onLike: () => widget.onToggleLike(widget.post.id),
+                        onSave: () => widget.onToggleSave(widget.post.id),
+                        onComments: () {},
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: _ThreadSafetyNotice()),
+                  FutureBuilder<List<SecretChatComment>>(
+                    future: _commentsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _ThreadMessage(
+                            title: 'Unable to load replies',
+                            message: 'Please try opening this thread again.',
+                            actionLabel: 'Retry',
+                            onAction: _refreshComments,
+                          ),
+                        );
+                      }
+                      final comments = snapshot.data ?? const [];
+                      if (comments.isEmpty) {
+                        return const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _ThreadMessage(
+                            title: 'No replies yet',
+                            message:
+                                'Be the first to respond with support or encouragement.',
+                          ),
+                        );
+                      }
+                      return SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                        sliver: SliverList.separated(
+                          itemCount: comments.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            return _CommentBubble(comment: comments[index]);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: _ReplyComposer(
+                controller: _controller,
+                validation: _validation,
+                isSending: _isSending,
+                onChanged: _validateReply,
+                onSend: _sendReply,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _refreshComments() {
+    setState(() => _commentsFuture = widget.fetchComments(widget.post.id));
+  }
+
+  void _validateReply(String value) {
+    if (value.trim().isEmpty) {
+      setState(() => _validation = null);
+      return;
+    }
+    setState(() => _validation = _validator.validateComment(value));
+  }
+
+  Future<void> _sendReply() async {
+    final message = _controller.text.trim();
+    if (message.isEmpty) return;
+    final validation = _validator.validateComment(message);
+    if (!validation.isAllowed) {
+      setState(() => _validation = validation);
+      return;
+    }
+
+    setState(() => _isSending = true);
+    try {
+      await widget.addComment(postId: widget.post.id, message: message);
+      _controller.clear();
+      setState(() {
+        _validation = null;
+        _commentsFuture = widget.fetchComments(widget.post.id);
+      });
+    } on SecretChatValidationException catch (error) {
+      setState(() => _validation = error.result);
+    } catch (_) {
+      setState(
+        () => _validation = const SecretChatValidationResult(
+          code: SecretChatValidationCode.unsafe,
+          message: 'Unable to send this reply. Please try again.',
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+}
+
+class _ThreadSafetyNotice extends StatelessWidget {
+  const _ThreadSafetyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 2, 20, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.shield_outlined, size: 16, color: SecretChatPalette.muted),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'You are replying anonymously. Keep replies supportive and focused on mental health or wellbeing.',
+              style: TextStyle(
+                color: SecretChatPalette.muted,
+                fontSize: 12,
+                height: 1.25,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentBubble extends StatelessWidget {
+  const _CommentBubble({required this.comment});
+
+  final SecretChatComment comment;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE8DDAF)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Anonymous',
+              style: TextStyle(
+                color: SecretChatPalette.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              comment.message,
+              style: const TextStyle(
+                color: SecretChatPalette.text,
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplyComposer extends StatelessWidget {
+  const _ReplyComposer({
+    required this.controller,
+    required this.validation,
+    required this.isSending,
+    required this.onChanged,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final SecretChatValidationResult? validation;
+  final bool isSending;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 14,
+            offset: Offset(0, -5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  maxLength: SecretChatSafetyValidator.commentMaxLength,
+                  onChanged: onChanged,
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: 'Reply anonymously...',
+                    filled: true,
+                    fillColor: SecretChatPalette.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filled(
+                onPressed: isSending ? null : onSend,
+                icon: isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: SecretChatPalette.sun,
+                  foregroundColor: SecretChatPalette.text,
+                ),
+              ),
+            ],
+          ),
+          if (validation != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              validation!.message,
+              style: TextStyle(
+                color: validation!.isAllowed
+                    ? const Color(0xFF167A56)
+                    : const Color(0xFFB45309),
+                fontSize: 12,
+                height: 1.25,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ThreadMessage extends StatelessWidget {
+  const _ThreadMessage({
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: SecretChatPalette.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: SecretChatPalette.muted,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 14),
+              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -42,6 +42,20 @@ service cloud.firestore {
       allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
+    match /user_activities/{activityId} {
+      allow create: if isOwner(request.resource.data.userId);
+      allow read, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if (isOwner(resource.data.userId)
+        && isOwner(request.resource.data.userId)) || isAdmin();
+    }
+
+    match /breathing_sessions/{sessionId} {
+      allow create: if isOwner(request.resource.data.userId);
+      allow read, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if (isOwner(resource.data.userId)
+        && isOwner(request.resource.data.userId)) || isAdmin();
+    }
+
     match /mind_aid_messages/{messageId} {
       allow create: if isOwner(request.resource.data.userId);
       allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
@@ -52,19 +66,27 @@ service cloud.firestore {
         && (resource.data.moderationStatus == 'active' || isAdmin());
       allow create: if signedIn()
         && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.isAnonymous == true
         && request.resource.data.moderationStatus == 'active';
-      allow update: if isAdmin()
-        || (signedIn()
-          && resource.data.authorId == request.auth.uid
-          && request.resource.data.authorId == resource.data.authorId);
+      allow update: if isAdmin() || (signedIn()
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.message == resource.data.message
+        && request.resource.data.category == resource.data.category
+        && request.resource.data.moderationStatus == resource.data.moderationStatus
+        && request.resource.data.isAnonymous == resource.data.isAnonymous
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likeCount', 'commentCount', 'updatedAt']));
       allow delete: if isAdmin()
         || (signedIn() && resource.data.authorId == request.auth.uid);
     }
 
     match /secret_chat_comments/{commentId} {
-      allow read: if signedIn();
+      allow read: if signedIn()
+        && (resource.data.moderationStatus == 'active' || isAdmin());
       allow create: if signedIn()
-        && request.resource.data.authorId == request.auth.uid;
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.isAnonymous == true
+        && request.resource.data.moderationStatus == 'active';
       allow update, delete: if isAdmin()
         || (signedIn() && resource.data.authorId == request.auth.uid);
     }

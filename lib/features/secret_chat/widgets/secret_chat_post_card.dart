@@ -62,7 +62,7 @@ class SecretChatPostCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Anonymous User',
+                        'Anonymous',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

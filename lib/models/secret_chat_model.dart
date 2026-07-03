@@ -14,6 +14,8 @@ class SecretChatModel {
     required this.commentCount,
     this.authorId,
     this.moderationStatus = 'active',
+    this.safetyLabels = const [],
+    this.isAnonymous = true,
     this.isLiked = false,
     this.isSaved = false,
     this.isMine = false,
@@ -27,6 +29,8 @@ class SecretChatModel {
   final int commentCount;
   final String? authorId;
   final String moderationStatus;
+  final List<String> safetyLabels;
+  final bool isAnonymous;
   final bool isLiked;
   final bool isSaved;
   final bool isMine;
@@ -40,6 +44,8 @@ class SecretChatModel {
     int? commentCount,
     String? authorId,
     String? moderationStatus,
+    List<String>? safetyLabels,
+    bool? isAnonymous,
     bool? isLiked,
     bool? isSaved,
     bool? isMine,
@@ -53,6 +59,8 @@ class SecretChatModel {
       commentCount: commentCount ?? this.commentCount,
       authorId: authorId ?? this.authorId,
       moderationStatus: moderationStatus ?? this.moderationStatus,
+      safetyLabels: safetyLabels ?? this.safetyLabels,
+      isAnonymous: isAnonymous ?? this.isAnonymous,
       isLiked: isLiked ?? this.isLiked,
       isSaved: isSaved ?? this.isSaved,
       isMine: isMine ?? this.isMine,
@@ -76,6 +84,8 @@ class SecretChatModel {
       commentCount: intFromFirestore(json['commentCount']),
       authorId: authorId,
       moderationStatus: (json['moderationStatus'] ?? 'active').toString(),
+      safetyLabels: _stringList(json['safetyLabels']),
+      isAnonymous: boolFromFirestore(json['isAnonymous'], fallback: true),
       isLiked: isLiked,
       isSaved: isSaved,
       isMine: currentUserId != null && authorId == currentUserId,
@@ -91,6 +101,8 @@ class SecretChatModel {
       'likeCount': likeCount,
       'commentCount': commentCount,
       'moderationStatus': moderationStatus,
+      'safetyLabels': safetyLabels,
+      'isAnonymous': isAnonymous,
     };
   }
 }
@@ -101,12 +113,20 @@ class SecretChatComment {
     required this.postId,
     required this.message,
     required this.createdAt,
+    this.authorId,
+    this.moderationStatus = 'active',
+    this.safetyLabels = const [],
+    this.isAnonymous = true,
   });
 
   final String id;
   final String postId;
   final String message;
   final DateTime createdAt;
+  final String? authorId;
+  final String moderationStatus;
+  final List<String> safetyLabels;
+  final bool isAnonymous;
 
   factory SecretChatComment.fromJson(Map<String, dynamic> json, {String? id}) {
     return SecretChatComment(
@@ -114,11 +134,23 @@ class SecretChatComment {
       postId: (json['postId'] ?? '').toString(),
       message: (json['message'] ?? '').toString(),
       createdAt: dateTimeFromFirestoreOrNow(json['createdAt']),
+      authorId: json['authorId']?.toString(),
+      moderationStatus: (json['moderationStatus'] ?? 'active').toString(),
+      safetyLabels: _stringList(json['safetyLabels']),
+      isAnonymous: boolFromFirestore(json['isAnonymous'], fallback: true),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'postId': postId, 'message': message, 'createdAt': createdAt};
+    return {
+      'postId': postId,
+      'authorId': authorId,
+      'message': message,
+      'createdAt': createdAt,
+      'moderationStatus': moderationStatus,
+      'safetyLabels': safetyLabels,
+      'isAnonymous': isAnonymous,
+    };
   }
 }
 
@@ -127,4 +159,12 @@ class SecretChatCategory {
 
   final String label;
   final Color color;
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => item.toString().trim())
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
 }

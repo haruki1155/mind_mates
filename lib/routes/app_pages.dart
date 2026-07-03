@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/authentication/screens/forgot_password_screen.dart';
 import '../features/authentication/screens/login_screen.dart';
 import '../features/authentication/screens/signup_screen.dart';
+import '../features/breathing/screens/mindful_breathing_screen.dart';
 import '../features/counseling/screens/services_screen.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/onboarding/screens/onboarding_screen.dart';
@@ -46,5 +47,6 @@ class AppPages {
     RouteNames.profile: (_) => const ProfileScreen(),
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),
+    RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
   };
 }

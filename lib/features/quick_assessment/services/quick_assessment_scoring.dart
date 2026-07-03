@@ -58,6 +58,19 @@ class QuickAssessmentScoring {
     return QuickAssessmentLevel.low;
   }
 
+  static QuickAssessmentSignal signalForLevel(QuickAssessmentLevel level) {
+    switch (level) {
+      case QuickAssessmentLevel.low:
+        return QuickAssessmentSignal.stable;
+      case QuickAssessmentLevel.moderate:
+        return QuickAssessmentSignal.watchful;
+      case QuickAssessmentLevel.high:
+        return QuickAssessmentSignal.elevated;
+      case QuickAssessmentLevel.veryHigh:
+        return QuickAssessmentSignal.highSupport;
+    }
+  }
+
   static List<String> topConcernAreas(List<QuickAssessmentResponse> responses) {
     final sorted = areaScores(responses).entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));

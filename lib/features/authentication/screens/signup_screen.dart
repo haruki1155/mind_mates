@@ -146,7 +146,7 @@ class _SignupBodyState extends State<_SignupBody> {
       ),
     );
     if (savedQuickAssessment) {
-      await userProvider.markActivity(userId);
+      await userProvider.markQuickAssessment(userId);
     }
     await userProvider.loadProfile(userId);
 

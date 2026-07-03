@@ -33,6 +33,7 @@ class _SecretChatPageState extends State<SecretChatPage> {
       searchQuery: provider.searchQuery,
       isLoading: provider.isLoading,
       errorMessage: provider.errorMessage,
+      canCreate: provider.canCreate,
       onFilterChanged: provider.setFilter,
       onSearchChanged: provider.setSearchQuery,
       onCreatePost: provider.createPost,

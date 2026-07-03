@@ -5,11 +5,13 @@ import 'package:mind_mates/models/mood_model.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
+import 'package:mind_mates/providers/breathing_provider.dart';
 import 'package:mind_mates/providers/insights_provider.dart';
 import 'package:mind_mates/providers/mood_provider.dart';
 import 'package:mind_mates/providers/report_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
+import 'package:mind_mates/repositories/breathing_repository.dart';
 import 'package:mind_mates/repositories/insights_repository.dart';
 import 'package:mind_mates/repositories/mood_repository.dart';
 import 'package:mind_mates/repositories/report_repository.dart';
@@ -62,6 +64,9 @@ void main() {
           ChangeNotifierProvider(
             create: (_) => AssessmentProvider(AssessmentRepository()),
           ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
         ],
         child: MaterialApp(
           theme: ThemeData(splashFactory: NoSplash.splashFactory),
@@ -74,7 +79,8 @@ void main() {
 
     expect(find.text('Welcome back, Leonardo Molar!'), findsOneWidget);
     expect(find.text('Student'), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
+    expect(find.text('Day streak'), findsOneWidget);
+    expect(find.text('5'), findsWidgets);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(find.text('This week is ready for review'), findsOneWidget);
@@ -102,6 +108,9 @@ void main() {
           ChangeNotifierProvider(
             create: (_) => AssessmentProvider(AssessmentRepository()),
           ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
         ],
         child: MaterialApp(
           theme: ThemeData(splashFactory: NoSplash.splashFactory),
@@ -115,6 +124,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Search insights...'), findsOneWidget);
+  });
+
+  testWidgets('home Mindful breathing insight opens breathing screen', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AssessmentProvider(AssessmentRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Mindful breathing'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('Emergency Reset Breath'), findsOneWidget);
+    expect(find.text('Mindful Breathing'), findsOneWidget);
   });
 }
 
@@ -150,3 +204,5 @@ class _FakeReportRepository extends ReportRepository {
   @override
   Future<ReportModel?> fetchLatestReport(String userId) async => latest;
 }
+
+class _FakeBreathingRepository extends BreathingRepository {}

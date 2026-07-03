@@ -34,11 +34,32 @@ class MindAidAssessmentContext {
   }
 }
 
+class MindAidQuickAssessmentContext {
+  const MindAidQuickAssessmentContext({
+    required this.score,
+    required this.level,
+    required this.signal,
+    required this.summary,
+    required this.topConcernAreas,
+    required this.recommendedNextStep,
+    this.createdAt,
+  });
+
+  final int score;
+  final String level;
+  final String signal;
+  final String summary;
+  final List<String> topConcernAreas;
+  final String recommendedNextStep;
+  final DateTime? createdAt;
+}
+
 class MindAidContext {
   const MindAidContext({
     this.recentMessages = const [],
     this.moodLevel,
     this.assessmentScore,
+    this.quickAssessment,
     this.assessment,
     this.conversationSummary,
     this.preferredSupportStyle,
@@ -48,6 +69,7 @@ class MindAidContext {
   final List<String> recentMessages;
   final int? moodLevel;
   final int? assessmentScore;
+  final MindAidQuickAssessmentContext? quickAssessment;
   final MindAidAssessmentContext? assessment;
   final String? conversationSummary;
   final MindAidSupportStyle? preferredSupportStyle;
@@ -55,15 +77,17 @@ class MindAidContext {
 
   int? get effectiveAssessmentScore {
     final fullScore = assessment?.overallScore.round();
-    return fullScore ?? assessmentScore;
+    return fullScore ?? quickAssessment?.score ?? assessmentScore;
   }
 
-  bool get hasAssessment => assessment != null || assessmentScore != null;
+  bool get hasAssessment =>
+      assessment != null || quickAssessment != null || assessmentScore != null;
 
   MindAidContext copyWith({
     List<String>? recentMessages,
     int? moodLevel,
     int? assessmentScore,
+    MindAidQuickAssessmentContext? quickAssessment,
     MindAidAssessmentContext? assessment,
     String? conversationSummary,
     MindAidSupportStyle? preferredSupportStyle,
@@ -73,6 +97,7 @@ class MindAidContext {
       recentMessages: recentMessages ?? this.recentMessages,
       moodLevel: moodLevel ?? this.moodLevel,
       assessmentScore: assessmentScore ?? this.assessmentScore,
+      quickAssessment: quickAssessment ?? this.quickAssessment,
       assessment: assessment ?? this.assessment,
       conversationSummary: conversationSummary ?? this.conversationSummary,
       preferredSupportStyle:

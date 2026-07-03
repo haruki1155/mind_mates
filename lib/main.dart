@@ -6,6 +6,7 @@ import 'app.dart';
 import 'firebase_options.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/breathing_provider.dart';
 import 'providers/insights_provider.dart';
 import 'providers/mind_aid_provider.dart';
 import 'providers/journal_provider.dart';
@@ -15,6 +16,7 @@ import 'providers/secret_chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'repositories/assessment_repository.dart';
 import 'repositories/auth_repository.dart';
+import 'repositories/breathing_repository.dart';
 import 'repositories/insights_repository.dart';
 import 'repositories/journal_repository.dart';
 import 'repositories/mind_aid_repository_screen.dart';
@@ -53,6 +55,9 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => AssessmentProvider(AssessmentRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => BreathingProvider(BreathingRepository()),
         ),
       ],
       child: const MindMateApp(),

@@ -146,7 +146,7 @@ class _StudentAssessmentCompleteScreenState
       try {
         await provider.saveStudentAssessmentForUser(userId);
         if (!mounted) return;
-        await context.read<UserProvider>().markActivity(userId);
+        await context.read<UserProvider>().markFullAssessment(userId);
       } catch (error) {
         debugPrint('Student assessment sync failed: $error');
       }

@@ -3,12 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../database/firestore_collections.dart';
 import '../models/journal_model.dart';
 import '../services/firebase/firestore_service.dart';
+import 'user_repository.dart';
 
 class JournalRepository {
-  JournalRepository({FirestoreService? firestoreService})
-    : _firestoreService = firestoreService ?? FirestoreService();
+  JournalRepository({
+    FirestoreService? firestoreService,
+    UserRepository? userRepository,
+  }) : _firestoreService = firestoreService ?? FirestoreService(),
+       _userRepository = userRepository ?? UserRepository();
 
   final FirestoreService _firestoreService;
+  final UserRepository _userRepository;
 
   Future<List<JournalModel>> fetchRecentJournals(
     String userId, {
@@ -35,15 +40,18 @@ class JournalRepository {
     required String content,
     int? moodLevel,
     List<String> tags = const [],
-  }) {
-    return _firestoreService.createDocument(FirestoreCollections.journals, {
-      'userId': userId,
-      'content': content.trim(),
-      'moodLevel': moodLevel,
-      'tags': tags,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+  }) async {
+    final id = await _firestoreService
+        .createDocument(FirestoreCollections.journals, {
+          'userId': userId,
+          'content': content.trim(),
+          'moodLevel': moodLevel,
+          'tags': tags,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+    await _tryRecordActivity(userId);
+    return id;
   }
 
   Future<void> updateJournal({
@@ -59,5 +67,16 @@ class JournalRepository {
           'tags': tags,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+  }
+
+  Future<void> _tryRecordActivity(String userId) async {
+    try {
+      await _userRepository.recordActivity(
+        userId,
+        UserActivityType.journalEntry,
+      );
+    } catch (_) {
+      // Journal saving should remain successful even if streak sync is unavailable.
+    }
   }
 }

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/profile/screens/profile_screen.dart';
+import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
+import 'package:mind_mates/providers/report_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
+import 'package:mind_mates/repositories/report_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/routes/app_pages.dart';
 import 'package:mind_mates/routes/route_names.dart';
@@ -55,11 +58,55 @@ void main() {
     expect(AppPages.routes[RouteNames.mentalHealthReport], isNotNull);
     expect(AppPages.routes[RouteNames.mentalHealthInsights], isNotNull);
   });
+
+  testWidgets('mental health summary uses generated report text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+    final reportProvider = ReportProvider(
+      _FakeReportRepository(
+        ReportModel(
+          id: 'report_1',
+          userId: 'user_1',
+          title: 'Mental Health Summary',
+          description:
+              'Latest assessment shows moderate concern with a 4-day streak.',
+          generatedAt: DateTime(2026, 7, 3),
+          hasEnoughData: true,
+        ),
+      ),
+    );
+    await reportProvider.loadLatestReport('user_1');
+
+    await tester.pumpWidget(
+      _profileApp(userProvider, reportProvider: reportProvider),
+    );
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Latest assessment shows moderate concern with a 4-day streak.',
+      ),
+      findsOneWidget,
+    );
+  });
 }
 
-Widget _profileApp(UserProvider provider, {ProfileViewData? data}) {
-  return ChangeNotifierProvider<UserProvider>.value(
-    value: provider,
+Widget _profileApp(
+  UserProvider provider, {
+  ProfileViewData? data,
+  ReportProvider? reportProvider,
+}) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<UserProvider>.value(value: provider),
+      if (reportProvider != null)
+        ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+    ],
     child: MaterialApp(
       theme: ThemeData(splashFactory: NoSplash.splashFactory),
       home: ProfileScreen(data: data),
@@ -104,4 +151,13 @@ class _FakeUserRepository extends UserRepository {
   Future<void> updateUserProfile(String uid, UserModel user) async {
     updatedUser = user;
   }
+}
+
+class _FakeReportRepository extends ReportRepository {
+  _FakeReportRepository(this.report);
+
+  final ReportModel report;
+
+  @override
+  Future<ReportModel?> fetchLatestReport(String userId) async => report;
 }

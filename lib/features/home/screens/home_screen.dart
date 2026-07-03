@@ -189,7 +189,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final moods =
         _watchProviderOrNull<MoodProvider>(context)?.moods ?? const [];
 
-    final activityDates = moods.map((mood) => mood.createdAt).toList();
+    final backendActivityDates =
+        user?.activeDateKeys
+            .map(_dateFromActivityKey)
+            .whereType<DateTime>()
+            .toList(growable: false) ??
+        const <DateTime>[];
+    final activityDates = backendActivityDates.isNotEmpty
+        ? backendActivityDates
+        : moods.map((mood) => mood.createdAt).toList();
     final displayName = user?.displayName.trim();
     final role = user?.roleLabel;
 
@@ -209,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Start with one check-in today'
                   : 'Keep your wellness rhythm going',
               linkLabel: 'View',
+              lastActiveAt: user.lastActiveAt,
             ),
       days: activityDates.isEmpty
           ? base.days
@@ -227,6 +236,16 @@ class _HomeScreenState extends State<HomeScreen> {
               actionLabel: 'View Summary',
             ),
     );
+  }
+
+  DateTime? _dateFromActivityKey(String key) {
+    final parts = key.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   T? _readProviderOrNull<T>(BuildContext context) {
@@ -319,17 +338,54 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Start Assessment?'),
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: HomePalette.sun, width: 1.2),
+          ),
+          title: const Text(
+            'Start Assessment?',
+            style: TextStyle(
+              color: HomePalette.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           content: const Text(
             'This will open your role-based assessment questions. You can skip questions while answering.',
+            style: TextStyle(
+              color: HomePalette.blueText,
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                foregroundColor: HomePalette.orange,
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
               child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: HomePalette.sun,
+                foregroundColor: HomePalette.text,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
               child: const Text('Start'),
             ),
           ],
@@ -368,6 +424,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openPlaceholder(String title) {
+    if (title == 'Mindful breathing') {
+      Navigator.of(context).pushNamed(RouteNames.mindfulBreathing);
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => BlankHomeFeaturePage(title: title)),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/secret_chat_model.dart';
+import 'secret_chat_thread_screen.dart';
 import '../widgets/secret_chat_background.dart';
 import '../widgets/secret_chat_compose_sheet.dart';
 import '../widgets/secret_chat_header.dart';
@@ -22,6 +23,7 @@ class SecretChatScreen extends StatefulWidget {
     required this.searchQuery,
     required this.isLoading,
     required this.errorMessage,
+    required this.canCreate,
     required this.onFilterChanged,
     required this.onSearchChanged,
     required this.onCreatePost,
@@ -40,6 +42,7 @@ class SecretChatScreen extends StatefulWidget {
   final String searchQuery;
   final bool isLoading;
   final String? errorMessage;
+  final bool canCreate;
   final ValueChanged<SecretChatFilter> onFilterChanged;
   final ValueChanged<String> onSearchChanged;
   final CreateSecretPost onCreatePost;
@@ -78,7 +81,7 @@ class _SecretChatScreenState extends State<SecretChatScreen>
     return Scaffold(
       backgroundColor: SecretChatPalette.background,
       floatingActionButton: FloatingActionButton(
-        onPressed: _openComposeSheet,
+        onPressed: widget.canCreate ? _openComposeSheet : _showSignInRequired,
         backgroundColor: SecretChatPalette.sun,
         foregroundColor: SecretChatPalette.text,
         elevation: 5,
@@ -140,7 +143,7 @@ class _SecretChatScreenState extends State<SecretChatScreen>
         hasScrollBody: false,
         child: _FeedMessage(
           title: 'No thoughts found',
-          message: 'Try another search or share the first thought here.',
+          message: 'No anonymous threads yet. Start a wellbeing conversation.',
         ),
       );
     }
@@ -194,17 +197,23 @@ class _SecretChatScreenState extends State<SecretChatScreen>
   }
 
   Future<void> _openCommentsSheet(SecretChatModel post) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _CommentsSheet(
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SecretChatThreadScreen(
           post: post,
+          categoryColor: _categoryColor(post.category),
           fetchComments: widget.onFetchComments,
           addComment: widget.onAddComment,
-        );
-      },
+          onToggleLike: widget.onToggleLike,
+          onToggleSave: widget.onToggleSave,
+        ),
+      ),
+    );
+  }
+
+  void _showSignInRequired() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please sign in to share anonymously.')),
     );
   }
 }
@@ -229,7 +238,7 @@ class _PrivacyNotice extends StatelessWidget {
                 ),
                 TextSpan(
                   text:
-                      'Share your mental health journey anonymously. Your privacy is protected.',
+                      'Share anonymously in a moderated space for mental health and wellbeing.',
                 ),
               ],
             ),

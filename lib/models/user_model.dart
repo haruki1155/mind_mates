@@ -15,6 +15,10 @@ class UserModel {
     this.role,
     this.createdAt,
     this.dayStreak = 0,
+    this.longestStreak = 0,
+    this.lastActivityDateKey,
+    this.lastActiveAt,
+    this.activeDateKeys = const [],
     this.avatarAssetName,
   });
 
@@ -29,6 +33,10 @@ class UserModel {
   final String? role;
   final DateTime? createdAt;
   final int dayStreak;
+  final int longestStreak;
+  final String? lastActivityDateKey;
+  final DateTime? lastActiveAt;
+  final List<String> activeDateKeys;
   final String? avatarAssetName;
 
   String get displayName {
@@ -65,6 +73,10 @@ class UserModel {
     String? role,
     DateTime? createdAt,
     int? dayStreak,
+    int? longestStreak,
+    String? lastActivityDateKey,
+    DateTime? lastActiveAt,
+    List<String>? activeDateKeys,
     String? avatarAssetName,
   }) {
     return UserModel(
@@ -79,6 +91,10 @@ class UserModel {
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
       dayStreak: dayStreak ?? this.dayStreak,
+      longestStreak: longestStreak ?? this.longestStreak,
+      lastActivityDateKey: lastActivityDateKey ?? this.lastActivityDateKey,
+      lastActiveAt: lastActiveAt ?? this.lastActiveAt,
+      activeDateKeys: activeDateKeys ?? this.activeDateKeys,
       avatarAssetName: avatarAssetName ?? this.avatarAssetName,
     );
   }
@@ -96,6 +112,10 @@ class UserModel {
       role: _stringOrNull(json['role']),
       createdAt: _dateOrNull(json['createdAt']),
       dayStreak: _intOrZero(json['dayStreak']),
+      longestStreak: _intOrZero(json['longestStreak']),
+      lastActivityDateKey: _stringOrNull(json['lastActivityDateKey']),
+      lastActiveAt: _dateOrNull(json['lastActiveAt']),
+      activeDateKeys: _stringList(json['activeDateKeys']),
       avatarAssetName: _stringOrNull(json['avatarAssetName']),
     );
   }
@@ -113,6 +133,10 @@ class UserModel {
       'role': role ?? '',
       'createdAt': createdAt?.toIso8601String(),
       'dayStreak': dayStreak,
+      'longestStreak': longestStreak,
+      'lastActivityDateKey': lastActivityDateKey ?? '',
+      'lastActiveAt': lastActiveAt?.toIso8601String(),
+      'activeDateKeys': activeDateKeys,
       'avatarAssetName': avatarAssetName ?? '',
     };
   }
@@ -149,5 +173,13 @@ class UserModel {
     if (value is num) return value.toInt();
     if (value == null) return 0;
     return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static List<String> _stringList(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .map((item) => item.toString())
+        .where((item) => item.trim().isNotEmpty)
+        .toList(growable: false);
   }
 }

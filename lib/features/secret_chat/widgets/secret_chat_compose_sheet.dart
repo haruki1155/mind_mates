@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/secret_chat_model.dart';
+import '../../../providers/secret_chat_provider.dart';
+import '../domain/secret_chat_safety_validator.dart';
 import '../screens/secret_chat_screen.dart';
 import 'secret_chat_background.dart';
 
@@ -20,8 +22,10 @@ class SecretChatComposeSheet extends StatefulWidget {
 
 class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
   final _controller = TextEditingController();
+  final _validator = const SecretChatSafetyValidator();
   late String _category = widget.categories.first.label;
   bool _isSubmitting = false;
+  SecretChatValidationResult? _validation;
 
   @override
   void dispose() {
@@ -67,7 +71,7 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Your post appears without your name and stays local for now.',
+              'Your post appears without your name and is filtered for mental health and wellbeing only.',
               style: TextStyle(
                 color: SecretChatPalette.muted,
                 fontSize: 12,
@@ -95,7 +99,14 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
               controller: _controller,
               minLines: 4,
               maxLines: 7,
-              maxLength: 280,
+              maxLength: SecretChatSafetyValidator.postMaxLength,
+              onChanged: (value) {
+                if (value.trim().isEmpty) {
+                  setState(() => _validation = null);
+                  return;
+                }
+                setState(() => _validation = _validator.validatePost(value));
+              },
               decoration: InputDecoration(
                 hintText: 'What would you like to share?',
                 filled: true,
@@ -106,6 +117,21 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
                 ),
               ),
             ),
+            if (_validation != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _validation!.message,
+                  style: TextStyle(
+                    color: _validation!.isAllowed
+                        ? const Color(0xFF167A56)
+                        : const Color(0xFFB45309),
+                    fontSize: 12,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -136,11 +162,31 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
   Future<void> _submit() async {
     final message = _controller.text.trim();
     if (message.isEmpty) return;
+    final validation = _validator.validatePost(message);
+    if (!validation.isAllowed) {
+      setState(() => _validation = validation);
+      return;
+    }
 
     setState(() => _isSubmitting = true);
-    await widget.onSubmit(message: message, category: _category);
-    if (mounted) {
-      Navigator.of(context).pop();
+    try {
+      await widget.onSubmit(message: message, category: _category);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } on SecretChatValidationException catch (error) {
+      if (mounted) setState(() => _validation = error.result);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _validation = const SecretChatValidationResult(
+            code: SecretChatValidationCode.unsafe,
+            message: 'Unable to post right now. Please try again.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 }

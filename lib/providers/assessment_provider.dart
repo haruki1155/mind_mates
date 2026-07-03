@@ -162,6 +162,7 @@ class AssessmentProvider extends ChangeNotifier {
 
     final concernScore = QuickAssessmentScoring.averageConcernScore(responses);
     final overallLevel = QuickAssessmentScoring.overallLevel(concernScore);
+    final signalGeneratedAt = createdAt ?? DateTime.now();
 
     return QuickAssessmentResult(
       role: role,
@@ -174,7 +175,10 @@ class AssessmentProvider extends ChangeNotifier {
       recommendedNextStep: QuickAssessmentScoring.recommendedNextStepForLevel(
         overallLevel,
       ),
-      createdAt: createdAt ?? DateTime.now(),
+      mentalStatusSignal: QuickAssessmentScoring.signalForLevel(overallLevel),
+      signalSource: 'quickAssessment',
+      signalGeneratedAt: signalGeneratedAt,
+      createdAt: signalGeneratedAt,
     );
   }
 

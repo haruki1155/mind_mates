@@ -14,6 +14,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
+  just_audio: ^0.10.6
   permission_handler: ^12.0.3
   provider: ^6.1.5+1
 
@@ -44,3 +45,4 @@ flutter:
     - assets/images/Quick assesment/QUESTION 4/
     - assets/images/Quick assesment/QUESTION 5/
     - assets/data/mind_aid/
+    - assets/audio/breathing/

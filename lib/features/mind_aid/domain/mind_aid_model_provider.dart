@@ -164,6 +164,7 @@ If the user may be unsafe, say to seek immediate human support.''';
   String _userPrompt(MindAidModelPrompt prompt) {
     final primary = prompt.matches.isEmpty ? null : prompt.matches.first.record;
     final assessment = prompt.context.assessment;
+    final quickAssessment = prompt.context.quickAssessment;
     final topCategory = assessment?.highestCategory;
     final supportStyle = prompt.context.preferredSupportStyle?.label;
 
@@ -175,7 +176,16 @@ If the user may be unsafe, say to seek immediate human support.''';
       'supportStyle': supportStyle,
       'conversationSummary': prompt.context.conversationSummary,
       'assessment': assessment == null
-          ? {'quickScore': prompt.context.assessmentScore}
+          ? {
+              'quickScore':
+                  quickAssessment?.score ?? prompt.context.assessmentScore,
+              'quickLevel': quickAssessment?.level,
+              'wellnessSignal': quickAssessment?.signal,
+              'topConcernAreas': quickAssessment?.topConcernAreas,
+              'summary': quickAssessment?.summary,
+              'recommendedNextStep': quickAssessment?.recommendedNextStep,
+              'guardrail': 'screening signal only, not a diagnosis',
+            }
           : {
               'userType': assessment.userType,
               'overallScore': assessment.overallScore.round(),

@@ -82,6 +82,7 @@ class MindAidRepository {
         recentMessages: recentMessages,
         moodLevel: context.moodLevel,
         assessmentScore: context.effectiveAssessmentScore,
+        quickAssessment: context.quickAssessment,
         assessment: context.assessment,
         conversationSummary: context.conversationSummary,
         preferredSupportStyle: context.preferredSupportStyle,

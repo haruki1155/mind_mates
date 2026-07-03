@@ -79,7 +79,7 @@ class _LoginBodyState extends State<_LoginBody> {
 
     final savedQuickAssessment = await _savePendingQuickAssessment(userId);
     if (savedQuickAssessment) {
-      await userProvider.markActivity(userId);
+      await userProvider.markQuickAssessment(userId);
     }
     await userProvider.loadProfile(userId);
 

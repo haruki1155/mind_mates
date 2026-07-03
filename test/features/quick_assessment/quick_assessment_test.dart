@@ -86,6 +86,25 @@ void main() {
         contains('full role-based assessment'),
       );
     });
+
+    test('maps assessment level into a non-diagnostic wellness signal', () {
+      expect(
+        QuickAssessmentScoring.signalForLevel(QuickAssessmentLevel.low),
+        QuickAssessmentSignal.stable,
+      );
+      expect(
+        QuickAssessmentScoring.signalForLevel(QuickAssessmentLevel.moderate),
+        QuickAssessmentSignal.watchful,
+      );
+      expect(
+        QuickAssessmentScoring.signalForLevel(QuickAssessmentLevel.high),
+        QuickAssessmentSignal.elevated,
+      );
+      expect(
+        QuickAssessmentScoring.signalForLevel(QuickAssessmentLevel.veryHigh),
+        QuickAssessmentSignal.highSupport,
+      );
+    });
   });
 
   group('AssessmentProvider quick assessment flow', () {
@@ -126,6 +145,9 @@ void main() {
       expect(result.responses.length, 5);
       expect(result.concernScore, 95);
       expect(result.overallLevel, QuickAssessmentLevel.veryHigh);
+      expect(result.mentalStatusSignal, QuickAssessmentSignal.highSupport);
+      expect(result.signalSource, 'quickAssessment');
+      expect(result.signalGeneratedAt, result.createdAt);
       expect(result.summary, isNotEmpty);
       expect(result.topConcernAreas, isNotEmpty);
       expect(result.recommendedNextStep, isNotEmpty);
@@ -179,6 +201,12 @@ void main() {
         expect(payload['summary'], isA<String>());
         expect(payload['topConcernAreas'], isA<List<String>>());
         expect(payload['recommendedNextStep'], isA<String>());
+        expect(
+          payload['mentalStatusSignal'],
+          QuickAssessmentSignal.highSupport.name,
+        );
+        expect(payload['signalSource'], 'quickAssessment');
+        expect(payload['signalGeneratedAt'], isA<String>());
         expect(payload['responses'], isA<List<Object>>());
         expect(firestore.collection, 'assessments');
         expect(firestore.createdDocument?['userId'], 'user_123');

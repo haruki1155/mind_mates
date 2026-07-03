@@ -61,16 +61,60 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> markActivity(String uid) async {
+  Future<void> recordActivity(
+    String uid,
+    UserActivityType type, {
+    DateTime? occurredAt,
+  }) async {
     try {
-      await _repository.markUserActivity(uid);
+      final updatedUser = await _repository.recordActivity(
+        uid,
+        type,
+        occurredAt: occurredAt,
+      );
       final current = _user;
-      if (current != null && current.id == uid) {
-        _user = current.copyWith(dayStreak: current.dayStreak + 1);
+      if (updatedUser != null) {
+        _user = current == null
+            ? updatedUser
+            : current.copyWith(
+                dayStreak: updatedUser.dayStreak,
+                longestStreak: updatedUser.longestStreak,
+                lastActivityDateKey: updatedUser.lastActivityDateKey,
+                lastActiveAt: updatedUser.lastActiveAt,
+                activeDateKeys: updatedUser.activeDateKeys,
+              );
         notifyListeners();
       }
     } catch (_) {
       // Streak sync should never block the user from completing an action.
     }
+  }
+
+  Future<void> markActivity(String uid) {
+    return recordActivity(uid, UserActivityType.quickAssessment);
+  }
+
+  Future<void> markQuickAssessment(String uid) {
+    return recordActivity(uid, UserActivityType.quickAssessment);
+  }
+
+  Future<void> markFullAssessment(String uid) {
+    return recordActivity(uid, UserActivityType.fullAssessment);
+  }
+
+  Future<void> markMindAidMessage(String uid) {
+    return recordActivity(uid, UserActivityType.mindAidMessage);
+  }
+
+  Future<void> markMoodCheckIn(String uid) {
+    return recordActivity(uid, UserActivityType.moodCheckIn);
+  }
+
+  Future<void> markJournalEntry(String uid) {
+    return recordActivity(uid, UserActivityType.journalEntry);
+  }
+
+  Future<void> markBreathingSession(String uid) {
+    return recordActivity(uid, UserActivityType.breathingSession);
   }
 }

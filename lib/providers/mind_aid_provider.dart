@@ -92,7 +92,7 @@ class MindAidProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendMessage(
+  Future<bool> sendMessage(
     String userId,
     String text, {
     MindAidContext context = const MindAidContext(),
@@ -151,6 +151,9 @@ class MindAidProvider extends ChangeNotifier {
       );
       _trackChatResult(result);
       _conversationSummary = _summarizeConversation();
+      isSending = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       errorMessage = e.toString();
       _fallbackCount += 1;
@@ -158,15 +161,16 @@ class MindAidProvider extends ChangeNotifier {
 
     isSending = false;
     notifyListeners();
+    return false;
   }
 
-  void selectSuggestion(
+  Future<bool> selectSuggestion(
     MindAidSuggestion suggestion,
     String userId, {
     MindAidContext context = const MindAidContext(),
   }) {
     _selectedSuggestionCount += 1;
-    sendMessage(
+    return sendMessage(
       userId,
       suggestion.label,
       context: _contextWithSessionMemory(context),

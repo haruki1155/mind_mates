@@ -68,6 +68,26 @@ enum QuickAssessmentLevel {
   }
 }
 
+enum QuickAssessmentSignal {
+  stable,
+  watchful,
+  elevated,
+  highSupport;
+
+  String get label {
+    switch (this) {
+      case QuickAssessmentSignal.stable:
+        return 'Stable wellness signal';
+      case QuickAssessmentSignal.watchful:
+        return 'Watchful wellness signal';
+      case QuickAssessmentSignal.elevated:
+        return 'Elevated support signal';
+      case QuickAssessmentSignal.highSupport:
+        return 'High support signal';
+    }
+  }
+}
+
 class QuickAssessmentOption {
   const QuickAssessmentOption({
     required this.id,
@@ -129,6 +149,9 @@ class QuickAssessmentResult {
     required this.summary,
     required this.topConcernAreas,
     required this.recommendedNextStep,
+    required this.mentalStatusSignal,
+    required this.signalSource,
+    required this.signalGeneratedAt,
     required this.createdAt,
   });
 
@@ -140,6 +163,9 @@ class QuickAssessmentResult {
   final String summary;
   final List<String> topConcernAreas;
   final String recommendedNextStep;
+  final QuickAssessmentSignal mentalStatusSignal;
+  final String signalSource;
+  final DateTime signalGeneratedAt;
   final DateTime createdAt;
 
   Map<String, Object> toJson() {
@@ -152,6 +178,9 @@ class QuickAssessmentResult {
       'summary': summary,
       'topConcernAreas': topConcernAreas,
       'recommendedNextStep': recommendedNextStep,
+      'mentalStatusSignal': mentalStatusSignal.name,
+      'signalSource': signalSource,
+      'signalGeneratedAt': signalGeneratedAt.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
     };
   }

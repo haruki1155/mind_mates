@@ -8,6 +8,8 @@ class FirestoreCollections {
   static const appointments = 'appointments';
   static const recommendations = 'recommendations';
   static const reports = 'reports';
+  static const userActivities = 'user_activities';
+  static const breathingSessions = 'breathing_sessions';
   static const secretChats = 'secret_chats';
   static const secretChatComments = 'secret_chat_comments';
   static const secretChatInteractions = 'secret_chat_interactions';

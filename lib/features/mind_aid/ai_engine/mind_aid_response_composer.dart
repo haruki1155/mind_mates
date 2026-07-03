@@ -94,9 +94,20 @@ class MindAidResponseComposer {
   String _assessmentReview(MindAidContext context) {
     final assessment = context.assessment;
     if (assessment == null) {
+      final quick = context.quickAssessment;
+      if (quick != null) {
+        final concerns = quick.topConcernAreas.isEmpty
+            ? 'your overall check-in pattern'
+            : quick.topConcernAreas.take(2).join(' and ');
+        return 'I can review your quick assessment as a wellness signal, not a diagnosis. '
+            'It suggests a ${quick.level.toLowerCase()} support need (${quick.score}/100), mainly around $concerns. '
+            '${quick.summary} ${quick.recommendedNextStep} '
+            'What part of this result feels most important today?';
+      }
+
       final score = context.effectiveAssessmentScore;
       final scoreText = score == null ? '' : ' of $score/100';
-      return 'I can keep your quick assessment score$scoreText in mind. It suggests checking in with what feels most urgent today, then choosing one small support step. What part of your result do you want to understand first?';
+      return 'I can keep your quick assessment score$scoreText in mind as a wellness signal, not a diagnosis. It suggests checking in with what feels most urgent today, then choosing one small support step. What part of your result do you want to understand first?';
     }
 
     final top = assessment.highestCategory;

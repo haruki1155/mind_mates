@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 
+import '../features/secret_chat/domain/secret_chat_safety_validator.dart';
 import '../models/secret_chat_model.dart';
 import '../repositories/secret_chat_repository.dart';
 
 class SecretChatProvider extends ChangeNotifier {
-  SecretChatProvider(this.repository);
+  SecretChatProvider(
+    this.repository, {
+    this.validator = const SecretChatSafetyValidator(),
+  });
 
   final SecretChatRepository repository;
+  final SecretChatSafetyValidator validator;
 
   final categories = const [
     SecretChatCategory(label: 'Mental Health', color: Color(0xFFFFC414)),
-    SecretChatCategory(label: 'Gratitude', color: Color(0xFF76A9FF)),
     SecretChatCategory(label: 'Anxiety', color: Color(0xFFFF7BA5)),
+    SecretChatCategory(label: 'Stress', color: Color(0xFFFF9D76)),
+    SecretChatCategory(label: 'Gratitude', color: Color(0xFF76A9FF)),
+    SecretChatCategory(label: 'Self-care', color: Color(0xFF71D6A4)),
+    SecretChatCategory(label: 'School Pressure', color: Color(0xFFB8A7FF)),
+    SecretChatCategory(label: 'Support', color: Color(0xFF78C7E8)),
   ];
 
   List<SecretChatModel> _posts = [];
@@ -25,6 +34,7 @@ class SecretChatProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get canCreate => repository.hasSignedInUser;
   int get savedCount => _posts.where((post) => post.isSaved).length;
 
   List<SecretChatModel> get visiblePosts {
@@ -58,7 +68,8 @@ class SecretChatProvider extends ChangeNotifier {
     try {
       _posts = await repository.fetchPosts();
     } catch (error) {
-      _errorMessage = error.toString();
+      _posts = [];
+      _errorMessage = _friendlyError(error);
     }
 
     _isLoading = false;
@@ -80,22 +91,35 @@ class SecretChatProvider extends ChangeNotifier {
     required String message,
     required String category,
   }) async {
+    final validation = validator.validatePost(message);
+    if (!validation.isAllowed) {
+      _errorMessage = validation.message;
+      notifyListeners();
+      throw SecretChatValidationException(validation);
+    }
+
     final post = await repository.createPost(
       message: message,
       category: category,
+      safetyLabels: validation.labels,
     );
     _posts = [post, ..._posts];
     _selectedFilter = SecretChatFilter.mine;
+    _errorMessage = null;
     notifyListeners();
   }
 
   Future<void> toggleLike(String postId) async {
-    final updated = await repository.toggleLike(postId);
+    final post = _findPost(postId);
+    if (post == null) return;
+    final updated = await repository.toggleLike(post);
     _replacePost(updated);
   }
 
   Future<void> toggleSave(String postId) async {
-    final updated = await repository.toggleSave(postId);
+    final post = _findPost(postId);
+    if (post == null) return;
+    final updated = await repository.toggleSave(post);
     _replacePost(updated);
   }
 
@@ -107,9 +131,25 @@ class SecretChatProvider extends ChangeNotifier {
     required String postId,
     required String message,
   }) async {
-    await repository.addComment(postId: postId, message: message);
-    final updatedPosts = await repository.fetchPosts();
-    _posts = updatedPosts;
+    final validation = validator.validateComment(message);
+    if (!validation.isAllowed) {
+      _errorMessage = validation.message;
+      notifyListeners();
+      throw SecretChatValidationException(validation);
+    }
+
+    await repository.addComment(
+      postId: postId,
+      message: message,
+      safetyLabels: validation.labels,
+    );
+    _posts = [
+      for (final post in _posts)
+        post.id == postId
+            ? post.copyWith(commentCount: post.commentCount + 1)
+            : post,
+    ];
+    _errorMessage = null;
     notifyListeners();
   }
 
@@ -124,4 +164,30 @@ class SecretChatProvider extends ChangeNotifier {
     ];
     notifyListeners();
   }
+
+  SecretChatModel? _findPost(String postId) {
+    for (final post in _posts) {
+      if (post.id == postId) return post;
+    }
+    return null;
+  }
+
+  String _friendlyError(Object error) {
+    if (error is SecretChatAuthException) {
+      return 'Please sign in to use Secret Chat.';
+    }
+    if (error is SecretChatValidationException) {
+      return error.result.message;
+    }
+    return 'Secret Chat is unavailable right now. Please try again.';
+  }
+}
+
+class SecretChatValidationException implements Exception {
+  const SecretChatValidationException(this.result);
+
+  final SecretChatValidationResult result;
+
+  @override
+  String toString() => result.message;
 }

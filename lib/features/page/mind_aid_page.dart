@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '/providers/mind_aid_provider.dart';
 import '/providers/assessment_provider.dart';
 import '/providers/auth_provider.dart';
+import '/providers/user_provider.dart';
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
 import '/routes/route_names.dart';
@@ -32,10 +33,10 @@ class _MindAidPageState extends State<MindAidPage> {
       suggestions: provider.suggestions,
       isAssistantTyping: provider.isSending,
       onSendMessage: (text) {
-        provider.sendMessage(userId, text, context: mindAidContext);
+        _sendAndRecordActivity(userId, text, mindAidContext);
       },
       onSuggestionSelected: (suggestion) {
-        provider.selectSuggestion(suggestion, userId, context: mindAidContext);
+        _selectSuggestionAndRecordActivity(userId, suggestion, mindAidContext);
       },
       onHomeTap: () {
         Navigator.of(
@@ -45,6 +46,34 @@ class _MindAidPageState extends State<MindAidPage> {
       onNotificationTap: () {},
       disclaimerText: "AI assistant support only",
     );
+  }
+
+  Future<void> _sendAndRecordActivity(
+    String userId,
+    String text,
+    MindAidContext contextValue,
+  ) async {
+    final sent = await context.read<MindAidProvider>().sendMessage(
+      userId,
+      text,
+      context: contextValue,
+    );
+    if (!mounted || !sent || userId == 'guest') return;
+    await context.read<UserProvider>().markMindAidMessage(userId);
+  }
+
+  Future<void> _selectSuggestionAndRecordActivity(
+    String userId,
+    MindAidSuggestion suggestion,
+    MindAidContext contextValue,
+  ) async {
+    final sent = await context.read<MindAidProvider>().selectSuggestion(
+      suggestion,
+      userId,
+      context: contextValue,
+    );
+    if (!mounted || !sent || userId == 'guest') return;
+    await context.read<UserProvider>().markMindAidMessage(userId);
   }
 
   MindAidContext _buildMindAidContext(AssessmentProvider provider) {
@@ -64,7 +93,17 @@ class _MindAidPageState extends State<MindAidPage> {
 
     final quickResult = provider.quickResult;
     if (quickResult != null) {
-      return MindAidContext(assessmentScore: quickResult.concernScore.round());
+      return MindAidContext(
+        quickAssessment: MindAidQuickAssessmentContext(
+          score: quickResult.concernScore.round(),
+          level: quickResult.overallLevel.label,
+          signal: quickResult.mentalStatusSignal.name,
+          summary: quickResult.summary,
+          topConcernAreas: quickResult.topConcernAreas,
+          recommendedNextStep: quickResult.recommendedNextStep,
+          createdAt: quickResult.createdAt,
+        ),
+      );
     }
 
     return const MindAidContext();
@@ -94,6 +133,17 @@ class _MindAidPageState extends State<MindAidPage> {
         assessment.overallScore.round(),
         assessment.mainConcernAreas.join('|'),
         categoryKey,
+      ].join(':');
+    }
+
+    final quick = contextValue.quickAssessment;
+    if (quick != null) {
+      return [
+        'quick',
+        quick.score,
+        quick.level,
+        quick.signal,
+        quick.topConcernAreas.join('|'),
       ].join(':');
     }
 

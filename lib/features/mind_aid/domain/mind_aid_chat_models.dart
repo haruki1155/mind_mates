@@ -29,6 +29,7 @@ class MindAidChatRequest {
     this.recentMessages = const [],
     this.moodLevel,
     this.assessmentScore,
+    this.quickAssessment,
     this.assessment,
     this.conversationSummary,
     this.preferredSupportStyle,
@@ -40,6 +41,7 @@ class MindAidChatRequest {
   final List<MindAidMessageModel> recentMessages;
   final int? moodLevel;
   final int? assessmentScore;
+  final MindAidQuickAssessmentContext? quickAssessment;
   final MindAidAssessmentContext? assessment;
   final String? conversationSummary;
   final MindAidSupportStyle? preferredSupportStyle;

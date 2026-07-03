@@ -40,6 +40,7 @@ class MindAidChatEngine {
           .toList(growable: false),
       moodLevel: request.moodLevel,
       assessmentScore: request.assessmentScore,
+      quickAssessment: request.quickAssessment,
       assessment: request.assessment,
       conversationSummary: request.conversationSummary,
       preferredSupportStyle: request.preferredSupportStyle,
@@ -224,6 +225,21 @@ class MindAidChatEngine {
           MindAidSuggestionModel(
             id: 'top_concern_${topConcern.hashCode.abs()}',
             label: 'Help me with $topConcern',
+          ),
+        );
+      }
+
+      final quickConcerns = context.quickAssessment?.topConcernAreas;
+      final quickConcern = quickConcerns == null || quickConcerns.isEmpty
+          ? null
+          : quickConcerns.first;
+      if (topConcern == null &&
+          quickConcern != null &&
+          quickConcern.trim().isNotEmpty) {
+        suggestions.add(
+          MindAidSuggestionModel(
+            id: 'quick_concern_${quickConcern.hashCode.abs()}',
+            label: 'Help me with $quickConcern',
           ),
         );
       }

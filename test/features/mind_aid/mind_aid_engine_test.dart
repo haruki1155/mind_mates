@@ -244,16 +244,19 @@ void main() {
       'quick assessment fallback can answer assessment review prompts',
       () async {
         final result = await MindAidChatEngine().respond(
-          const MindAidChatRequest(
+          MindAidChatRequest(
             userId: 'user_1',
             text: 'What should I do next with my score?',
-            assessmentScore: 68,
+            quickAssessment: _quickAssessmentContext(),
           ),
           dataset,
         );
 
-        expect(result.text, contains('quick assessment score'));
+        expect(result.text, contains('wellness signal'));
         expect(result.text, contains('68/100'));
+        expect(result.text, contains('moderate'));
+        expect(result.text, contains('Stress load'));
+        expect(result.text, contains('not a diagnosis'));
       },
     );
 
@@ -342,6 +345,24 @@ void main() {
         final labels = result.suggestions.map((suggestion) => suggestion.label);
         expect(labels, contains('Review my assessment'));
         expect(labels, contains('Help me with Emotional Well-Being'));
+      },
+    );
+
+    test(
+      'quick assessment context adds review and concern suggestions',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          MindAidChatRequest(
+            userId: 'user_1',
+            text: 'I feel worried',
+            quickAssessment: _quickAssessmentContext(),
+          ),
+          dataset,
+        );
+
+        final labels = result.suggestions.map((suggestion) => suggestion.label);
+        expect(labels, contains('Review my assessment'));
+        expect(labels, contains('Help me with Stress load'));
       },
     );
   });
@@ -459,6 +480,20 @@ MindAidContext _assessmentContext() {
       summaryMessage:
           'Your result suggests several areas may need extra support.',
     ),
+  );
+}
+
+MindAidQuickAssessmentContext _quickAssessmentContext() {
+  return MindAidQuickAssessmentContext(
+    score: 68,
+    level: 'Moderate',
+    signal: 'watchful',
+    summary:
+        'Responses suggest some areas of strain that may benefit from regular check-ins.',
+    topConcernAreas: const ['Stress load', 'Daily coping'],
+    recommendedNextStep:
+        'Complete the full role-based assessment for more personalized insight.',
+    createdAt: DateTime(2026, 7, 3),
   );
 }
 
