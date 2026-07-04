@@ -167,6 +167,7 @@ If the user may be unsafe, say to seek immediate human support.''';
     final quickAssessment = prompt.context.quickAssessment;
     final topCategory = assessment?.highestCategory;
     final supportStyle = prompt.context.preferredSupportStyle?.label;
+    final snapshot = prompt.context.wellnessSnapshot;
 
     return jsonEncode({
       'userMessage': prompt.userText,
@@ -197,6 +198,30 @@ If the user may be unsafe, say to seek immediate human support.''';
                       'name': topCategory.key,
                       'score': topCategory.value.round(),
                     },
+            },
+      'wellnessSnapshot': snapshot == null
+          ? null
+          : {
+              'latestMoodLevel': snapshot.latestMoodLevel,
+              'recentMoodAverage': snapshot.recentMoodAverage?.toStringAsFixed(
+                1,
+              ),
+              'moodTrend': snapshot.moodTrend?.label,
+              'latestMoodLabel': snapshot.latestMoodLabel,
+              'hasMoodNote': snapshot.hasMoodNote,
+              'assessmentStatus': snapshot.assessmentStatus,
+              'assessmentScore': snapshot.assessmentScore,
+              'mentalStatusSignal': snapshot.mentalStatusSignal,
+              'topConcernAreas': snapshot.topConcernAreas,
+              'reportSummary': snapshot.reportSummary,
+              'recommendedActions': snapshot.recommendedActions,
+              'currentStreak': snapshot.currentStreak,
+              'activeDayCount': snapshot.activeDayCount,
+              'breathingSessionCount': snapshot.breathingSessionCount,
+              'mindfulBreathingMinutes': snapshot.mindfulBreathingMinutes,
+              'hasRecentLowMood': snapshot.hasRecentLowMood,
+              'hasElevatedAssessment': snapshot.hasElevatedAssessment,
+              'hasNoRecentCheckIn': snapshot.hasNoRecentCheckIn,
             },
       'localResponseOptions': primary?.responses.take(2).toList() ?? const [],
       'copingSteps': primary?.copingSteps ?? const [],

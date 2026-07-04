@@ -54,6 +54,159 @@ class MindAidQuickAssessmentContext {
   final DateTime? createdAt;
 }
 
+class MindAidWellnessSnapshot {
+  const MindAidWellnessSnapshot({
+    this.latestMoodLevel,
+    this.recentMoodAverage,
+    this.moodTrend,
+    this.latestMoodLabel,
+    this.hasMoodNote = false,
+    this.assessmentStatus,
+    this.assessmentScore,
+    this.mentalStatusSignal,
+    this.topConcernAreas = const [],
+    this.reportSummary,
+    this.recommendedActions = const [],
+    this.currentStreak = 0,
+    this.activeDayCount = 0,
+    this.breathingSessionCount = 0,
+    this.mindfulBreathingMinutes = 0,
+    this.lastCheckInAt,
+  });
+
+  final int? latestMoodLevel;
+  final double? recentMoodAverage;
+  final MindAidMoodTrend? moodTrend;
+  final String? latestMoodLabel;
+  final bool hasMoodNote;
+  final String? assessmentStatus;
+  final int? assessmentScore;
+  final String? mentalStatusSignal;
+  final List<String> topConcernAreas;
+  final String? reportSummary;
+  final List<String> recommendedActions;
+  final int currentStreak;
+  final int activeDayCount;
+  final int breathingSessionCount;
+  final int mindfulBreathingMinutes;
+  final DateTime? lastCheckInAt;
+
+  bool get hasMoodData => latestMoodLevel != null || recentMoodAverage != null;
+
+  bool get hasRecentLowMood {
+    final level = latestMoodLevel;
+    final average = recentMoodAverage;
+    return (level != null && level <= 2) || (average != null && average <= 2.4);
+  }
+
+  bool get hasElevatedAssessment {
+    final status = assessmentStatus?.toLowerCase() ?? '';
+    final signal = mentalStatusSignal?.toLowerCase() ?? '';
+    final score = assessmentScore;
+    return status.contains('high') ||
+        status.contains('severe') ||
+        signal == 'watchful' ||
+        signal == 'elevated' ||
+        signal == 'highsupport' ||
+        (score != null && score >= 70);
+  }
+
+  bool get hasNoRecentCheckIn {
+    final checkedAt = lastCheckInAt;
+    if (checkedAt == null) return true;
+    return DateTime.now().difference(checkedAt).inDays >= 3;
+  }
+
+  bool get hasPositivePractice =>
+      currentStreak >= 3 || breathingSessionCount > 0 || activeDayCount >= 3;
+
+  bool get hasLowMoodTrend =>
+      moodTrend == MindAidMoodTrend.declining || hasRecentLowMood;
+
+  bool get hasElevatedSignal => hasElevatedAssessment || hasRecentLowMood;
+
+  String? get primaryConcernLabel {
+    if (topConcernAreas.isNotEmpty) return topConcernAreas.first;
+    final status = assessmentStatus?.trim();
+    if (status != null && status.isNotEmpty) return status;
+    final label = latestMoodLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    return null;
+  }
+
+  String? get recommendedSupportAction {
+    if (recommendedActions.isNotEmpty) return recommendedActions.first;
+    if (hasElevatedAssessment) {
+      return 'Consider reaching out to PACC or a trusted person';
+    }
+    if (hasRecentLowMood) {
+      return 'Try one small grounding step and check in again later';
+    }
+    if (hasNoRecentCheckIn) {
+      return 'Log a quick mood check-in so support can stay current';
+    }
+    if (hasPositivePractice) return 'Keep the routine that has been helping';
+    return null;
+  }
+
+  MindAidWellnessSnapshot copyWith({
+    int? latestMoodLevel,
+    double? recentMoodAverage,
+    MindAidMoodTrend? moodTrend,
+    String? latestMoodLabel,
+    bool? hasMoodNote,
+    String? assessmentStatus,
+    int? assessmentScore,
+    String? mentalStatusSignal,
+    List<String>? topConcernAreas,
+    String? reportSummary,
+    List<String>? recommendedActions,
+    int? currentStreak,
+    int? activeDayCount,
+    int? breathingSessionCount,
+    int? mindfulBreathingMinutes,
+    DateTime? lastCheckInAt,
+  }) {
+    return MindAidWellnessSnapshot(
+      latestMoodLevel: latestMoodLevel ?? this.latestMoodLevel,
+      recentMoodAverage: recentMoodAverage ?? this.recentMoodAverage,
+      moodTrend: moodTrend ?? this.moodTrend,
+      latestMoodLabel: latestMoodLabel ?? this.latestMoodLabel,
+      hasMoodNote: hasMoodNote ?? this.hasMoodNote,
+      assessmentStatus: assessmentStatus ?? this.assessmentStatus,
+      assessmentScore: assessmentScore ?? this.assessmentScore,
+      mentalStatusSignal: mentalStatusSignal ?? this.mentalStatusSignal,
+      topConcernAreas: topConcernAreas ?? this.topConcernAreas,
+      reportSummary: reportSummary ?? this.reportSummary,
+      recommendedActions: recommendedActions ?? this.recommendedActions,
+      currentStreak: currentStreak ?? this.currentStreak,
+      activeDayCount: activeDayCount ?? this.activeDayCount,
+      breathingSessionCount:
+          breathingSessionCount ?? this.breathingSessionCount,
+      mindfulBreathingMinutes:
+          mindfulBreathingMinutes ?? this.mindfulBreathingMinutes,
+      lastCheckInAt: lastCheckInAt ?? this.lastCheckInAt,
+    );
+  }
+}
+
+enum MindAidMoodTrend {
+  improving,
+  steady,
+  declining;
+
+  String get label {
+    switch (this) {
+      case MindAidMoodTrend.improving:
+        return 'improving';
+      case MindAidMoodTrend.steady:
+        return 'steady';
+      case MindAidMoodTrend.declining:
+        return 'declining';
+    }
+  }
+}
+
 class MindAidContext {
   const MindAidContext({
     this.recentMessages = const [],
@@ -64,6 +217,7 @@ class MindAidContext {
     this.conversationSummary,
     this.preferredSupportStyle,
     this.journalText,
+    this.wellnessSnapshot,
   });
 
   final List<String> recentMessages;
@@ -74,14 +228,23 @@ class MindAidContext {
   final String? conversationSummary;
   final MindAidSupportStyle? preferredSupportStyle;
   final String? journalText;
+  final MindAidWellnessSnapshot? wellnessSnapshot;
 
   int? get effectiveAssessmentScore {
     final fullScore = assessment?.overallScore.round();
-    return fullScore ?? quickAssessment?.score ?? assessmentScore;
+    return fullScore ??
+        quickAssessment?.score ??
+        assessmentScore ??
+        wellnessSnapshot?.assessmentScore;
   }
 
   bool get hasAssessment =>
-      assessment != null || quickAssessment != null || assessmentScore != null;
+      assessment != null ||
+      quickAssessment != null ||
+      assessmentScore != null ||
+      wellnessSnapshot?.assessmentScore != null;
+
+  bool get hasWellnessSignals => wellnessSnapshot != null;
 
   MindAidContext copyWith({
     List<String>? recentMessages,
@@ -92,6 +255,7 @@ class MindAidContext {
     String? conversationSummary,
     MindAidSupportStyle? preferredSupportStyle,
     String? journalText,
+    MindAidWellnessSnapshot? wellnessSnapshot,
   }) {
     return MindAidContext(
       recentMessages: recentMessages ?? this.recentMessages,
@@ -103,6 +267,7 @@ class MindAidContext {
       preferredSupportStyle:
           preferredSupportStyle ?? this.preferredSupportStyle,
       journalText: journalText ?? this.journalText,
+      wellnessSnapshot: wellnessSnapshot ?? this.wellnessSnapshot,
     );
   }
 }

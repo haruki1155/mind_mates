@@ -48,7 +48,9 @@ class ResponseBuilder {
     for (var offset = 0; offset < values.length; offset++) {
       final value = values[(seedValue + offset) % values.length];
       final wasRecentlyUsed = recentResponses.any((response) {
-        return response == value || response.startsWith(value);
+        return response == value ||
+            response.startsWith(value) ||
+            response.contains(value);
       });
       if (!wasRecentlyUsed) return value;
     }

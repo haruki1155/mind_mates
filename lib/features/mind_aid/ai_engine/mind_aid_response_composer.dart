@@ -26,7 +26,13 @@ class MindAidResponseComposer {
     if (action != MindAidDialogueAction.escalate &&
         _isAssessmentReviewRequest(normalizedInput) &&
         context.hasAssessment) {
-      return _assessmentReview(context);
+      return _withPersona(
+        _assessmentReview(context),
+        normalizedInput: normalizedInput,
+        matches: matches,
+        context: context,
+        includeQuestion: false,
+      );
     }
 
     final modelText = await modelProvider.generate(
@@ -44,9 +50,20 @@ class MindAidResponseComposer {
 
     switch (action) {
       case MindAidDialogueAction.clarify:
-        return _clarify(state);
+        return _withPersona(
+          _clarify(state),
+          normalizedInput: normalizedInput,
+          matches: matches,
+          context: context,
+          includeQuestion: false,
+        );
       case MindAidDialogueAction.followUp:
-        return _followUp(normalizedInput, matches.first, dataset, state);
+        return _withPersona(
+          _followUp(normalizedInput, matches.first, dataset, state),
+          normalizedInput: normalizedInput,
+          matches: matches,
+          context: context,
+        );
       case MindAidDialogueAction.escalate:
         return ResponseBuilder.build(
           record: matches.first.record,
@@ -54,7 +71,12 @@ class MindAidResponseComposer {
           normalizedInput: normalizedInput,
         );
       case MindAidDialogueAction.answer:
-        return _answer(normalizedInput, matches, dataset, state, context);
+        return _withPersona(
+          _answer(normalizedInput, matches, dataset, state, context),
+          normalizedInput: normalizedInput,
+          matches: matches,
+          context: context,
+        );
     }
   }
 
@@ -103,6 +125,23 @@ class MindAidResponseComposer {
             'It suggests a ${quick.level.toLowerCase()} support need (${quick.score}/100), mainly around $concerns. '
             '${quick.summary} ${quick.recommendedNextStep} '
             'What part of this result feels most important today?';
+      }
+
+      final snapshot = context.wellnessSnapshot;
+      if (snapshot != null) {
+        final score = snapshot.assessmentScore;
+        final status = snapshot.assessmentStatus;
+        final signal = snapshot.mentalStatusSignal;
+        final concerns = snapshot.topConcernAreas.isEmpty
+            ? 'your recent wellness pattern'
+            : snapshot.topConcernAreas.take(2).join(' and ');
+        final scoreText = score == null ? '' : ' ($score/100)';
+        final statusText = status == null
+            ? 'a wellness signal'
+            : 'a $status support signal$scoreText';
+        final signalText = signal == null ? '' : ' The signal is $signal.';
+        final action = snapshot.recommendedSupportAction;
+        return 'I can review the latest wellness information I have, not as a diagnosis but as a guide. It points to $statusText, mainly around $concerns.$signalText ${action ?? 'A small next step could be choosing one support action for today.'} What part of this feels most accurate right now?';
       }
 
       final score = context.effectiveAssessmentScore;
@@ -178,6 +217,7 @@ class MindAidResponseComposer {
         value.contains('think') ||
         value.contains('mean') ||
         value.contains('help') ||
+        value.contains('suggest') ||
         value.contains('what should i do') ||
         value.contains('next');
 
@@ -232,6 +272,117 @@ class MindAidResponseComposer {
     return 'I want to support you well, but I need a little more detail. Is this mostly about school, relationships, stress, anxiety, or something else?';
   }
 
+  String _withPersona(
+    String base, {
+    required String normalizedInput,
+    required List<MindAidIntentMatch> matches,
+    required MindAidContext context,
+    bool includeQuestion = true,
+  }) {
+    final trimmed = base.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final parts = <String>[];
+    final empathy = _empathyLine(context, matches);
+    if (!_startsWithAny(trimmed, ['i hear', 'i can', 'thanks', 'okay'])) {
+      parts.add(empathy);
+    }
+
+    final opinion = _perspectiveLine(context, matches);
+    if (opinion != null && !trimmed.toLowerCase().contains('my take')) {
+      parts.add(opinion);
+    }
+
+    parts.add(trimmed);
+
+    final contextual = _contextualSupportLine(context, matches);
+    if (contextual != null && !trimmed.contains(contextual)) {
+      parts.add(contextual);
+    }
+
+    if (includeQuestion &&
+        !trimmed.endsWith('?') &&
+        !parts.any((part) => part.trim().endsWith('?'))) {
+      parts.add(_gentleQuestion(context, matches));
+    }
+
+    return parts.join('\n\n');
+  }
+
+  String _empathyLine(
+    MindAidContext context,
+    List<MindAidIntentMatch> matches,
+  ) {
+    final snapshot = context.wellnessSnapshot;
+    if (snapshot?.hasRecentLowMood == true) {
+      return 'I hear that this has been heavy lately, and I want to keep the next step gentle.';
+    }
+    final intent = matches.isEmpty
+        ? null
+        : _readable(matches.first.record.intent);
+    if (intent != null) {
+      return 'I hear you. $intent can feel like a lot when you are carrying it alone.';
+    }
+    return 'I hear you, and I am glad you said it here.';
+  }
+
+  String? _perspectiveLine(
+    MindAidContext context,
+    List<MindAidIntentMatch> matches,
+  ) {
+    final snapshot = context.wellnessSnapshot;
+    if (snapshot?.hasElevatedAssessment == true) {
+      final concern = snapshot?.primaryConcernLabel;
+      return 'My take is that this deserves steady support, especially${concern == null ? '' : ' around $concern'}, without treating it like something you have to solve all at once.';
+    }
+    if (snapshot?.hasPositivePractice == true) {
+      return 'What stands out to me is that you already have some supportive activity in motion, so we can build from what is working.';
+    }
+    if (matches.isNotEmpty) {
+      return 'My take is that the most useful move is to make this smaller and more specific first.';
+    }
+    return null;
+  }
+
+  String? _contextualSupportLine(
+    MindAidContext context,
+    List<MindAidIntentMatch> matches,
+  ) {
+    final snapshot = context.wellnessSnapshot;
+    if (snapshot == null) return null;
+
+    if (snapshot.hasRecentLowMood) {
+      return 'Because your recent mood looks low, I would keep today\'s goal small: one grounding step, one basic need, or one trusted person.';
+    }
+    if (snapshot.hasElevatedAssessment) {
+      final action = snapshot.recommendedSupportAction;
+      return action == null
+          ? 'Your recent wellness signal looks elevated, so it could help to include PACC or someone you trust if this is affecting daily life.'
+          : 'Your recent wellness signal looks elevated, so a helpful next step is: $action.';
+    }
+    if (snapshot.hasNoRecentCheckIn && matches.isEmpty) {
+      return 'I do not see a recent check-in, so a quick mood log could help me support you with better context.';
+    }
+    if (snapshot.hasPositivePractice) {
+      return 'The streak or breathing activity in your recent pattern is worth keeping; consistency can be a quiet anchor.';
+    }
+    return null;
+  }
+
+  String _gentleQuestion(
+    MindAidContext context,
+    List<MindAidIntentMatch> matches,
+  ) {
+    final concern = context.wellnessSnapshot?.primaryConcernLabel;
+    if (concern != null) {
+      return 'What feels most connected to $concern right now?';
+    }
+    if (matches.isNotEmpty) {
+      return 'What is the smallest part of this you want help with first?';
+    }
+    return 'What feels hardest right now?';
+  }
+
   String _shortSupportLine(
     MindAidDatasetRecord record,
     MindAidDatasetBundle dataset,
@@ -253,4 +404,9 @@ class MindAidResponseComposer {
   bool _isYes(String value) => value == 'yes' || value.startsWith('yes ');
 
   bool _isNo(String value) => value == 'no' || value.startsWith('no ');
+
+  bool _startsWithAny(String value, List<String> prefixes) {
+    final normalized = value.toLowerCase();
+    return prefixes.any(normalized.startsWith);
+  }
 }

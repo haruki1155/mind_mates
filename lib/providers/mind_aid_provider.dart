@@ -209,7 +209,7 @@ class MindAidProvider extends ChangeNotifier {
     return [
       const MindAidSuggestion(
         id: 'review_assessment',
-        label: 'Review my assessment',
+        label: 'What does my assessment suggest?',
       ),
       ...base,
     ];
@@ -243,11 +243,50 @@ class MindAidProvider extends ChangeNotifier {
     MindAidSendResult result,
     MindAidContext context,
   ) {
-    if (!result.chatResponse.requiresEscalation) {
-      return const [];
-    }
-
     final cards = <MindAidSupportCard>[];
+    final snapshot = context.wellnessSnapshot;
+
+    if (snapshot != null && !result.chatResponse.requiresEscalation) {
+      if (snapshot.hasMoodData) {
+        final trend = snapshot.moodTrend?.label;
+        final average = snapshot.recentMoodAverage;
+        cards.add(
+          MindAidSupportCard(
+            title: 'Mood pattern',
+            description: [
+              if (snapshot.latestMoodLevel != null)
+                'Latest mood: ${snapshot.latestMoodLevel}/5',
+              if (average != null)
+                'recent average: ${average.toStringAsFixed(1)}/5',
+              if (trend != null) 'trend: $trend',
+            ].join(', '),
+            icon: Icons.mood_rounded,
+          ),
+        );
+      }
+
+      final concern = snapshot.primaryConcernLabel;
+      if (concern != null) {
+        cards.add(
+          MindAidSupportCard(
+            title: 'Assessment focus',
+            description: concern,
+            icon: Icons.insights_rounded,
+          ),
+        );
+      }
+
+      final action = snapshot.recommendedSupportAction;
+      if (action != null) {
+        cards.add(
+          MindAidSupportCard(
+            title: 'Suggested next step',
+            description: action,
+            icon: Icons.flag_rounded,
+          ),
+        );
+      }
+    }
 
     if (context.assessment?.highestCategory case final topConcern?) {
       cards.add(
@@ -260,15 +299,17 @@ class MindAidProvider extends ChangeNotifier {
       );
     }
 
-    cards.insert(
-      0,
-      const MindAidSupportCard(
-        title: 'Immediate support',
-        description:
-            'If there is immediate danger, contact emergency services, campus security, PACC, or a trusted person now.',
-        icon: Icons.health_and_safety_rounded,
-      ),
-    );
+    if (result.chatResponse.requiresEscalation) {
+      cards.insert(
+        0,
+        const MindAidSupportCard(
+          title: 'Immediate support',
+          description:
+              'If there is immediate danger, contact emergency services, campus security, PACC, or a trusted person now.',
+          icon: Icons.health_and_safety_rounded,
+        ),
+      );
+    }
 
     final unique = <String, MindAidSupportCard>{};
     for (final card in cards) {

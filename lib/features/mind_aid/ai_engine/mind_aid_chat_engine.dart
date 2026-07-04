@@ -45,6 +45,7 @@ class MindAidChatEngine {
       conversationSummary: request.conversationSummary,
       preferredSupportStyle: request.preferredSupportStyle,
       journalText: request.journalText,
+      wellnessSnapshot: request.wellnessSnapshot,
     );
 
     final matches = normalizedInput.isEmpty
@@ -215,7 +216,7 @@ class MindAidChatEngine {
       suggestions.add(
         MindAidSuggestionModel(
           id: 'review_assessment',
-          label: 'Review my assessment',
+          label: 'What does my assessment suggest?',
         ),
       );
 
@@ -245,10 +246,38 @@ class MindAidChatEngine {
       }
     }
 
+    final snapshot = context.wellnessSnapshot;
+    if (snapshot != null) {
+      if (snapshot.hasMoodData) {
+        suggestions.add(
+          MindAidSuggestionModel(
+            id: 'understand_mood_trend',
+            label: 'Help me understand my mood trend',
+          ),
+        );
+      }
+      if (snapshot.hasElevatedAssessment && !context.hasAssessment) {
+        suggestions.add(
+          MindAidSuggestionModel(
+            id: 'review_wellness_signal',
+            label: 'What does my assessment suggest?',
+          ),
+        );
+      }
+      if (snapshot.hasNoRecentCheckIn) {
+        suggestions.add(
+          MindAidSuggestionModel(
+            id: 'quick_check_in',
+            label: 'Help me check in with myself',
+          ),
+        );
+      }
+    }
+
     suggestions.addAll([
       MindAidSuggestionModel(
         id: 'two_minute_coping',
-        label: 'Give me a 2-minute coping step',
+        label: 'Give me a 2-minute grounding step',
       ),
       MindAidSuggestionModel(id: 'make_a_plan', label: 'Help me make a plan'),
       MindAidSuggestionModel(id: 'talk_to_pacc', label: 'Talk to PACC'),

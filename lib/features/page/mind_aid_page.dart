@@ -7,6 +7,7 @@ import '/providers/auth_provider.dart';
 import '/providers/user_provider.dart';
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
+import '/repositories/mind_aid_context_repository.dart';
 import '/routes/route_names.dart';
 
 class MindAidPage extends StatefulWidget {
@@ -17,7 +18,12 @@ class MindAidPage extends StatefulWidget {
 }
 
 class _MindAidPageState extends State<MindAidPage> {
+  final MindAidContextRepository _contextRepository =
+      MindAidContextRepository();
+
   String? _loadedContextKey;
+  String? _loadedSnapshotUserId;
+  MindAidWellnessSnapshot? _wellnessSnapshot;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +31,11 @@ class _MindAidPageState extends State<MindAidPage> {
     final assessmentProvider = context.watch<AssessmentProvider>();
     final authProvider = context.watch<AuthProvider>();
     final userId = authProvider.userId ?? 'guest';
-    final mindAidContext = _buildMindAidContext(assessmentProvider);
+    _loadWellnessSnapshot(userId);
+    final mindAidContext = _buildMindAidContext(
+      assessmentProvider,
+      _wellnessSnapshot,
+    );
     _loadChatWhenContextChanges(userId, mindAidContext);
 
     return MindAidScreen(
@@ -76,7 +86,10 @@ class _MindAidPageState extends State<MindAidPage> {
     await context.read<UserProvider>().markMindAidMessage(userId);
   }
 
-  MindAidContext _buildMindAidContext(AssessmentProvider provider) {
+  MindAidContext _buildMindAidContext(
+    AssessmentProvider provider,
+    MindAidWellnessSnapshot? snapshot,
+  ) {
     final fullResult = provider.studentResult;
     if (fullResult != null) {
       return MindAidContext(
@@ -88,6 +101,7 @@ class _MindAidPageState extends State<MindAidPage> {
           subscaleScores: fullResult.subscaleScores,
           summaryMessage: fullResult.message,
         ),
+        wellnessSnapshot: snapshot,
       );
     }
 
@@ -103,10 +117,32 @@ class _MindAidPageState extends State<MindAidPage> {
           recommendedNextStep: quickResult.recommendedNextStep,
           createdAt: quickResult.createdAt,
         ),
+        wellnessSnapshot: snapshot,
       );
     }
 
-    return const MindAidContext();
+    return MindAidContext(wellnessSnapshot: snapshot);
+  }
+
+  void _loadWellnessSnapshot(String userId) {
+    if (userId == 'guest' || userId.trim().isEmpty) {
+      if (_wellnessSnapshot != null || _loadedSnapshotUserId != userId) {
+        _loadedSnapshotUserId = userId;
+        _wellnessSnapshot = null;
+      }
+      return;
+    }
+
+    if (_loadedSnapshotUserId == userId) return;
+    _loadedSnapshotUserId = userId;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final snapshot = await _contextRepository.fetchWellnessSnapshot(userId);
+      if (!mounted || _loadedSnapshotUserId != userId) return;
+      setState(() {
+        _wellnessSnapshot = snapshot;
+      });
+    });
   }
 
   void _loadChatWhenContextChanges(String userId, MindAidContext contextValue) {
@@ -133,6 +169,7 @@ class _MindAidPageState extends State<MindAidPage> {
         assessment.overallScore.round(),
         assessment.mainConcernAreas.join('|'),
         categoryKey,
+        _snapshotKey(contextValue.wellnessSnapshot),
       ].join(':');
     }
 
@@ -144,9 +181,44 @@ class _MindAidPageState extends State<MindAidPage> {
         quick.level,
         quick.signal,
         quick.topConcernAreas.join('|'),
+        _snapshotKey(contextValue.wellnessSnapshot),
+      ].join(':');
+    }
+
+    final snapshot = contextValue.wellnessSnapshot;
+    if (snapshot != null) {
+      return [
+        'wellness',
+        snapshot.latestMoodLevel ?? 'mood-none',
+        snapshot.recentMoodAverage?.toStringAsFixed(1) ?? 'avg-none',
+        snapshot.moodTrend?.name ?? 'trend-none',
+        snapshot.assessmentStatus ?? 'status-none',
+        snapshot.assessmentScore ?? 'score-none',
+        snapshot.mentalStatusSignal ?? 'signal-none',
+        snapshot.topConcernAreas.join('|'),
+        snapshot.currentStreak,
+        snapshot.activeDayCount,
+        snapshot.breathingSessionCount,
       ].join(':');
     }
 
     return 'quick:${contextValue.assessmentScore ?? 'none'}';
+  }
+
+  String _snapshotKey(MindAidWellnessSnapshot? snapshot) {
+    if (snapshot == null) return 'snapshot:none';
+    return [
+      'wellness',
+      snapshot.latestMoodLevel ?? 'mood-none',
+      snapshot.recentMoodAverage?.toStringAsFixed(1) ?? 'avg-none',
+      snapshot.moodTrend?.name ?? 'trend-none',
+      snapshot.assessmentStatus ?? 'status-none',
+      snapshot.assessmentScore ?? 'score-none',
+      snapshot.mentalStatusSignal ?? 'signal-none',
+      snapshot.topConcernAreas.join('|'),
+      snapshot.currentStreak,
+      snapshot.activeDayCount,
+      snapshot.breathingSessionCount,
+    ].join(':');
   }
 }

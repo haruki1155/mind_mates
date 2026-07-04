@@ -12,6 +12,9 @@ import 'package:mind_mates/features/mind_aid/domain/mind_aid_dataset_models.dart
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_model_provider.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_safety.dart';
 import 'package:mind_mates/models/mind_aid_message_model.dart';
+import 'package:mind_mates/models/mood_model.dart';
+import 'package:mind_mates/models/report_model.dart';
+import 'package:mind_mates/repositories/mind_aid_context_repository.dart';
 import 'package:mind_mates/repositories/mind_aid_repository_screen.dart';
 import 'package:mind_mates/services/firebase/firestore_service.dart';
 
@@ -343,7 +346,7 @@ void main() {
         );
 
         final labels = result.suggestions.map((suggestion) => suggestion.label);
-        expect(labels, contains('Review my assessment'));
+        expect(labels, contains('What does my assessment suggest?'));
         expect(labels, contains('Help me with Emotional Well-Being'));
       },
     );
@@ -361,10 +364,110 @@ void main() {
         );
 
         final labels = result.suggestions.map((suggestion) => suggestion.label);
-        expect(labels, contains('Review my assessment'));
+        expect(labels, contains('What does my assessment suggest?'));
         expect(labels, contains('Help me with Stress load'));
       },
     );
+
+    test('low mood snapshot changes tone and suggestions', () async {
+      final result = await MindAidChatEngine().respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          text: 'I feel worried',
+          wellnessSnapshot: MindAidWellnessSnapshot(
+            latestMoodLevel: 2,
+            recentMoodAverage: 2.1,
+            moodTrend: MindAidMoodTrend.declining,
+          ),
+        ),
+        dataset,
+      );
+
+      expect(result.text, contains('recent mood looks low'));
+      expect(result.text, contains('My take'));
+      expect(
+        result.suggestions.map((suggestion) => suggestion.label),
+        contains('Help me understand my mood trend'),
+      );
+    });
+
+    test(
+      'snapshot assessment review works without in-memory assessment',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          const MindAidChatRequest(
+            userId: 'user_1',
+            text: 'What does my assessment suggest?',
+            wellnessSnapshot: MindAidWellnessSnapshot(
+              assessmentStatus: 'High Concern',
+              assessmentScore: 76,
+              mentalStatusSignal: 'elevated',
+              topConcernAreas: ['Sleep and Rest'],
+            ),
+          ),
+          dataset,
+        );
+
+        expect(result.text, contains('High Concern'));
+        expect(result.text, contains('76/100'));
+        expect(result.text, contains('Sleep and Rest'));
+        expect(result.text, contains('not as a diagnosis'));
+      },
+    );
+  });
+
+  group('MindAidContextRepository', () {
+    test(
+      'derives a wellness snapshot from mood, report, and assessment data',
+      () {
+        final snapshot = MindAidContextRepository.buildSnapshot(
+          moods: [
+            MoodModel(
+              id: 'm1',
+              level: 2,
+              label: 'Low',
+              note: 'private note',
+              createdAt: DateTime(2026, 7, 4),
+            ),
+            MoodModel(id: 'm2', level: 2, createdAt: DateTime(2026, 7, 3)),
+            MoodModel(id: 'm3', level: 3, createdAt: DateTime(2026, 7, 2)),
+            MoodModel(id: 'm4', level: 4, createdAt: DateTime(2026, 7, 1)),
+          ],
+          latestAssessment: const {
+            'status': 'High Concern',
+            'overallScore': 74,
+            'mentalStatusSignal': 'elevated',
+            'mainConcernAreas': ['Emotional Well-Being'],
+          },
+          latestReport: ReportModel(
+            id: 'r1',
+            generatedAt: DateTime(2026, 7, 4),
+            description: 'Weekly wellness summary.',
+            activeDayCount: 4,
+            breathingSessionCount: 2,
+            mindfulBreathingMinutes: 6,
+            recommendedNextActions: const ['Talk to PACC'],
+          ),
+          user: const {'dayStreak': 5},
+        );
+
+        expect(snapshot, isNotNull);
+        expect(snapshot!.latestMoodLevel, 2);
+        expect(snapshot.recentMoodAverage, closeTo(2.75, 0.01));
+        expect(snapshot.hasRecentLowMood, isTrue);
+        expect(snapshot.hasElevatedAssessment, isTrue);
+        expect(snapshot.primaryConcernLabel, 'Emotional Well-Being');
+        expect(snapshot.recommendedSupportAction, 'Talk to PACC');
+        expect(snapshot.currentStreak, 5);
+        expect(snapshot.breathingSessionCount, 2);
+      },
+    );
+
+    test('returns null when no wellness signals are available', () {
+      final snapshot = MindAidContextRepository.buildSnapshot();
+
+      expect(snapshot, isNull);
+    });
   });
 
   group('MindAidRepository', () {

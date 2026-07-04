@@ -33,10 +33,25 @@ class ScoreEngine {
       score += 10;
     }
 
-    if (context.moodLevel != null &&
-        context.moodLevel! <= 2 &&
+    final latestMoodLevel =
+        context.moodLevel ?? context.wellnessSnapshot?.latestMoodLevel;
+    if (latestMoodLevel != null &&
+        latestMoodLevel <= 2 &&
         record.category != 'school') {
       score += 0.25;
+    }
+
+    final snapshot = context.wellnessSnapshot;
+    if (snapshot != null) {
+      if (snapshot.hasLowMoodTrend && record.severity != MindAidSeverity.low) {
+        score += 0.2;
+      }
+      for (final concern in snapshot.topConcernAreas) {
+        if (_categoryRelatesToRecord(concern, record) ||
+            _metadataCategoryRelatesTo(concern, record)) {
+          score += 0.25;
+        }
+      }
     }
 
     final assessmentScore = context.effectiveAssessmentScore;
