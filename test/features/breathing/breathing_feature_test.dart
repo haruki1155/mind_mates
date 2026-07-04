@@ -66,6 +66,9 @@ void main() {
   testWidgets('completion appears only after the timer reaches the end', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final userProvider = UserProvider(_FakeUserRepository())
       ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
 
@@ -81,15 +84,18 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Emergency Reset Breath'));
+    await tester.tap(find.text('1 min'));
     await tester.pump();
-    expect(find.text('Ready to begin?'), findsOneWidget);
 
     await tester.tap(find.text('Start breathing'));
     await tester.pump();
+    expect(find.text('Ready to begin?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Start breathing').last);
+    await tester.pump();
     expect(find.text('Session complete'), findsNothing);
 
-    await tester.pump(const Duration(seconds: 31));
+    await tester.pump(const Duration(seconds: 61));
     await tester.pump();
 
     expect(find.text('Session complete'), findsOneWidget);

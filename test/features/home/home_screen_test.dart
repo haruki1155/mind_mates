@@ -167,8 +167,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('Emergency Reset Breath'), findsOneWidget);
-    expect(find.text('Mindful Breathing'), findsOneWidget);
+    expect(find.text('Breathing'), findsOneWidget);
+    expect(find.text('Breath to reduce'), findsOneWidget);
+    expect(find.text('Anger'), findsOneWidget);
   });
 
   testWidgets('home blocks main assessment when completed this week', (
