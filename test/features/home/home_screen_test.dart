@@ -126,6 +126,49 @@ void main() {
     expect(find.text('Search insights...'), findsOneWidget);
   });
 
+  testWidgets('home Log your mood opens mood check-in screen', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AssessmentProvider(AssessmentRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Log your mood').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('How are you feeling?'), findsOneWidget);
+    expect(find.text("What's on your mind today?"), findsOneWidget);
+    expect(find.text('0/300 characters'), findsOneWidget);
+  });
+
   testWidgets('home Mindful breathing insight opens breathing screen', (
     tester,
   ) async {

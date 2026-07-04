@@ -113,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onNotificationTap: () =>
                               _openPlaceholder('Notifications'),
                           onStreakTap: () => _openPlaceholder('Streak Details'),
-                          onMoodTap: () => _openPlaceholder('Log Mood'),
+                          onMoodTap: _openLogMood,
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -494,7 +494,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _openPlaceholder(resource.title);
   }
 
+  void _openLogMood() {
+    Navigator.of(context).pushNamed(RouteNames.logMood);
+  }
+
   void _openPlaceholder(String title) {
+    if (title == 'Log your mood' || title == 'Log Mood') {
+      _openLogMood();
+      return;
+    }
+
     if (title == 'Mindful breathing') {
       Navigator.of(context).pushNamed(RouteNames.mindfulBreathing);
       return;

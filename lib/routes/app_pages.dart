@@ -8,6 +8,7 @@ import '../features/authentication/screens/signup_screen.dart';
 import '../features/breathing/screens/mindful_breathing_screen.dart';
 import '../features/counseling/screens/services_screen.dart';
 import '../features/home/screens/home_screen.dart';
+import '../features/mood/screens/log_mood_screen.dart';
 import '../features/onboarding/screens/onboarding_screen.dart';
 import '../features/profile/screens/mental_health_insights_screen.dart';
 import '../features/profile/screens/mental_health_report_screen.dart';
@@ -50,6 +51,7 @@ class AppPages {
     RouteNames.profile: (_) => const ProfileScreen(),
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),
+    RouteNames.logMood: (_) => const LogMoodScreen(),
     RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
     RouteNames.adminStatus: (_) => const AdminStatusDashboardScreen(),
   };

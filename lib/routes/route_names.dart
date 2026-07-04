@@ -21,6 +21,7 @@ class RouteNames {
   static const profile = '/profile';
   static const mentalHealthReport = '/profile/mental-health-report';
   static const mentalHealthInsights = '/profile/mental-health-insights';
+  static const logMood = '/mood/log';
   static const mindfulBreathing = '/insights/mindful-breathing';
   static const adminStatus = '/admin/status';
 }
