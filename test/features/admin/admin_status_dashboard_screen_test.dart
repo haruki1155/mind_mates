@@ -18,10 +18,15 @@ void main() {
               status: AdminUserStatus.severe,
               role: 'student',
               latestAssessmentStatus: 'High Concern',
+              fullAssessmentStatus: 'High Concern',
+              quickAssessmentStatus: 'watchful',
               activeDayCount: 2,
               assessmentCount: 1,
               mindAidMessageCount: 4,
               breathingSessionCount: 1,
+              moodCheckInCount: 2,
+              secretChatEngagementCount: 3,
+              totalEngagementCount: 13,
               updatedAt: DateTime(2026, 7, 3),
             ),
             AdminStatusSummaryModel(
@@ -30,7 +35,9 @@ void main() {
               status: AdminUserStatus.normal,
               role: 'faculty',
               latestAssessmentStatus: 'Stable',
+              quickAssessmentStatus: 'stable',
               activeDayCount: 3,
+              secretChatEngagementCount: 0,
               updatedAt: DateTime(2026, 7, 3),
             ),
           ]),
@@ -45,6 +52,10 @@ void main() {
     expect(find.text('Mia Reyes'), findsOneWidget);
     expect(find.text('Severe'), findsWidgets);
     expect(find.text('Normal'), findsWidgets);
+    expect(find.text('Engagement'), findsOneWidget);
+    expect(find.text('Secret Chat'), findsOneWidget);
+    expect(find.text('13'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
   });
 }
 

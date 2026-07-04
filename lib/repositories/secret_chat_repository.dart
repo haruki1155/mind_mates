@@ -5,6 +5,7 @@ import '../database/firestore_collections.dart';
 import '../features/secret_chat/domain/secret_chat_safety_validator.dart';
 import '../models/secret_chat_model.dart';
 import '../services/firebase/firestore_service.dart';
+import 'user_repository.dart';
 
 class SecretChatAuthException implements Exception {
   const SecretChatAuthException();
@@ -16,10 +17,13 @@ class SecretChatAuthException implements Exception {
 class SecretChatRepository {
   SecretChatRepository({
     FirestoreService? firestoreService,
+    UserRepository? userRepository,
     this.firebaseAuth,
-  }) : _firestoreService = firestoreService ?? FirestoreService();
+  }) : _firestoreService = firestoreService ?? FirestoreService(),
+       _userRepository = userRepository ?? UserRepository();
 
   final FirestoreService _firestoreService;
+  final UserRepository _userRepository;
   final FirebaseAuth? firebaseAuth;
 
   FirebaseAuth get _auth => firebaseAuth ?? FirebaseAuth.instance;
@@ -79,6 +83,7 @@ class SecretChatRepository {
           'safetyLabels': safetyLabels,
           'isAnonymous': true,
         });
+    await _tryRecordActivity(uid, UserActivityType.secretChatPost);
     return SecretChatModel(
       id: id,
       message: message.trim(),
@@ -120,6 +125,7 @@ class SecretChatRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
+    await _tryRecordActivity(uid, UserActivityType.secretChatInteraction);
 
     return post.copyWith(
       isLiked: nextLiked,
@@ -141,6 +147,7 @@ class SecretChatRepository {
       },
       merge: true,
     );
+    await _tryRecordActivity(uid, UserActivityType.secretChatInteraction);
     return post.copyWith(isSaved: nextSaved);
   }
 
@@ -189,6 +196,7 @@ class SecretChatRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
+    await _tryRecordActivity(uid, UserActivityType.secretChatComment);
 
     return SecretChatComment(
       id: commentRef.id,
@@ -218,6 +226,14 @@ class SecretChatRepository {
   }
 
   String _interactionId(String uid, String postId) => '${uid}_$postId';
+
+  Future<void> _tryRecordActivity(String userId, UserActivityType type) async {
+    try {
+      await _userRepository.recordActivity(userId, type);
+    } catch (_) {
+      // Secret Chat should remain usable even if activity sync is unavailable.
+    }
+  }
 }
 
 extension SecretChatValidationCodeLabel on SecretChatValidationCode {

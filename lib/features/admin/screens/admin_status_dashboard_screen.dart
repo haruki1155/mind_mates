@@ -195,8 +195,9 @@ class _StatusTable extends StatelessWidget {
               DataColumn(label: Text('User')),
               DataColumn(label: Text('Status')),
               DataColumn(label: Text('Role')),
-              DataColumn(label: Text('Activity')),
+              DataColumn(label: Text('Engagement')),
               DataColumn(label: Text('Assessment')),
+              DataColumn(label: Text('Secret Chat')),
               DataColumn(label: Text('Updated')),
             ],
             rows: [
@@ -207,7 +208,8 @@ class _StatusTable extends StatelessWidget {
                     DataCell(_StatusBadge(status: item.status)),
                     DataCell(Text(item.role ?? '-')),
                     DataCell(Text('${item.totalActivityCount}')),
-                    DataCell(Text(item.latestAssessmentStatus ?? '-')),
+                    DataCell(Text(_assessmentText(item))),
+                    DataCell(Text('${item.secretChatEngagementCount}')),
                     DataCell(Text(_formatDate(item.updatedAt))),
                   ],
                 ),
@@ -216,6 +218,14 @@ class _StatusTable extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _assessmentText(AdminStatusSummaryModel item) {
+    final full = item.fullAssessmentStatus;
+    if (full != null && full.isNotEmpty) return full;
+    final quick = item.quickAssessmentStatus;
+    if (quick != null && quick.isNotEmpty) return quick;
+    return item.latestAssessmentStatus ?? '-';
   }
 
   static String _formatDate(DateTime date) {

@@ -61,7 +61,8 @@ class ReportRepository {
               createdAt.isBefore(weekEndExclusive);
         })
         .toList(growable: false);
-    final latestAssessment = _latestAssessmentForSummary(assessments);
+    final assessmentSummary = _assessmentSummary(assessments);
+    final latestAssessment = assessmentSummary.preferredAssessment;
     final mindAidMessageCount = await _countMindAidMessages(
       userId: userId,
       since: weekStart,
@@ -77,7 +78,12 @@ class ReportRepository {
       since: weekStart,
       before: weekEndExclusive,
     );
-    final positiveMoodCount = await _countPositiveMoods(
+    final moodSummary = await _fetchMoodSummary(
+      userId: userId,
+      since: weekStart,
+      before: weekEndExclusive,
+    );
+    final secretChatSummary = await _fetchSecretChatSummary(
       userId: userId,
       since: weekStart,
       before: weekEndExclusive,
@@ -87,11 +93,25 @@ class ReportRepository {
     final latestAssessmentSource = _assessmentSource(latestAssessment);
     final mentalStatusSignal = _mentalStatusSignal(latestAssessment);
     final currentStreak = _intOrZero(userDoc?['dayStreak']);
+    final totalEngagementCount =
+        activeDateKeys.length +
+        weeklyAssessments.length +
+        moodSummary.count +
+        mindAidMessageCount +
+        breathingSummary.sessionCount +
+        secretChatSummary.engagementCount;
+    final mentalStatus = _mentalStatusFor(
+      assessmentSummary: assessmentSummary,
+      moodSummary: moodSummary,
+      hasEnoughActivity: totalEngagementCount > 0,
+    );
     final hasEnoughData =
         latestAssessment != null ||
+        moodSummary.count > 0 ||
         mindAidMessageCount > 0 ||
         activeDateKeys.isNotEmpty ||
         breathingSummary.sessionCount > 0 ||
+        secretChatSummary.engagementCount > 0 ||
         currentStreak > 0;
 
     final reportPayload = {
@@ -102,22 +122,41 @@ class ReportRepository {
         latestAssessmentSource: latestAssessmentSource,
         mentalStatusSignal: mentalStatusSignal,
         topConcernAreas: topConcernAreas,
+        moodSummary: moodSummary,
         mindAidMessageCount: mindAidMessageCount,
         activeDayCount: activeDateKeys.length,
         currentStreak: currentStreak,
         breathingSessionCount: breathingSummary.sessionCount,
         mindfulBreathingMinutes: breathingSummary.minutes,
+        secretChatSummary: secretChatSummary,
+        mentalStatusLabel: mentalStatus.label,
       ),
       'generatedAt': FieldValue.serverTimestamp(),
       'weekStart': Timestamp.fromDate(weekStart),
       'weekEnd': Timestamp.fromDate(weekEnd),
-      'positiveMoodCount': positiveMoodCount,
+      'moodCheckInCount': moodSummary.count,
+      'averageMoodLevel': moodSummary.average,
+      'latestMoodLevel': moodSummary.latestLevel,
+      'positiveMoodCount': moodSummary.positiveCount,
       'assessmentCount': weeklyAssessments.length,
+      'quickAssessmentScore': assessmentSummary.quickScore,
+      'quickAssessmentStatus': assessmentSummary.quickStatus ?? '',
+      'quickAssessmentSignal': assessmentSummary.quickSignal ?? '',
+      'fullAssessmentScore': assessmentSummary.fullScore,
+      'fullAssessmentStatus': assessmentSummary.fullStatus ?? '',
+      'fullAssessmentTopConcernAreas': assessmentSummary.fullConcernAreas,
       'mindAidMessageCount': mindAidMessageCount,
       'activeDayCount': activeDateKeys.length,
       'currentStreak': currentStreak,
       'breathingSessionCount': breathingSummary.sessionCount,
       'mindfulBreathingMinutes': breathingSummary.minutes,
+      'secretChatPostCount': secretChatSummary.postCount,
+      'secretChatCommentCount': secretChatSummary.commentCount,
+      'secretChatInteractionCount': secretChatSummary.interactionCount,
+      'secretChatEngagementCount': secretChatSummary.engagementCount,
+      'totalEngagementCount': totalEngagementCount,
+      'mentalStatus': mentalStatus.status,
+      'mentalStatusLabel': mentalStatus.label,
       'latestAssessmentStatus': latestAssessmentStatus ?? '',
       'latestAssessmentSource': latestAssessmentSource ?? '',
       'mentalStatusSignal': mentalStatusSignal ?? '',
@@ -126,10 +165,13 @@ class ReportRepository {
         latestAssessmentStatus: latestAssessmentStatus,
         mentalStatusSignal: mentalStatusSignal,
         topConcernAreas: topConcernAreas,
+        moodSummary: moodSummary,
         mindAidMessageCount: mindAidMessageCount,
         activeDayCount: activeDateKeys.length,
         currentStreak: currentStreak,
         breathingSessionCount: breathingSummary.sessionCount,
+        secretChatSummary: secretChatSummary,
+        mentalStatus: mentalStatus.status,
       ),
       'hasEnoughData': hasEnoughData,
     };
@@ -142,12 +184,18 @@ class ReportRepository {
       userId: userId,
       userDoc: userDoc,
       latestAssessmentStatus: latestAssessmentStatus,
+      quickAssessmentStatus: assessmentSummary.quickStatus,
+      fullAssessmentStatus: assessmentSummary.fullStatus,
       mentalStatusSignal: mentalStatusSignal,
       topConcernAreas: topConcernAreas,
+      moodSummary: moodSummary,
       activeDayCount: activeDateKeys.length,
       assessmentCount: weeklyAssessments.length,
       mindAidMessageCount: mindAidMessageCount,
       breathingSessionCount: breathingSummary.sessionCount,
+      secretChatSummary: secretChatSummary,
+      totalEngagementCount: totalEngagementCount,
+      mentalStatus: mentalStatus,
       hasEnoughData: hasEnoughData,
     );
     return reportId;
@@ -167,14 +215,23 @@ class ReportRepository {
     );
   }
 
-  Map<String, dynamic>? _latestAssessmentForSummary(
+  _AssessmentSummary _assessmentSummary(
     List<Map<String, dynamic>> assessments,
   ) {
-    if (assessments.isEmpty) return null;
-    final full = assessments.where((assessment) {
-      return assessment['type']?.toString() != 'quick';
-    });
-    return full.isNotEmpty ? full.first : assessments.first;
+    Map<String, dynamic>? latestQuick;
+    Map<String, dynamic>? latestFull;
+
+    for (final assessment in assessments) {
+      final type = assessment['type']?.toString().trim().toLowerCase();
+      if (type == 'quick') {
+        latestQuick ??= assessment;
+      } else {
+        latestFull ??= assessment;
+      }
+      if (latestQuick != null && latestFull != null) break;
+    }
+
+    return _AssessmentSummary(latestQuick: latestQuick, latestFull: latestFull);
   }
 
   Future<int> _countMindAidMessages({
@@ -209,7 +266,7 @@ class ReportRepository {
         .toSet();
   }
 
-  Future<int> _countPositiveMoods({
+  Future<_MoodSummary> _fetchMoodSummary({
     required String userId,
     required DateTime since,
     required DateTime before,
@@ -220,9 +277,61 @@ class ReportRepository {
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
         .where('createdAt', isLessThan: Timestamp.fromDate(before))
         .get();
-    return snapshot.docs
-        .where((doc) => _intOrZero(doc.data()['level']) >= 4)
-        .length;
+    final levels = snapshot.docs
+        .map((doc) => _intOrZero(doc.data()['level']))
+        .where((level) => level > 0)
+        .toList(growable: false);
+    final latest = [...snapshot.docs]
+      ..sort((left, right) {
+        final leftDate = _dateFrom(left.data()['createdAt']) ?? DateTime(0);
+        final rightDate = _dateFrom(right.data()['createdAt']) ?? DateTime(0);
+        return rightDate.compareTo(leftDate);
+      });
+    final total = levels.fold<int>(0, (total, level) => total + level);
+    return _MoodSummary(
+      count: levels.length,
+      average: levels.isEmpty ? null : total / levels.length,
+      latestLevel: latest.isEmpty
+          ? null
+          : _intOrZero(latest.first.data()['level']),
+      positiveCount: levels.where((level) => level >= 4).length,
+    );
+  }
+
+  Future<_SecretChatSummary> _fetchSecretChatSummary({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) async {
+    final postSnapshot = await _firestoreService.firestore
+        .collection(FirestoreCollections.secretChats)
+        .where('authorId', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .where('createdAt', isLessThan: Timestamp.fromDate(before))
+        .get();
+    final commentSnapshot = await _firestoreService.firestore
+        .collection(FirestoreCollections.secretChatComments)
+        .where('authorId', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .where('createdAt', isLessThan: Timestamp.fromDate(before))
+        .get();
+    final interactionSnapshot = await _firestoreService.firestore
+        .collection(FirestoreCollections.secretChatInteractions)
+        .where('userId', isEqualTo: userId)
+        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .where('updatedAt', isLessThan: Timestamp.fromDate(before))
+        .get();
+
+    final interactionCount = interactionSnapshot.docs.where((doc) {
+      final data = doc.data();
+      return data['liked'] == true || data['saved'] == true;
+    }).length;
+
+    return _SecretChatSummary(
+      postCount: postSnapshot.docs.length,
+      commentCount: commentSnapshot.docs.length,
+      interactionCount: interactionCount,
+    );
   }
 
   Future<_BreathingSummary> _fetchBreathingSummary({
@@ -289,13 +398,16 @@ class ReportRepository {
     required String? latestAssessmentSource,
     required String? mentalStatusSignal,
     required List<String> topConcernAreas,
+    required _MoodSummary moodSummary,
     required int mindAidMessageCount,
     required int activeDayCount,
     required int currentStreak,
     required int breathingSessionCount,
     required int mindfulBreathingMinutes,
+    required _SecretChatSummary secretChatSummary,
+    required String mentalStatusLabel,
   }) {
-    final parts = <String>[];
+    final parts = <String>['Mental status: $mentalStatusLabel'];
     if (latestAssessmentStatus != null) {
       if (latestAssessmentSource == 'quickAssessment') {
         parts.add(
@@ -313,9 +425,22 @@ class ReportRepository {
     if (topConcernAreas.isNotEmpty) {
       parts.add('main focus: ${topConcernAreas.join(', ')}');
     }
+    if (moodSummary.count > 0) {
+      final average = moodSummary.average;
+      parts.add(
+        average == null
+            ? '${moodSummary.count} mood check-in${moodSummary.count == 1 ? '' : 's'}'
+            : '${moodSummary.count} mood check-in${moodSummary.count == 1 ? '' : 's'} averaging ${average.toStringAsFixed(1)}/5',
+      );
+    }
     if (mindAidMessageCount > 0) {
       parts.add(
         '$mindAidMessageCount MindAid check-in${mindAidMessageCount == 1 ? '' : 's'}',
+      );
+    }
+    if (secretChatSummary.engagementCount > 0) {
+      parts.add(
+        '${secretChatSummary.engagementCount} Secret Chat engagement${secretChatSummary.engagementCount == 1 ? '' : 's'}',
       );
     }
     if (breathingSessionCount > 0) {
@@ -331,7 +456,7 @@ class ReportRepository {
       );
     }
 
-    if (parts.isEmpty) {
+    if (parts.length == 1) {
       return 'Your weekly summary will grow as you use assessments, MindAid, and daily check-ins.';
     }
     return '${parts.join(' with ')}.';
@@ -341,14 +466,25 @@ class ReportRepository {
     required String? latestAssessmentStatus,
     required String? mentalStatusSignal,
     required List<String> topConcernAreas,
+    required _MoodSummary moodSummary,
     required int mindAidMessageCount,
     required int activeDayCount,
     required int currentStreak,
     required int breathingSessionCount,
+    required _SecretChatSummary secretChatSummary,
+    required String mentalStatus,
   }) {
     final actions = <String>[];
+    if (mentalStatus == 'severe') {
+      actions.add('Consider reaching out to PACC counseling support');
+    }
     if (topConcernAreas.isNotEmpty) {
       actions.add('Review support strategies for ${topConcernAreas.first}');
+    }
+    if (moodSummary.count == 0) {
+      actions.add('Log a mood check-in this week');
+    } else if ((moodSummary.average ?? 5) <= 2.4) {
+      actions.add('Choose one small support step for low mood days');
     }
     if (mindAidMessageCount == 0) {
       actions.add('Use MindAid when you want guided support');
@@ -365,6 +501,9 @@ class ReportRepository {
     }
     if (mentalStatusSignal == 'watchful' || mentalStatusSignal == 'elevated') {
       actions.add('Consider a full assessment for deeper insight');
+    }
+    if (secretChatSummary.engagementCount == 0) {
+      actions.add('Use Secret Chat when peer support feels helpful');
     }
     actions.add('Continue daily check-ins');
 
@@ -396,56 +535,86 @@ class ReportRepository {
     required String userId,
     required Map<String, dynamic>? userDoc,
     required String? latestAssessmentStatus,
+    required String? quickAssessmentStatus,
+    required String? fullAssessmentStatus,
     required String? mentalStatusSignal,
     required List<String> topConcernAreas,
+    required _MoodSummary moodSummary,
     required int activeDayCount,
     required int assessmentCount,
     required int mindAidMessageCount,
     required int breathingSessionCount,
+    required _SecretChatSummary secretChatSummary,
+    required int totalEngagementCount,
+    required _MentalStatusSummary mentalStatus,
     required bool hasEnoughData,
   }) {
-    final status = _adminStatusFor(
-      latestAssessmentStatus: latestAssessmentStatus,
-      mentalStatusSignal: mentalStatusSignal,
-      hasEnoughData: hasEnoughData,
-    );
     return _firestoreService
         .setDocument(FirestoreCollections.adminStatusSummaries, userId, {
           'userId': userId,
           'userLabel': _userLabel(userId, userDoc),
           'role': userDoc?['role']?.toString().trim() ?? '',
-          'status': status,
-          'statusRank': _statusRank(status),
+          'status': mentalStatus.status,
+          'statusRank': _statusRank(mentalStatus.status),
+          'mentalStatusLabel': mentalStatus.label,
           'latestAssessmentStatus': latestAssessmentStatus ?? '',
+          'quickAssessmentStatus': quickAssessmentStatus ?? '',
+          'fullAssessmentStatus': fullAssessmentStatus ?? '',
           'mentalStatusSignal': mentalStatusSignal ?? '',
           'topConcernAreas': topConcernAreas,
+          'moodCheckInCount': moodSummary.count,
+          'averageMoodLevel': moodSummary.average,
           'activeDayCount': activeDayCount,
           'assessmentCount': assessmentCount,
           'mindAidMessageCount': mindAidMessageCount,
           'breathingSessionCount': breathingSessionCount,
+          'secretChatEngagementCount': secretChatSummary.engagementCount,
+          'totalEngagementCount': totalEngagementCount,
           'updatedAt': FieldValue.serverTimestamp(),
         }, merge: true);
   }
 
-  String _adminStatusFor({
-    required String? latestAssessmentStatus,
-    required String? mentalStatusSignal,
-    required bool hasEnoughData,
+  _MentalStatusSummary _mentalStatusFor({
+    required _AssessmentSummary assessmentSummary,
+    required _MoodSummary moodSummary,
+    required bool hasEnoughActivity,
   }) {
-    final status = (latestAssessmentStatus ?? '').toLowerCase();
-    final signal = (mentalStatusSignal ?? '').toLowerCase();
-    if (status.contains('severe') ||
-        status.contains('very high') ||
-        status.contains('high') ||
-        signal == 'highsupport' ||
-        signal == 'elevated') {
-      return 'severe';
+    final fullStatus = (assessmentSummary.fullStatus ?? '').toLowerCase();
+    final quickStatus = (assessmentSummary.quickStatus ?? '').toLowerCase();
+    final quickSignal = (assessmentSummary.quickSignal ?? '').toLowerCase();
+    final fullScore = assessmentSummary.fullScore;
+    final quickScore = assessmentSummary.quickScore;
+    final averageMood = moodSummary.average;
+
+    final severe =
+        fullStatus.contains('severe') ||
+        fullStatus.contains('high') ||
+        quickStatus.contains('very high') ||
+        quickSignal == 'elevated' ||
+        quickSignal == 'highsupport' ||
+        (fullScore != null && fullScore >= 70) ||
+        (quickScore != null && quickScore >= 75) ||
+        (averageMood != null && averageMood <= 2.0);
+    if (severe) {
+      return const _MentalStatusSummary(
+        status: 'severe',
+        label: 'Needs support',
+      );
     }
-    if (status.contains('moderate') || signal == 'watchful') {
-      return 'moderate';
+
+    final moderate =
+        fullStatus.contains('moderate') ||
+        quickStatus.contains('moderate') ||
+        quickSignal == 'watchful' ||
+        (quickScore != null && quickScore >= 50) ||
+        (averageMood != null && averageMood <= 2.7) ||
+        (!hasEnoughActivity &&
+            (assessmentSummary.hasAssessment || moodSummary.count > 0));
+    if (moderate) {
+      return const _MentalStatusSummary(status: 'moderate', label: 'Watchful');
     }
-    if (!hasEnoughData) return 'normal';
-    return 'normal';
+
+    return const _MentalStatusSummary(status: 'normal', label: 'Stable');
   }
 
   int _statusRank(String status) {
@@ -481,4 +650,87 @@ class _BreathingSummary {
 
   final int sessionCount;
   final int minutes;
+}
+
+class _MoodSummary {
+  const _MoodSummary({
+    required this.count,
+    required this.average,
+    required this.latestLevel,
+    required this.positiveCount,
+  });
+
+  final int count;
+  final double? average;
+  final int? latestLevel;
+  final int positiveCount;
+}
+
+class _SecretChatSummary {
+  const _SecretChatSummary({
+    required this.postCount,
+    required this.commentCount,
+    required this.interactionCount,
+  });
+
+  final int postCount;
+  final int commentCount;
+  final int interactionCount;
+
+  int get engagementCount => postCount + commentCount + interactionCount;
+}
+
+class _AssessmentSummary {
+  const _AssessmentSummary({this.latestQuick, this.latestFull});
+
+  final Map<String, dynamic>? latestQuick;
+  final Map<String, dynamic>? latestFull;
+
+  bool get hasAssessment => latestQuick != null || latestFull != null;
+
+  Map<String, dynamic>? get preferredAssessment => latestFull ?? latestQuick;
+
+  int? get quickScore => _score(latestQuick);
+  int? get fullScore => _score(latestFull);
+
+  String? get quickStatus =>
+      _firstText(latestQuick?['overallLevel'], latestQuick?['status']);
+  String? get fullStatus =>
+      _firstText(latestFull?['status'], latestFull?['overallLevel']);
+  String? get quickSignal => _firstText(latestQuick?['mentalStatusSignal']);
+
+  List<String> get fullConcernAreas => _stringList(
+    latestFull?['mainConcernAreas'] ?? latestFull?['topConcernAreas'],
+  ).take(3).toList(growable: false);
+
+  static int? _score(Map<String, dynamic>? assessment) {
+    if (assessment == null) return null;
+    final value = assessment['overallScore'] ?? assessment['concernScore'];
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static String? _firstText(Object? first, [Object? second]) {
+    for (final value in [first, second]) {
+      final text = value?.toString().trim();
+      if (text != null && text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  static List<String> _stringList(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+}
+
+class _MentalStatusSummary {
+  const _MentalStatusSummary({required this.status, required this.label});
+
+  final String status;
+  final String label;
 }

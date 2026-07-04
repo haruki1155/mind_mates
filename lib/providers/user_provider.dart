@@ -117,4 +117,12 @@ class UserProvider extends ChangeNotifier {
   Future<void> markBreathingSession(String uid) {
     return recordActivity(uid, UserActivityType.breathingSession);
   }
+
+  Future<void> markSecretChatPost(String uid) {
+    return recordActivity(uid, UserActivityType.secretChatPost);
+  }
+
+  Future<void> markSecretChatComment(String uid) {
+    return recordActivity(uid, UserActivityType.secretChatComment);
+  }
 }

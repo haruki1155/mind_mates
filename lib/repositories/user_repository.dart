@@ -10,7 +10,10 @@ enum UserActivityType {
   mindAidMessage,
   moodCheckIn,
   journalEntry,
-  breathingSession;
+  breathingSession,
+  secretChatPost,
+  secretChatComment,
+  secretChatInteraction;
 
   String get storedValue => name;
 }

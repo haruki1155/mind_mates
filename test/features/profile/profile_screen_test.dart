@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mind_mates/features/profile/screens/mental_health_report_screen.dart';
 import 'package:mind_mates/features/profile/screens/profile_screen.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
@@ -93,6 +94,67 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('mental health report shows assessment and usage summary', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final reportProvider = ReportProvider(
+      _FakeReportRepository(
+        ReportModel(
+          id: 'report_1',
+          userId: 'user_1',
+          title: 'Mental Health Summary',
+          description:
+              'Mental status: Watchful with 6 Secret Chat engagements.',
+          generatedAt: DateTime(2026, 7, 3),
+          mentalStatus: 'moderate',
+          mentalStatusLabel: 'Watchful',
+          fullAssessmentScore: 72,
+          fullAssessmentStatus: 'High Concern',
+          fullAssessmentTopConcernAreas: const ['Sleep and Rest'],
+          quickAssessmentScore: 61,
+          quickAssessmentStatus: 'moderate',
+          quickAssessmentSignal: 'watchful',
+          moodCheckInCount: 4,
+          averageMoodLevel: 3.2,
+          mindAidMessageCount: 5,
+          breathingSessionCount: 2,
+          mindfulBreathingMinutes: 8,
+          activeDayCount: 3,
+          currentStreak: 4,
+          secretChatPostCount: 1,
+          secretChatCommentCount: 2,
+          secretChatInteractionCount: 3,
+          secretChatEngagementCount: 6,
+          totalEngagementCount: 22,
+          recommendedNextActions: const ['Review support strategies'],
+          hasEnoughData: true,
+        ),
+      ),
+    );
+    await reportProvider.loadLatestReport('user_1');
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ReportProvider>.value(
+        value: reportProvider,
+        child: const MaterialApp(home: MentalHealthReportScreen()),
+      ),
+    );
+
+    expect(find.text('Watchful'), findsOneWidget);
+    expect(find.text('Assessment Results'), findsOneWidget);
+    expect(find.text('High Concern'), findsOneWidget);
+    expect(find.text('72/100'), findsOneWidget);
+    expect(find.text('moderate'), findsOneWidget);
+    expect(find.text('61/100'), findsOneWidget);
+    expect(find.text('Secret Chat'), findsOneWidget);
+    expect(find.text('1 posts, 2 comments'), findsOneWidget);
+    expect(find.text('22'), findsOneWidget);
+    expect(find.text('Review support strategies'), findsOneWidget);
   });
 }
 
