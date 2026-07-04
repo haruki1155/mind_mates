@@ -191,19 +191,57 @@ void main() {
       );
     });
 
+    test('allows full assessment when none were completed recently', () {
+      final eligibility = FullAssessmentEligibility.fromCompletedDates(
+        completedAt: const [],
+        now: DateTime(2026, 7, 3, 9),
+      );
+
+      expect(eligibility.canStart, isTrue);
+    });
+
+    test('blocks full assessment until 2 days after latest completion', () {
+      final eligibility = FullAssessmentEligibility.fromCompletedDates(
+        completedAt: [DateTime(2026, 7, 2, 9)],
+        now: DateTime(2026, 7, 3, 9),
+      );
+
+      expect(eligibility.canStart, isFalse);
+      expect(eligibility.nextEligibleAt, DateTime(2026, 7, 4, 9));
+      expect(eligibility.reason, FullAssessmentBlockReason.minimumInterval);
+    });
+
+    test('allows full assessment 2 days after one completion', () {
+      final eligibility = FullAssessmentEligibility.fromCompletedDates(
+        completedAt: [DateTime(2026, 7, 1, 9)],
+        now: DateTime(2026, 7, 3, 9),
+      );
+
+      expect(eligibility.canStart, isTrue);
+    });
+
+    test('blocks after 2 full assessments in a rolling 7-day period', () {
+      final eligibility = FullAssessmentEligibility.fromCompletedDates(
+        completedAt: [DateTime(2026, 6, 29, 9), DateTime(2026, 7, 1, 9)],
+        now: DateTime(2026, 7, 3, 9),
+      );
+
+      expect(eligibility.canStart, isFalse);
+      expect(eligibility.nextEligibleAt, DateTime(2026, 7, 6, 9));
+      expect(eligibility.reason, FullAssessmentBlockReason.rollingLimit);
+    });
+
     test(
-      'blocks full assessment when one exists in the current week',
-      () async {
-        final provider = AssessmentProvider(
-          _FakeAssessmentRepository(hasFullThisWeek: true),
+      'uses the later interval date when it is after the rolling window',
+      () {
+        final eligibility = FullAssessmentEligibility.fromCompletedDates(
+          completedAt: [DateTime(2026, 6, 27, 9), DateTime(2026, 7, 3, 8)],
+          now: DateTime(2026, 7, 3, 9),
         );
 
-        final canStart = await provider.canStartFullAssessmentThisWeek(
-          'user_1',
-          now: DateTime(2026, 7, 3),
-        );
-
-        expect(canStart, isFalse);
+        expect(eligibility.canStart, isFalse);
+        expect(eligibility.nextEligibleAt, DateTime(2026, 7, 5, 8));
+        expect(eligibility.reason, FullAssessmentBlockReason.minimumInterval);
       },
     );
   });
@@ -281,15 +319,7 @@ void _completeAssessment(AssessmentProvider provider) {
 }
 
 class _FakeAssessmentRepository extends AssessmentRepository {
-  _FakeAssessmentRepository({this.hasFullThisWeek = false});
-
-  final bool hasFullThisWeek;
   String? savedFullAssessmentUserId;
-
-  @override
-  Future<bool> hasFullAssessmentThisWeek(String userId, {DateTime? now}) async {
-    return hasFullThisWeek;
-  }
 
   @override
   Future<Map<String, Object>> saveStudentAssessment({

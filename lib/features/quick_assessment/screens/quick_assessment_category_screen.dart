@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../repositories/assessment_repository.dart';
 import '../../../routes/route_names.dart';
 import '../models/quick_assessment_models.dart';
 import '../widgets/quick_assessment_widgets.dart';
@@ -194,13 +195,29 @@ class _DecisionContent extends StatelessWidget {
       return;
     }
 
-    final canStart = await context
-        .read<AssessmentProvider>()
-        .canStartFullAssessmentThisWeek(userId);
+    FullAssessmentEligibility eligibility;
+    try {
+      eligibility = await context
+          .read<AssessmentProvider>()
+          .fullAssessmentEligibility(userId);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to verify assessment limit. You can continue for now.',
+            ),
+          ),
+        );
+      Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+      return;
+    }
     if (!context.mounted) return;
 
-    if (!canStart) {
-      await _showWeeklyLimitDialog(context);
+    if (!eligibility.canStart) {
+      await _showAssessmentLimitDialog(context, eligibility);
       return;
     }
 
@@ -220,14 +237,22 @@ class _DecisionContent extends StatelessWidget {
     }
   }
 
-  Future<void> _showWeeklyLimitDialog(BuildContext context) {
+  Future<void> _showAssessmentLimitDialog(
+    BuildContext context,
+    FullAssessmentEligibility eligibility,
+  ) {
+    final nextEligibleAt = eligibility.nextEligibleAt;
+    final nextEligibleText = nextEligibleAt == null
+        ? 'Please try again later.'
+        : 'Try again on ${_formatEligibilityDate(nextEligibleAt)}.';
+
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: QuickAssessmentPalette.card,
-        title: const Text('Assessment already completed'),
-        content: const Text(
-          'You can take the main assessment once per week. Your next assessment opens next Monday.',
+        title: const Text('Assessment limit reached'),
+        content: Text(
+          'You can take the full assessment up to 2 times in 7 days, with 2 days between attempts. $nextEligibleText',
         ),
         actions: [
           FilledButton(
@@ -237,5 +262,38 @@ class _DecisionContent extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatEligibilityDate(DateTime date) {
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    final local = date.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+
+    return '${weekdays[local.weekday - 1]}, ${months[local.month - 1]} ${local.day}, ${local.year} at $hour:$minute $period';
   }
 }

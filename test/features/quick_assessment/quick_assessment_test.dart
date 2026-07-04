@@ -1,10 +1,17 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/quick_assessment/data/quick_assessment_questions.dart';
 import 'package:mind_mates/features/quick_assessment/models/quick_assessment_models.dart';
+import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_category_screen.dart';
 import 'package:mind_mates/features/quick_assessment/services/quick_assessment_scoring.dart';
+import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
+import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
+import 'package:mind_mates/repositories/user_repository.dart';
+import 'package:mind_mates/routes/route_names.dart';
 import 'package:mind_mates/services/firebase/firestore_service.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   group('QuickAssessmentScoring', () {
@@ -213,6 +220,55 @@ void main() {
       },
     );
   });
+
+  group('QuickAssessmentCategoryScreen', () {
+    testWidgets('blocks full assessment when rolling limit is reached', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final assessmentProvider =
+          AssessmentProvider(
+              _EligibilityAssessmentRepository(
+                const FullAssessmentEligibility(
+                  canStart: false,
+                  nextEligibleAt: null,
+                  reason: FullAssessmentBlockReason.rollingLimit,
+                ),
+              ),
+            )
+            ..selectRole(AssessmentRole.student)
+            ..updateName('Leo');
+      final userProvider = UserProvider(_FakeUserRepository())
+        ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AssessmentProvider>.value(
+              value: assessmentProvider,
+            ),
+            ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ],
+          child: MaterialApp(
+            routes: {
+              RouteNames.studentAssessment: (_) =>
+                  const _RouteMarker('student assessment target'),
+            },
+            home: const QuickAssessmentCategoryScreen(),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Take Student Assessment'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Assessment limit reached'), findsOneWidget);
+      expect(find.textContaining('up to 2 times in 7 days'), findsOneWidget);
+      expect(find.text('student assessment target'), findsNothing);
+    });
+  });
 }
 
 AssessmentProvider _readyProvider({
@@ -249,5 +305,32 @@ class _FakeFirestoreService extends FirestoreService {
     bool merge = false,
   }) async {
     setDocumentData = data;
+  }
+}
+
+class _EligibilityAssessmentRepository extends AssessmentRepository {
+  _EligibilityAssessmentRepository(this.eligibility);
+
+  final FullAssessmentEligibility eligibility;
+
+  @override
+  Future<FullAssessmentEligibility> fullAssessmentEligibility(
+    String userId, {
+    DateTime? now,
+  }) async {
+    return eligibility;
+  }
+}
+
+class _FakeUserRepository extends UserRepository {}
+
+class _RouteMarker extends StatelessWidget {
+  const _RouteMarker(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(body: Center(child: Text(label)));
   }
 }

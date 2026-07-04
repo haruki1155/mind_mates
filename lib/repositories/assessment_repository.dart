@@ -9,6 +9,10 @@ class AssessmentRepository {
   AssessmentRepository({FirestoreService? firestoreService})
     : _firestoreService = firestoreService ?? FirestoreService();
 
+  static const fullAssessmentLimit = 2;
+  static const fullAssessmentWindow = Duration(days: 7);
+  static const fullAssessmentMinimumInterval = Duration(days: 2);
+
   final FirestoreService _firestoreService;
 
   Future<Map<String, Object>> saveQuickAssessment({
@@ -75,24 +79,92 @@ class AssessmentRepository {
     return snapshot.docs.length;
   }
 
-  Future<bool> hasFullAssessmentThisWeek(String userId, {DateTime? now}) async {
-    final weekStart = _weekStartFor(now ?? DateTime.now());
-    final weekEndExclusive = weekStart.add(const Duration(days: 7));
+  Future<FullAssessmentEligibility> fullAssessmentEligibility(
+    String userId, {
+    DateTime? now,
+  }) async {
+    final checkedAt = now ?? DateTime.now();
+    final windowStart = checkedAt.subtract(fullAssessmentWindow);
     final snapshot = await _firestoreService.firestore
         .collection(FirestoreCollections.assessments)
         .where('userId', isEqualTo: userId)
-        .where(
-          'createdAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(weekStart),
-        )
-        .where('createdAt', isLessThan: Timestamp.fromDate(weekEndExclusive))
+        .where('createdAt', isGreaterThan: Timestamp.fromDate(windowStart))
         .get();
 
-    return snapshot.docs.any((doc) => doc.data()['type'] != 'quick');
+    final fullAssessmentDates = snapshot.docs
+        .where((doc) => doc.data()['type'] != 'quick')
+        .map((doc) => _dateFromValue(doc.data()['createdAt']))
+        .whereType<DateTime>()
+        .toList();
+
+    return FullAssessmentEligibility.fromCompletedDates(
+      completedAt: fullAssessmentDates,
+      now: checkedAt,
+    );
   }
 
-  DateTime _weekStartFor(DateTime date) {
-    final local = DateTime(date.year, date.month, date.day);
-    return local.subtract(Duration(days: local.weekday - 1));
+  DateTime? _dateFromValue(Object? value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
   }
+}
+
+enum FullAssessmentBlockReason { minimumInterval, rollingLimit }
+
+class FullAssessmentEligibility {
+  const FullAssessmentEligibility({
+    required this.canStart,
+    this.nextEligibleAt,
+    this.reason,
+  });
+
+  factory FullAssessmentEligibility.fromCompletedDates({
+    required List<DateTime> completedAt,
+    required DateTime now,
+  }) {
+    final windowStart = now.subtract(AssessmentRepository.fullAssessmentWindow);
+    final fullAssessmentDates =
+        completedAt.where((date) => date.isAfter(windowStart)).toList()..sort();
+
+    if (fullAssessmentDates.isEmpty) {
+      return const FullAssessmentEligibility(canStart: true);
+    }
+
+    final latestEligibleAt = fullAssessmentDates.last.add(
+      AssessmentRepository.fullAssessmentMinimumInterval,
+    );
+    DateTime? nextEligibleAt;
+    var reason = FullAssessmentBlockReason.minimumInterval;
+
+    if (now.isBefore(latestEligibleAt)) {
+      nextEligibleAt = latestEligibleAt;
+    }
+
+    if (fullAssessmentDates.length >=
+        AssessmentRepository.fullAssessmentLimit) {
+      final rollingEligibleAt = fullAssessmentDates.first.add(
+        AssessmentRepository.fullAssessmentWindow,
+      );
+      if (nextEligibleAt == null || rollingEligibleAt.isAfter(nextEligibleAt)) {
+        nextEligibleAt = rollingEligibleAt;
+        reason = FullAssessmentBlockReason.rollingLimit;
+      }
+    }
+
+    if (nextEligibleAt == null || !now.isBefore(nextEligibleAt)) {
+      return const FullAssessmentEligibility(canStart: true);
+    }
+
+    return FullAssessmentEligibility(
+      canStart: false,
+      nextEligibleAt: nextEligibleAt,
+      reason: reason,
+    );
+  }
+
+  final bool canStart;
+  final DateTime? nextEligibleAt;
+  final FullAssessmentBlockReason? reason;
 }

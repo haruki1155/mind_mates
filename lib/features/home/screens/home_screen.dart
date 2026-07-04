@@ -6,6 +6,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../repositories/assessment_repository.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/models/quick_assessment_models.dart';
 import '../models/home_dashboard_data.dart';
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
 
   bool _showBottomNav = true;
+  bool _isOpeningAssessment = false;
   _HomeNavDestination _activeDestination = _HomeNavDestination.today;
   String? _loadedBackendUserId;
 
@@ -335,91 +337,111 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openStudentAssessment() async {
+    if (_isOpeningAssessment) return;
+    _isOpeningAssessment = true;
+
     final userId = _currentUserId();
-    if (userId != null && userId.isNotEmpty) {
-      final canStart = await context
-          .read<AssessmentProvider>()
-          .canStartFullAssessmentThisWeek(userId);
-      if (!mounted) return;
-      if (!canStart) {
-        await _showWeeklyAssessmentLimitDialog();
-        return;
+    try {
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          final eligibility = await context
+              .read<AssessmentProvider>()
+              .fullAssessmentEligibility(userId);
+          if (!mounted) return;
+          if (!eligibility.canStart) {
+            await _showAssessmentLimitDialog(eligibility);
+            return;
+          }
+        } catch (error) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Unable to verify assessment limit. You can continue for now.',
+                ),
+              ),
+            );
+        }
       }
-    }
 
-    final shouldStart = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: HomePalette.sun, width: 1.2),
-          ),
-          title: const Text(
-            'Start Assessment?',
-            style: TextStyle(
-              color: HomePalette.text,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
+      final shouldStart = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: HomePalette.sun, width: 1.2),
             ),
-          ),
-          content: const Text(
-            'This will open your role-based assessment questions. You can skip questions while answering.',
-            style: TextStyle(
-              color: HomePalette.blueText,
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(
-                foregroundColor: HomePalette.orange,
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
+            title: const Text(
+              'Start Assessment?',
+              style: TextStyle(
+                color: HomePalette.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
               ),
-              child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(
-                backgroundColor: HomePalette.sun,
-                foregroundColor: HomePalette.text,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
+            content: const Text(
+              'This will open your role-based assessment questions. You can skip questions while answering.',
+              style: TextStyle(
+                color: HomePalette.blueText,
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
               ),
-              child: const Text('Start'),
             ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                style: TextButton.styleFrom(
+                  foregroundColor: HomePalette.orange,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: HomePalette.sun,
+                  foregroundColor: HomePalette.text,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                child: const Text('Start'),
+              ),
+            ],
+          );
+        },
+      );
 
-    if (shouldStart != true || !mounted) return;
+      if (shouldStart != true || !mounted) return;
 
-    final assessmentProvider = context.read<AssessmentProvider>();
-    final savedRole = context.read<UserProvider>().user?.role;
-    final role =
-        assessmentProvider.selectedRole ??
-        AssessmentRole.fromStoredValue(savedRole) ??
-        AssessmentRole.student;
+      final assessmentProvider = context.read<AssessmentProvider>();
+      final savedRole = context.read<UserProvider>().user?.role;
+      final role =
+          assessmentProvider.selectedRole ??
+          AssessmentRole.fromStoredValue(savedRole) ??
+          AssessmentRole.student;
 
-    if (assessmentProvider.selectedRole != role) {
-      assessmentProvider.selectRole(role);
+      if (assessmentProvider.selectedRole != role) {
+        assessmentProvider.selectRole(role);
+      }
+
+      Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+    } finally {
+      _isOpeningAssessment = false;
     }
-
-    Navigator.of(context).pushNamed(RouteNames.studentAssessment);
   }
 
   String? _currentUserId() {
@@ -434,7 +456,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _showWeeklyAssessmentLimitDialog() {
+  Future<void> _showAssessmentLimitDialog(
+    FullAssessmentEligibility eligibility,
+  ) {
+    final nextEligibleAt = eligibility.nextEligibleAt;
+    final nextEligibleText = nextEligibleAt == null
+        ? 'Please try again later.'
+        : 'Try again on ${_formatEligibilityDate(nextEligibleAt)}.';
+
     return showDialog<void>(
       context: context,
       builder: (context) {
@@ -446,15 +475,15 @@ class _HomeScreenState extends State<HomeScreen> {
             side: const BorderSide(color: HomePalette.sun, width: 1.2),
           ),
           title: const Text(
-            'Assessment already completed',
+            'Assessment limit reached',
             style: TextStyle(
               color: HomePalette.text,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
           ),
-          content: const Text(
-            'You can take the main assessment once per week. Your next assessment opens next Monday.',
+          content: Text(
+            'You can take the full assessment up to 2 times in 7 days, with 2 days between attempts. $nextEligibleText',
             style: TextStyle(
               color: HomePalette.blueText,
               fontSize: 13,
@@ -478,6 +507,39 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  String _formatEligibilityDate(DateTime date) {
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    final local = date.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+
+    return '${weekdays[local.weekday - 1]}, ${months[local.month - 1]} ${local.day}, ${local.year} at $hour:$minute $period';
   }
 
   void _openResource(HomeResourceData resource) {

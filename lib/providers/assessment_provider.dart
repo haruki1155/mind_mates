@@ -251,15 +251,11 @@ class AssessmentProvider extends ChangeNotifier {
     );
   }
 
-  Future<bool> canStartFullAssessmentThisWeek(
+  Future<FullAssessmentEligibility> fullAssessmentEligibility(
     String userId, {
     DateTime? now,
-  }) async {
-    final hasCompleted = await _repository.hasFullAssessmentThisWeek(
-      userId,
-      now: now,
-    );
-    return !hasCompleted;
+  }) {
+    return _repository.fullAssessmentEligibility(userId, now: now);
   }
 
   List<StudentAssessmentQuestion> _questionsForActiveRole() {

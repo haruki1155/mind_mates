@@ -215,7 +215,7 @@ void main() {
     expect(find.text('Anger'), findsOneWidget);
   });
 
-  testWidgets('home blocks main assessment when completed this week', (
+  testWidgets('home blocks main assessment when rolling limit is reached', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -245,7 +245,13 @@ void main() {
           ),
           ChangeNotifierProvider(
             create: (_) => AssessmentProvider(
-              _FakeAssessmentRepository(hasFullThisWeek: true),
+              _FakeAssessmentRepository(
+                eligibility: FullAssessmentEligibility(
+                  canStart: false,
+                  nextEligibleAt: DateTime(2026, 7, 5, 9),
+                  reason: FullAssessmentBlockReason.minimumInterval,
+                ),
+              ),
             ),
           ),
           ChangeNotifierProvider(
@@ -263,7 +269,8 @@ void main() {
     await tester.tap(find.text('Start Assessment'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Assessment already completed'), findsOneWidget);
+    expect(find.text('Assessment limit reached'), findsOneWidget);
+    expect(find.textContaining('up to 2 times in 7 days'), findsOneWidget);
     expect(find.text('Start Assessment?'), findsNothing);
   });
 }
@@ -304,12 +311,17 @@ class _FakeReportRepository extends ReportRepository {
 class _FakeBreathingRepository extends BreathingRepository {}
 
 class _FakeAssessmentRepository extends AssessmentRepository {
-  _FakeAssessmentRepository({this.hasFullThisWeek = false});
+  _FakeAssessmentRepository({
+    this.eligibility = const FullAssessmentEligibility(canStart: true),
+  });
 
-  final bool hasFullThisWeek;
+  final FullAssessmentEligibility eligibility;
 
   @override
-  Future<bool> hasFullAssessmentThisWeek(String userId, {DateTime? now}) async {
-    return hasFullThisWeek;
+  Future<FullAssessmentEligibility> fullAssessmentEligibility(
+    String userId, {
+    DateTime? now,
+  }) async {
+    return eligibility;
   }
 }
