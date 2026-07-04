@@ -667,13 +667,13 @@ class _MoodSelector extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
-          for (final mood in _breathingMoods) ...[
+          for (var index = 0; index < _breathingMoods.length; index++) ...[
             _MoodPill(
-              mood: mood,
-              selected: mood == selectedMood,
-              onTap: () => onMoodChanged(mood),
+              mood: _breathingMoods[index],
+              selected: _breathingMoods[index] == selectedMood,
+              onTap: () => onMoodChanged(_breathingMoods[index]),
             ),
-            const SizedBox(width: 10),
+            if (index != _breathingMoods.length - 1) const SizedBox(width: 10),
           ],
         ],
       ),
@@ -760,34 +760,21 @@ class _DurationSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            for (var minutes = 1; minutes <= 6; minutes++)
-              _DurationOption(
-                minutes: minutes,
-                selected: minutes == selectedMinutes,
-                onTap: () => onChanged(minutes),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        AnimatedAlign(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          alignment: Alignment(-1 + ((selectedMinutes - 1) * .4), 0),
-          child: Container(
-            width: 9,
-            height: 9,
-            decoration: const BoxDecoration(
-              color: _BreathingPalette.gold,
-              shape: BoxShape.circle,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          for (var minutes = 1; minutes <= 6; minutes++) ...[
+            _DurationOption(
+              minutes: minutes,
+              selected: minutes == selectedMinutes,
+              onTap: () => onChanged(minutes),
             ),
-          ),
-        ),
-      ],
+            if (minutes != 6) const SizedBox(width: 12),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -805,20 +792,24 @@ class _DurationOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Center(
-        child: InkWell(
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 82,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFF0CC) : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFFFFF0CC) : Colors.transparent,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
               '$minutes min',
+              maxLines: 1,
+              overflow: TextOverflow.visible,
               style: TextStyle(
                 color: selected
                     ? _BreathingPalette.ink
@@ -827,7 +818,17 @@ class _DurationOption extends StatelessWidget {
                 fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
               ),
             ),
-          ),
+            const SizedBox(height: 7),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: selected ? _BreathingPalette.gold : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
         ),
       ),
     );
