@@ -6,7 +6,7 @@ import '../../../models/user_model.dart';
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
-import '../../../routes/route_names.dart';
+import '../auth_flow_routes.dart';
 
 class SignupScreen extends StatelessWidget {
   const SignupScreen({super.key});
@@ -151,10 +151,12 @@ class _SignupBodyState extends State<_SignupBody> {
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      RouteNames.quickAssessmentCategory,
-      (route) => false,
+    final destination = destinationAfterAuthentication(
+      savedQuickAssessment: savedQuickAssessment,
     );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(destination, (route) => false);
   }
 
   UserModel _localProfileFromRegistration({
@@ -459,31 +461,47 @@ class _SignupField extends StatelessWidget {
           textInputAction: textInputAction,
           obscureText: obscureText,
           validator: validator,
-          style: const TextStyle(fontSize: 13, height: 1),
+          cursorColor: _SignupColors.button,
+          style: const TextStyle(
+            color: _SignupColors.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+          ),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
             fillColor: Colors.white,
-            contentPadding: EdgeInsets.fromLTRB(hasIcon ? 0 : 12, 7, 12, 7),
+            hintText: label,
+            hintStyle: const TextStyle(
+              color: _SignupColors.hintText,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             prefixIcon: hasIcon
                 ? _SignupFieldIcon(assetIconPath: assetIconPath, icon: icon)
                 : null,
             prefixIconConstraints: const BoxConstraints(
-              minWidth: 38,
-              minHeight: 29,
+              minWidth: 44,
+              minHeight: 44,
             ),
             errorStyle: const TextStyle(
               fontSize: 9,
               height: 0.9,
               fontWeight: FontWeight.w700,
+              color: _SignupColors.error,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: _SignupColors.text),
+              borderSide: const BorderSide(color: _SignupColors.fieldBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: _SignupColors.text),
+              borderSide: const BorderSide(color: _SignupColors.fieldBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -519,7 +537,7 @@ class _SignupFieldIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 6, 9, 6),
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
       child: assetIconPath == null
           ? Icon(icon, size: 18, color: _SignupColors.text)
           : Image.asset(
@@ -691,6 +709,8 @@ class _SignupColors {
   static const notice = Color(0xFFFFE292);
   static const button = Color(0xFFFFBE0A);
   static const text = Color(0xFF050505);
+  static const hintText = Color(0xFF6C6250);
+  static const fieldBorder = Color(0xFF8A7350);
   static const error = Color(0xFFB3261E);
   static const bubbleYellow = Color(0xFFFFCF52);
   static const bubbleGray = Color(0xFFD9D9D9);

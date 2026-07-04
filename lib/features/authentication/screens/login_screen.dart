@@ -5,6 +5,7 @@ import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
+import '../auth_flow_routes.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -84,10 +85,12 @@ class _LoginBodyState extends State<_LoginBody> {
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      RouteNames.quickAssessmentCategory,
-      (route) => false,
+    final destination = destinationAfterAuthentication(
+      savedQuickAssessment: savedQuickAssessment,
     );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(destination, (route) => false);
   }
 
   Future<bool> _savePendingQuickAssessment(String userId) async {

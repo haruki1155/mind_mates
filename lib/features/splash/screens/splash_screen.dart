@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../../onboarding/screens/onboarding_screen.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
+import '../../../routes/route_names.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -37,33 +40,24 @@ class _SplashScreenState extends State<SplashScreen>
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
-    _openOnboarding();
+    _openNextScreen();
   }
 
-  Future<void> _openOnboarding() async {
+  Future<void> _openNextScreen() async {
     await Future<void>.delayed(const Duration(milliseconds: 1900));
     if (!mounted) return;
 
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        pageBuilder: (_, animation, _) => const OnboardingScreen(),
-        transitionDuration: const Duration(milliseconds: 550),
-        transitionsBuilder: (_, animation, _, child) {
-          final offset =
-              Tween<Offset>(
-                begin: const Offset(0, 0.04),
-                end: Offset.zero,
-              ).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-              );
+    final userId = context.read<AuthProvider>().hydrateCurrentUser();
+    if (userId != null && userId.isNotEmpty) {
+      await context.read<UserProvider>().loadProfile(userId);
+    }
+    if (!mounted) return;
 
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: offset, child: child),
-          );
-        },
-      ),
-    );
+    final routeName = userId == null || userId.isEmpty
+        ? RouteNames.accountGate
+        : RouteNames.home;
+
+    Navigator.of(context).pushReplacementNamed(routeName);
   }
 
   @override
