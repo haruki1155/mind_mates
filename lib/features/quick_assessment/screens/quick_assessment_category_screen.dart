@@ -200,7 +200,10 @@ class _DecisionContent extends StatelessWidget {
       eligibility = await context
           .read<AssessmentProvider>()
           .fullAssessmentEligibility(userId);
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Full assessment eligibility check failed: $error\n$stackTrace',
+      );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()

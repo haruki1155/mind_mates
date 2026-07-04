@@ -352,7 +352,10 @@ class _HomeScreenState extends State<HomeScreen> {
             await _showAssessmentLimitDialog(eligibility);
             return;
           }
-        } catch (error) {
+        } catch (error, stackTrace) {
+          debugPrint(
+            'Full assessment eligibility check failed: $error\n$stackTrace',
+          );
           if (!mounted) return;
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()

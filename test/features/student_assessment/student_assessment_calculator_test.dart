@@ -15,6 +15,7 @@ import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
 import 'package:mind_mates/repositories/report_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
+import 'package:mind_mates/services/firebase/firestore_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -246,6 +247,40 @@ void main() {
     );
   });
 
+  group('AssessmentRepository full assessment eligibility', () {
+    test(
+      'uses indexed user and descending createdAt query and ignores quick records',
+      () async {
+        final firestore = _EligibilityFirestoreService(
+          docs: [
+            {
+              'type': 'quick',
+              'createdAt': DateTime(2026, 7, 3, 9).toIso8601String(),
+            },
+            {
+              'type': 'student',
+              'createdAt': DateTime(2026, 7, 2, 9).toIso8601String(),
+            },
+          ],
+        );
+        final repository = AssessmentRepository(firestoreService: firestore);
+
+        final eligibility = await repository.fullAssessmentEligibility(
+          'user_1',
+          now: DateTime(2026, 7, 3, 9),
+        );
+
+        expect(firestore.collection, 'assessments');
+        expect(firestore.whereEquals, {'userId': 'user_1'});
+        expect(firestore.orderBy, 'createdAt');
+        expect(firestore.descending, isTrue);
+        expect(eligibility.canStart, isFalse);
+        expect(eligibility.nextEligibleAt, DateTime(2026, 7, 4, 9));
+        expect(eligibility.reason, FullAssessmentBlockReason.minimumInterval);
+      },
+    );
+  });
+
   group('StudentAssessmentScreen UI', () {
     testWidgets('neutral option is not preselected', (tester) async {
       final provider = AssessmentProvider(AssessmentRepository())
@@ -333,6 +368,31 @@ class _FakeAssessmentRepository extends AssessmentRepository {
       'type': result.userType.toLowerCase(),
       ...result.toJson(),
     };
+  }
+}
+
+class _EligibilityFirestoreService extends FirestoreService {
+  _EligibilityFirestoreService({required this.docs});
+
+  final List<Map<String, dynamic>> docs;
+  String? collection;
+  Map<String, Object?>? whereEquals;
+  String? orderBy;
+  bool? descending;
+
+  @override
+  Future<List<Map<String, dynamic>>> getDocuments(
+    String collection, {
+    Map<String, Object?> whereEquals = const {},
+    String? orderBy,
+    bool descending = true,
+    int? limit,
+  }) async {
+    this.collection = collection;
+    this.whereEquals = whereEquals;
+    this.orderBy = orderBy;
+    this.descending = descending;
+    return docs;
   }
 }
 

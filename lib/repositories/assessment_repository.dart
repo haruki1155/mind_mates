@@ -84,16 +84,16 @@ class AssessmentRepository {
     DateTime? now,
   }) async {
     final checkedAt = now ?? DateTime.now();
-    final windowStart = checkedAt.subtract(fullAssessmentWindow);
-    final snapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.assessments)
-        .where('userId', isEqualTo: userId)
-        .where('createdAt', isGreaterThan: Timestamp.fromDate(windowStart))
-        .get();
+    final docs = await _firestoreService.getDocuments(
+      FirestoreCollections.assessments,
+      whereEquals: {'userId': userId},
+      orderBy: 'createdAt',
+      descending: true,
+    );
 
-    final fullAssessmentDates = snapshot.docs
-        .where((doc) => doc.data()['type'] != 'quick')
-        .map((doc) => _dateFromValue(doc.data()['createdAt']))
+    final fullAssessmentDates = docs
+        .where((doc) => doc['type'] != 'quick')
+        .map((doc) => _dateFromValue(doc['createdAt']))
         .whereType<DateTime>()
         .toList();
 

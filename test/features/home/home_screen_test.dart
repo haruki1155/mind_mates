@@ -273,6 +273,61 @@ void main() {
     expect(find.textContaining('up to 2 times in 7 days'), findsOneWidget);
     expect(find.text('Start Assessment?'), findsNothing);
   });
+
+  testWidgets('home shows fallback warning when eligibility check throws', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(
+        const UserModel(
+          id: 'user_1',
+          email: 'leo@example.com',
+          role: 'student',
+        ),
+      );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) =>
+                AssessmentProvider(_FakeAssessmentRepository(throws: true)),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Start Assessment'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Unable to verify assessment limit. You can continue for now.'),
+      findsOneWidget,
+    );
+    expect(find.text('Start Assessment?'), findsOneWidget);
+    expect(find.text('Assessment limit reached'), findsNothing);
+  });
 }
 
 Map<String, WidgetBuilder> _testRoutes() {
@@ -313,15 +368,20 @@ class _FakeBreathingRepository extends BreathingRepository {}
 class _FakeAssessmentRepository extends AssessmentRepository {
   _FakeAssessmentRepository({
     this.eligibility = const FullAssessmentEligibility(canStart: true),
+    this.throws = false,
   });
 
   final FullAssessmentEligibility eligibility;
+  final bool throws;
 
   @override
   Future<FullAssessmentEligibility> fullAssessmentEligibility(
     String userId, {
     DateTime? now,
   }) async {
+    if (throws) {
+      throw StateError('test eligibility failure');
+    }
     return eligibility;
   }
 }

@@ -268,6 +268,54 @@ void main() {
       expect(find.textContaining('up to 2 times in 7 days'), findsOneWidget);
       expect(find.text('student assessment target'), findsNothing);
     });
+
+    testWidgets('warns and continues when eligibility check throws', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final assessmentProvider =
+          AssessmentProvider(
+              _EligibilityAssessmentRepository(
+                const FullAssessmentEligibility(canStart: true),
+                throws: true,
+              ),
+            )
+            ..selectRole(AssessmentRole.student)
+            ..updateName('Leo');
+      final userProvider = UserProvider(_FakeUserRepository())
+        ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AssessmentProvider>.value(
+              value: assessmentProvider,
+            ),
+            ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ],
+          child: MaterialApp(
+            routes: {
+              RouteNames.studentAssessment: (_) =>
+                  const _RouteMarker('student assessment target'),
+            },
+            home: const QuickAssessmentCategoryScreen(),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Take Student Assessment'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Unable to verify assessment limit. You can continue for now.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('student assessment target'), findsOneWidget);
+    });
   });
 }
 
@@ -309,15 +357,19 @@ class _FakeFirestoreService extends FirestoreService {
 }
 
 class _EligibilityAssessmentRepository extends AssessmentRepository {
-  _EligibilityAssessmentRepository(this.eligibility);
+  _EligibilityAssessmentRepository(this.eligibility, {this.throws = false});
 
   final FullAssessmentEligibility eligibility;
+  final bool throws;
 
   @override
   Future<FullAssessmentEligibility> fullAssessmentEligibility(
     String userId, {
     DateTime? now,
   }) async {
+    if (throws) {
+      throw StateError('test eligibility failure');
+    }
     return eligibility;
   }
 }
