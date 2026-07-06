@@ -13,6 +13,7 @@ class UserModel {
     this.schoolId,
     this.department,
     this.course,
+    this.sector,
     this.role,
     this.createdAt,
     this.dayStreak = 0,
@@ -32,6 +33,7 @@ class UserModel {
   final String? schoolId;
   final String? department;
   final String? course;
+  final String? sector;
   final String? role;
   final DateTime? createdAt;
   final int dayStreak;
@@ -73,6 +75,7 @@ class UserModel {
     String? schoolId,
     String? department,
     String? course,
+    String? sector,
     String? role,
     DateTime? createdAt,
     int? dayStreak,
@@ -92,6 +95,7 @@ class UserModel {
       schoolId: schoolId ?? this.schoolId,
       department: department ?? this.department,
       course: course ?? this.course,
+      sector: sector ?? this.sector,
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
       dayStreak: dayStreak ?? this.dayStreak,
@@ -114,6 +118,7 @@ class UserModel {
       schoolId: _stringOrNull(json['schoolId']),
       department: _stringOrNull(json['department']),
       course: _stringOrNull(json['course']),
+      sector: _stringOrNull(json['sector']),
       role: _stringOrNull(json['role']),
       createdAt: _dateOrNull(json['createdAt']),
       dayStreak: _intOrZero(json['dayStreak']),
@@ -136,6 +141,7 @@ class UserModel {
       'schoolId': schoolId ?? '',
       'department': department ?? '',
       'course': course ?? '',
+      'sector': sector ?? '',
       'role': role ?? '',
       'createdAt': createdAt?.toIso8601String(),
       'dayStreak': dayStreak,
@@ -156,6 +162,7 @@ class UserModel {
       'schoolId': schoolId?.trim() ?? '',
       'department': department?.trim() ?? '',
       'course': course?.trim() ?? '',
+      'sector': sector?.trim() ?? '',
       'role': role?.trim() ?? '',
       'avatarAssetName': avatarAssetName?.trim() ?? '',
       'updatedAt': DateTime.now().toIso8601String(),

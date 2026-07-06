@@ -18,26 +18,43 @@ class AuthRepository {
   String? get currentUserId => _authService.currentUser?.uid;
   String? get currentUserEmail => _authService.currentUser?.email;
 
+  static const _authEmailDomain = 'mindmate.local';
+
+  static String authEmailForSchoolId(String schoolId) {
+    final normalized = schoolId
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '.')
+        .replaceAll(RegExp(r'\.+'), '.')
+        .replaceAll(RegExp(r'^\.|\.$'), '');
+    final localPart = normalized.isEmpty ? 'user' : normalized;
+    return '$localPart@$_authEmailDomain';
+  }
+
   Future<UserCredential> signIn({
-    required String email,
+    required String schoolId,
     required String password,
   }) {
-    return _authService.signIn(email: email, password: password);
+    return _authService.signIn(
+      email: authEmailForSchoolId(schoolId),
+      password: password,
+    );
   }
 
   Future<UserCredential> signUp({
-    required String email,
     required String password,
     required String firstName,
     required String lastName,
     required String schoolId,
     required String department,
     required String course,
+    String? sector,
     String? middleName,
     AssessmentRole? role,
   }) async {
+    final authEmail = authEmailForSchoolId(schoolId);
     final credential = await _authService.signUp(
-      email: email,
+      email: authEmail,
       password: password,
     );
     final user = credential.user;
@@ -49,7 +66,7 @@ class AuthRepository {
           user.uid,
           {
             'id': user.uid,
-            'email': email.trim(),
+            'email': authEmail,
             'firstName': firstName.trim(),
             'middleName': middleName?.trim() ?? '',
             'lastName': lastName.trim(),
@@ -61,6 +78,7 @@ class AuthRepository {
             'schoolId': schoolId.trim(),
             'department': department.trim(),
             'course': course.trim(),
+            'sector': sector?.trim() ?? '',
             if (role != null) 'role': role.name,
             'dayStreak': 0,
             'longestStreak': 0,

@@ -124,7 +124,60 @@ void main() {
       'College of Information and Technology Education / College of Computer Studies',
     );
     expect(authProvider.course, 'BS Information Technology');
+    expect(authProvider.generatedEmail, '2026.1@mindmate.local');
     expect(find.text('onboarding target'), findsOneWidget);
+  });
+
+  testWidgets('teaching signup uses college and course fields', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final authProvider = _FakeAuthProvider();
+    await tester.pumpWidget(
+      _SignupHarness(authProvider: authProvider, role: AssessmentRole.faculty),
+    );
+
+    expect(find.text('College or Department'), findsWidgets);
+    expect(find.text('Course or Program'), findsWidgets);
+    expect(find.text('Sector'), findsNothing);
+  });
+
+  testWidgets('non-teaching signup requires and passes sector', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final authProvider = _FakeAuthProvider();
+    await tester.pumpWidget(
+      _SignupHarness(authProvider: authProvider, role: AssessmentRole.staff),
+    );
+
+    expect(find.text('Sector'), findsWidgets);
+    expect(find.text('College or Department'), findsNothing);
+    expect(find.text('Course or Program'), findsNothing);
+
+    await _fillRequiredTextFields(tester);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+
+    await tester.tap(find.text('Sign Up'));
+    await tester.pump();
+
+    expect(find.text('Sector is required'), findsOneWidget);
+    expect(authProvider.signupCalls, 0);
+
+    await _selectDropdownItem(
+      tester,
+      fieldLabel: 'Sector',
+      itemLabel: 'Guidance/PACC',
+    );
+    await tester.tap(find.text('Sign Up'));
+    await tester.pumpAndSettle();
+
+    expect(authProvider.signupCalls, 1);
+    expect(authProvider.department, '');
+    expect(authProvider.course, '');
+    expect(authProvider.sector, 'Guidance/PACC');
+    expect(authProvider.role, AssessmentRole.staff);
   });
 }
 
@@ -142,10 +195,6 @@ Future<void> _fillRequiredTextFields(WidgetTester tester) async {
     '2026-1',
   );
   await tester.enterText(
-    find.widgetWithText(TextFormField, 'Email'),
-    'leo@example.com',
-  );
-  await tester.enterText(
     find.widgetWithText(TextFormField, 'Password'),
     'password123',
   );
@@ -161,9 +210,11 @@ Future<void> _selectDropdownItem(
   required String fieldLabel,
   required String itemLabel,
 }) async {
-  final field = find
-      .byType(DropdownButtonFormField<String>)
-      .at(fieldLabel == 'College or Department' ? 0 : 1);
+  final index = switch (fieldLabel) {
+    'Course or Program' => 1,
+    _ => 0,
+  };
+  final field = find.byType(DropdownButtonFormField<String>).at(index);
   await tester.ensureVisible(field);
   await tester.tap(field);
   await tester.pumpAndSettle();
@@ -175,9 +226,13 @@ Future<void> _selectDropdownItem(
 }
 
 class _SignupHarness extends StatelessWidget {
-  const _SignupHarness({required this.authProvider});
+  const _SignupHarness({
+    required this.authProvider,
+    this.role = AssessmentRole.student,
+  });
 
   final AuthProvider authProvider;
+  final AssessmentRole role;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +243,8 @@ class _SignupHarness extends StatelessWidget {
           create: (_) => UserProvider(_FakeUserRepository()),
         ),
         ChangeNotifierProvider<AssessmentProvider>(
-          create: (_) => AssessmentProvider(_FakeAssessmentRepository()),
+          create: (_) =>
+              AssessmentProvider(_FakeAssessmentRepository())..selectRole(role),
         ),
       ],
       child: MaterialApp(
@@ -208,22 +264,30 @@ class _FakeAuthProvider extends AuthProvider {
   int signupCalls = 0;
   String? department;
   String? course;
+  String? sector;
+  String? schoolId;
+  String? generatedEmail;
+  AssessmentRole? role;
 
   @override
   Future<String?> signUp({
-    required String email,
     required String password,
     required String firstName,
     required String lastName,
     required String schoolId,
     required String department,
     required String course,
+    String? sector,
     String? middleName,
     AssessmentRole? role,
   }) async {
     signupCalls += 1;
     this.department = department;
     this.course = course;
+    this.sector = sector;
+    this.schoolId = schoolId;
+    generatedEmail = AuthRepository.authEmailForSchoolId(schoolId);
+    this.role = role;
     return 'user_1';
   }
 }

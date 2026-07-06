@@ -6,6 +6,7 @@ import '../../../models/user_model.dart';
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../repositories/auth_repository.dart';
 import '../auth_flow_routes.dart';
 
 class SignupScreen extends StatelessWidget {
@@ -41,11 +42,11 @@ class _SignupBodyState extends State<_SignupBody> {
   final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _schoolIdController = TextEditingController();
-  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String? _selectedDepartment;
   String? _selectedCourse;
+  String? _selectedSector;
   bool _acceptedTerms = false;
 
   @override
@@ -54,7 +55,6 @@ class _SignupBodyState extends State<_SignupBody> {
     _middleNameController.dispose();
     _lastNameController.dispose();
     _schoolIdController.dispose();
-    _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -63,17 +63,6 @@ class _SignupBodyState extends State<_SignupBody> {
   String? _requiredValidator(String? value, String field) {
     if (value == null || value.trim().isEmpty) {
       return '$field is required';
-    }
-    return null;
-  }
-
-  String? _emailValidator(String? value) {
-    final requiredError = _requiredValidator(value, 'Email');
-    if (requiredError != null) {
-      return requiredError;
-    }
-    if (!value!.trim().contains('@')) {
-      return 'Enter a valid email';
     }
     return null;
   }
@@ -109,16 +98,18 @@ class _SignupBodyState extends State<_SignupBody> {
     final assessmentProvider = context.read<AssessmentProvider>();
     final authProvider = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
+    final role = assessmentProvider.selectedRole;
+    final usesSector = role == AssessmentRole.staff;
     final userId = await authProvider.signUp(
-      email: _emailController.text,
       password: _passwordController.text,
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,
       schoolId: _schoolIdController.text,
-      department: _selectedDepartment ?? '',
-      course: _selectedCourse ?? '',
+      department: usesSector ? '' : _selectedDepartment ?? '',
+      course: usesSector ? '' : _selectedCourse ?? '',
+      sector: usesSector ? _selectedSector : null,
       middleName: _middleNameController.text,
-      role: assessmentProvider.selectedRole,
+      role: role,
     );
 
     if (!mounted) return;
@@ -141,10 +132,7 @@ class _SignupBodyState extends State<_SignupBody> {
       userId,
     );
     userProvider.setUser(
-      _localProfileFromRegistration(
-        userId: userId,
-        role: assessmentProvider.selectedRole,
-      ),
+      _localProfileFromRegistration(userId: userId, role: role),
     );
     if (savedQuickAssessment) {
       await userProvider.markQuickAssessment(userId);
@@ -164,15 +152,17 @@ class _SignupBodyState extends State<_SignupBody> {
     required String userId,
     required AssessmentRole? role,
   }) {
+    final usesSector = role == AssessmentRole.staff;
     return UserModel(
       id: userId,
-      email: _emailController.text.trim(),
+      email: AuthRepository.authEmailForSchoolId(_schoolIdController.text),
       firstName: _firstNameController.text.trim(),
       middleName: _middleNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       schoolId: _schoolIdController.text.trim(),
-      department: _selectedDepartment?.trim(),
-      course: _selectedCourse?.trim(),
+      department: usesSector ? null : _selectedDepartment?.trim(),
+      course: usesSector ? null : _selectedCourse?.trim(),
+      sector: usesSector ? _selectedSector?.trim() : null,
       role: role?.name,
       createdAt: DateTime.now(),
       dayStreak: 0,
@@ -214,15 +204,16 @@ class _SignupBodyState extends State<_SignupBody> {
                 builder: (context, authProvider, _) {
                   return _SignupFormCard(
                     formKey: _formKey,
+                    role: context.watch<AssessmentProvider>().selectedRole,
                     firstNameController: _firstNameController,
                     middleNameController: _middleNameController,
                     lastNameController: _lastNameController,
                     schoolIdController: _schoolIdController,
-                    emailController: _emailController,
                     passwordController: _passwordController,
                     confirmPasswordController: _confirmPasswordController,
                     selectedDepartment: _selectedDepartment,
                     selectedCourse: _selectedCourse,
+                    selectedSector: _selectedSector,
                     acceptedTerms: _acceptedTerms,
                     isLoading: authProvider.isLoading,
                     onDepartmentChanged: (value) {
@@ -234,12 +225,14 @@ class _SignupBodyState extends State<_SignupBody> {
                     onCourseChanged: (value) {
                       setState(() => _selectedCourse = value);
                     },
+                    onSectorChanged: (value) {
+                      setState(() => _selectedSector = value);
+                    },
                     onTermsChanged: (value) {
                       setState(() => _acceptedTerms = value ?? false);
                     },
                     onSignUp: _handleSignUp,
                     requiredValidator: _requiredValidator,
-                    emailValidator: _emailValidator,
                     confirmPasswordValidator: _confirmPasswordValidator,
                   );
                 },
@@ -293,49 +286,52 @@ class _NoticePanel extends StatelessWidget {
 class _SignupFormCard extends StatelessWidget {
   const _SignupFormCard({
     required this.formKey,
+    required this.role,
     required this.firstNameController,
     required this.middleNameController,
     required this.lastNameController,
     required this.schoolIdController,
-    required this.emailController,
     required this.passwordController,
     required this.confirmPasswordController,
     required this.selectedDepartment,
     required this.selectedCourse,
+    required this.selectedSector,
     required this.acceptedTerms,
     required this.isLoading,
     required this.onDepartmentChanged,
     required this.onCourseChanged,
+    required this.onSectorChanged,
     required this.onTermsChanged,
     required this.onSignUp,
     required this.requiredValidator,
-    required this.emailValidator,
     required this.confirmPasswordValidator,
   });
 
   final GlobalKey<FormState> formKey;
+  final AssessmentRole? role;
   final TextEditingController firstNameController;
   final TextEditingController middleNameController;
   final TextEditingController lastNameController;
   final TextEditingController schoolIdController;
-  final TextEditingController emailController;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
   final String? selectedDepartment;
   final String? selectedCourse;
+  final String? selectedSector;
   final bool acceptedTerms;
   final bool isLoading;
   final ValueChanged<String?> onDepartmentChanged;
   final ValueChanged<String?> onCourseChanged;
+  final ValueChanged<String?> onSectorChanged;
   final ValueChanged<bool?> onTermsChanged;
   final Future<void> Function() onSignUp;
   final String? Function(String?, String) requiredValidator;
-  final String? Function(String?) emailValidator;
   final String? Function(String?) confirmPasswordValidator;
 
   @override
   Widget build(BuildContext context) {
     final selectedCourses = _coursesForDepartment(selectedDepartment);
+    final usesSector = role == AssessmentRole.staff;
 
     return Container(
       width: 346,
@@ -386,36 +382,38 @@ class _SignupFormCard extends StatelessWidget {
               validator: (value) => requiredValidator(value, 'School ID'),
             ),
             const SizedBox(height: 7),
-            _SignupDropdownField(
-              label: 'College or Department',
-              icon: Icons.account_balance_outlined,
-              value: selectedDepartment,
-              items: _collegeCourseOptions
-                  .map((option) => option.department)
-                  .toList(growable: false),
-              onChanged: onDepartmentChanged,
-              validator: (value) =>
-                  requiredValidator(value, 'College or department'),
-            ),
-            const SizedBox(height: 7),
-            _SignupDropdownField(
-              label: 'Course or Program',
-              icon: Icons.school_outlined,
-              value: selectedCourse,
-              items: selectedCourses,
-              onChanged: selectedDepartment == null ? null : onCourseChanged,
-              validator: (value) =>
-                  requiredValidator(value, 'Course or program'),
-            ),
-            const SizedBox(height: 7),
-            _SignupField(
-              controller: emailController,
-              label: 'Email',
-              assetIconPath: 'assets/images/Create Account/mail.png',
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              validator: emailValidator,
-            ),
+            if (usesSector) ...[
+              _SignupDropdownField(
+                label: 'Sector',
+                icon: Icons.business_center_outlined,
+                value: selectedSector,
+                items: _sectorOptions,
+                onChanged: onSectorChanged,
+                validator: (value) => requiredValidator(value, 'Sector'),
+              ),
+            ] else ...[
+              _SignupDropdownField(
+                label: 'College or Department',
+                icon: Icons.account_balance_outlined,
+                value: selectedDepartment,
+                items: _collegeCourseOptions
+                    .map((option) => option.department)
+                    .toList(growable: false),
+                onChanged: onDepartmentChanged,
+                validator: (value) =>
+                    requiredValidator(value, 'College or department'),
+              ),
+              const SizedBox(height: 7),
+              _SignupDropdownField(
+                label: 'Course or Program',
+                icon: Icons.school_outlined,
+                value: selectedCourse,
+                items: selectedCourses,
+                onChanged: selectedDepartment == null ? null : onCourseChanged,
+                validator: (value) =>
+                    requiredValidator(value, 'Course or program'),
+              ),
+            ],
             const SizedBox(height: 7),
             _SignupField(
               controller: passwordController,
@@ -452,7 +450,6 @@ class _SignupField extends StatelessWidget {
   const _SignupField({
     required this.controller,
     required this.label,
-    this.assetIconPath,
     this.icon,
     this.keyboardType,
     this.textInputAction,
@@ -462,7 +459,6 @@ class _SignupField extends StatelessWidget {
 
   final TextEditingController controller;
   final String label;
-  final String? assetIconPath;
   final IconData? icon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
@@ -471,7 +467,7 @@ class _SignupField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasIcon = assetIconPath != null || icon != null;
+    final iconData = icon;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,9 +510,9 @@ class _SignupField extends StatelessWidget {
               horizontal: 12,
               vertical: 12,
             ),
-            prefixIcon: hasIcon
-                ? _SignupFieldIcon(assetIconPath: assetIconPath, icon: icon)
-                : null,
+            prefixIcon: iconData == null
+                ? null
+                : _SignupFieldIcon(icon: iconData),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 44,
               minHeight: 44,
@@ -679,23 +675,15 @@ class _SignupDropdownField extends StatelessWidget {
 }
 
 class _SignupFieldIcon extends StatelessWidget {
-  const _SignupFieldIcon({this.assetIconPath, this.icon});
+  const _SignupFieldIcon({required this.icon});
 
-  final String? assetIconPath;
-  final IconData? icon;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
-      child: assetIconPath == null
-          ? Icon(icon, size: 18, color: _SignupColors.text)
-          : Image.asset(
-              assetIconPath!,
-              width: 18,
-              height: 18,
-              fit: BoxFit.contain,
-            ),
+      child: Icon(icon, size: 18, color: _SignupColors.text),
     );
   }
 }
@@ -865,6 +853,19 @@ List<String> _coursesForDepartment(String? department) {
   }
   return const [];
 }
+
+const _sectorOptions = [
+  'Administration',
+  'Registrar',
+  'Finance',
+  'Library',
+  'Guidance/PACC',
+  'Health Services',
+  'IT/MIS',
+  'Maintenance/Facilities',
+  'Security',
+  'Other',
+];
 
 const _collegeCourseOptions = [
   _CollegeCourseOption(

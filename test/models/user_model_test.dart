@@ -13,6 +13,7 @@ void main() {
         'schoolId': '2026-0001',
         'department': 'Information Technology',
         'course': 'BS Information Technology',
+        'sector': '',
         'role': 'student',
         'createdAt': '2026-06-30T08:15:00.000',
       });
@@ -21,6 +22,7 @@ void main() {
       expect(user.displayName, 'Leonardo Santos Molar');
       expect(user.roleLabel, 'Student');
       expect(user.course, 'BS Information Technology');
+      expect(user.sector, isNull);
       expect(user.dayStreak, 0);
       expect(user.createdAt, DateTime(2026, 6, 30, 8, 15));
     });
@@ -44,6 +46,7 @@ void main() {
         schoolId: 'UCU-1',
         department: 'Guidance',
         course: 'Master of Arts in Education - all major fields',
+        sector: 'Guidance/PACC',
         role: 'faculty',
         dayStreak: 7,
       ).toProfileUpdateJson();
@@ -52,6 +55,7 @@ void main() {
       expect(user['schoolId'], 'UCU-1');
       expect(user['department'], 'Guidance');
       expect(user['course'], 'Master of Arts in Education - all major fields');
+      expect(user['sector'], 'Guidance/PACC');
       expect(user['role'], 'faculty');
       expect(user['updatedAt'], isA<String>());
     });
@@ -101,6 +105,22 @@ void main() {
         const UserModel(id: '6', email: 'f@example.com').roleLabel,
         'User',
       );
+    });
+
+    test('serializes non-teaching sector details', () {
+      final user = const UserModel(
+        id: 'user_7',
+        email: '2026.0001@mindmate.local',
+        schoolId: '2026-0001',
+        sector: 'Guidance/PACC',
+        role: 'staff',
+      ).toJson();
+
+      expect(user['schoolId'], '2026-0001');
+      expect(user['sector'], 'Guidance/PACC');
+      expect(user['department'], '');
+      expect(user['course'], '');
+      expect(user['role'], 'staff');
     });
   });
 }

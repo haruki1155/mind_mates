@@ -47,21 +47,24 @@ class _LoginBodyState extends State<_LoginBody> {
 
   Future<void> _handleSignIn() async {
     FocusScope.of(context).unfocus();
-    final email = _identificationController.text.trim();
+    final schoolId = _identificationController.text.trim();
     final password = _passwordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
+    if (schoolId.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(content: Text('Enter your email and password.')),
+          const SnackBar(content: Text('Enter your School ID and password.')),
         );
       return;
     }
 
     final authProvider = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
-    final userId = await authProvider.signIn(email: email, password: password);
+    final userId = await authProvider.signIn(
+      schoolId: schoolId,
+      password: password,
+    );
 
     if (!mounted) return;
 
@@ -264,9 +267,9 @@ class _LoginFormCard extends StatelessWidget {
           const SizedBox(height: 22),
           _LoginField(
             controller: identificationController,
-            label: 'Email',
+            label: 'School ID',
             assetIconPath: 'assets/images/Login/mail.png',
-            keyboardType: TextInputType.emailAddress,
+            keyboardType: TextInputType.text,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 16),
