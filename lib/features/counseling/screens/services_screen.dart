@@ -498,7 +498,12 @@ class _BottomNavItem extends StatelessWidget {
               child: Icon(icon, size: 20, color: Colors.black87),
             ),
             const SizedBox(height: 3),
-            Text(label, style: _ServicesText.navLabel),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, style: _ServicesText.navLabel),
+              ),
+            ),
           ],
         ),
       ),
@@ -537,7 +542,12 @@ class _ServiceActionButton extends StatelessWidget {
             children: [
               if (!isPrimary) Icon(icon, size: 12, color: Colors.black87),
               if (!isPrimary) const SizedBox(width: 5),
-              Text(label, style: _ServicesText.button),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label, style: _ServicesText.button),
+                ),
+              ),
               if (isPrimary) const SizedBox(width: 8),
               if (isPrimary) Icon(icon, size: 18, color: Colors.black87),
             ],

@@ -8,6 +8,9 @@ class FirestoreCollections {
   static const appointments = 'appointments';
   static const recommendations = 'recommendations';
   static const reports = 'reports';
+  static const insightCategories = 'insight_categories';
+  static const insightContent = 'insight_content';
+  static const insightRules = 'insight_rules';
   static const adminStatusSummaries = 'admin_status_summaries';
   static const userActivities = 'user_activities';
   static const breathingSessions = 'breathing_sessions';

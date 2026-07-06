@@ -43,7 +43,7 @@ service cloud.firestore {
     }
 
     match /admin_status_summaries/{userId} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow create, update: if isOwner(request.resource.data.userId) || isAdmin();
       allow delete: if isAdmin();
     }
@@ -107,6 +107,21 @@ service cloud.firestore {
     match /appointments/{appointmentId} {
       allow create: if isOwner(request.resource.data.userId);
       allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    match /insight_categories/{categoryId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /insight_content/{contentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /insight_rules/{ruleId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /recommendations/{recommendationId} {

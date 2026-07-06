@@ -1,3 +1,4 @@
+import '../../../core/utils/firestore_mapper.dart';
 import '../../../models/mood_model.dart';
 import '../../../models/report_model.dart';
 
@@ -23,6 +24,15 @@ class InsightCategory {
   final String label;
   final String icon;
   final bool isSelected;
+
+  factory InsightCategory.fromJson(Map<String, dynamic> json) {
+    return InsightCategory(
+      id: (json['id'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      icon: (json['icon'] ?? 'mood').toString(),
+      isSelected: boolFromFirestore(json['isDefaultSelected']),
+    );
+  }
 }
 
 class InsightMetric {
@@ -46,6 +56,10 @@ class InsightCardItem {
     required this.imageAsset,
     this.actionRoute,
     this.publishedAt,
+    this.contentType,
+    this.body,
+    this.tags = const [],
+    this.source,
   });
 
   final String id;
@@ -55,6 +69,29 @@ class InsightCardItem {
   final String imageAsset;
   final String? actionRoute;
   final DateTime? publishedAt;
+  final String? contentType;
+  final String? body;
+  final List<String> tags;
+  final String? source;
+
+  factory InsightCardItem.fromJson(Map<String, dynamic> json) {
+    return InsightCardItem(
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      subtitle: (json['subtitle'] ?? '').toString(),
+      category: (json['categoryLabel'] ?? json['category'] ?? '').toString(),
+      imageAsset: (json['imageAsset'] ?? '').toString(),
+      actionRoute: _stringOrNull(json['actionRoute']),
+      publishedAt: dateTimeFromFirestore(json['publishedAt']),
+      contentType: _stringOrNull(json['contentType']),
+      body: _stringOrNull(json['body']),
+      tags: (json['tags'] as List<dynamic>? ?? const [])
+          .map((tag) => tag.toString())
+          .where((tag) => tag.trim().isNotEmpty)
+          .toList(growable: false),
+      source: _stringOrNull(json['source']),
+    );
+  }
 }
 
 class InsightSection {
@@ -108,4 +145,10 @@ class InsightMetricsSummary {
       totalLogs: moods.length + (report?.assessmentCount ?? 0),
     );
   }
+}
+
+String? _stringOrNull(Object? value) {
+  if (value == null) return null;
+  final text = value.toString().trim();
+  return text.isEmpty ? null : text;
 }

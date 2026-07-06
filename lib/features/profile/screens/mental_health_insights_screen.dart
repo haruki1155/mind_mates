@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../features/insights/models/insights_models.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/insights_provider.dart';
 import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
+import '../../../providers/user_provider.dart';
+import '../../../routes/route_names.dart';
 
 class MentalHealthInsightsScreen extends StatefulWidget {
   const MentalHealthInsightsScreen({super.key});
@@ -16,7 +19,9 @@ class MentalHealthInsightsScreen extends StatefulWidget {
 
 class _MentalHealthInsightsScreenState
     extends State<MentalHealthInsightsScreen> {
+  final TextEditingController _searchController = TextEditingController();
   bool _requestedInsights = false;
+  String _searchQuery = '';
 
   @override
   void didChangeDependencies() {
@@ -26,14 +31,24 @@ class _MentalHealthInsightsScreenState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _readProviderOrNull<InsightsProvider>(context)?.loadInsights();
+      _readProviderOrNull<InsightsProvider>(
+        context,
+      )?.loadInsights(_currentUserId());
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final insightsProvider = _watchProviderOrNull<InsightsProvider>(context);
     final data = insightsProvider?.data;
+    final visibleSections = _filteredSections(data?.sections ?? const []);
+    final hasSearchQuery = _searchQuery.trim().isNotEmpty;
     final moods =
         _watchProviderOrNull<MoodProvider>(context)?.moods ?? const [];
     final report = _watchProviderOrNull<ReportProvider>(context)?.latestReport;
@@ -50,38 +65,40 @@ class _MentalHealthInsightsScreenState
               physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
-                  child: _Header(
-                    onNotificationTap: () =>
-                        _showSnack(context, 'Notifications are coming soon.'),
-                  ),
+                  child: _Header(onNotificationTap: _openNotifications),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(12, 20, 12, 42),
                   sliver: SliverList.list(
                     children: [
-                      const _HeroSearchCard(),
+                      _HeroSearchCard(
+                        controller: _searchController,
+                        onChanged: _updateSearchQuery,
+                      ),
                       const SizedBox(height: 26),
                       _CategoryRow(categories: data?.categories ?? const []),
                       const SizedBox(height: 22),
                       _WeeklyGlanceCard(
                         metrics: metrics,
-                        onLogMoodTap: () =>
-                            _showSnack(context, 'Mood tracker is next.'),
+                        onLogMoodTap: _openLogMood,
                       ),
                       const SizedBox(height: 24),
                       if (insightsProvider?.isLoading ?? false)
                         const _InsightSectionSkeleton()
                       else if (data == null || data.sections.isEmpty)
                         const _EmptyInsightState()
+                      else if (visibleSections.isEmpty && hasSearchQuery)
+                        _NoInsightResultsState(query: _searchQuery)
                       else
-                        for (final section in data.sections) ...[
-                          _InsightSectionView(section: section),
+                        for (final section in visibleSections) ...[
+                          _InsightSectionView(
+                            section: section,
+                            onItemTap: _openInsightArticle,
+                            onSeeAllTap: () => _openInsightSection(section),
+                          ),
                           const SizedBox(height: 24),
                         ],
-                      _PaaccSupportCard(
-                        onContactTap: () =>
-                            _showSnack(context, 'Counselor contact is next.'),
-                      ),
+                      _PaaccSupportCard(onContactTap: _openServices),
                     ],
                   ),
                 ),
@@ -109,10 +126,87 @@ class _MentalHealthInsightsScreenState
     }
   }
 
-  void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+  String _currentUserId() {
+    final authProvider = _readProviderOrNull<AuthProvider>(context);
+    final authUserId =
+        authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    if (authUserId != null && authUserId.isNotEmpty) return authUserId;
+
+    final profileUserId = _readProviderOrNull<UserProvider>(context)?.user?.id;
+    if (profileUserId != null && profileUserId.isNotEmpty) {
+      return profileUserId;
+    }
+
+    return 'preview_user';
+  }
+
+  void _updateSearchQuery(String value) {
+    setState(() => _searchQuery = value);
+  }
+
+  List<InsightSection> _filteredSections(List<InsightSection> sections) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return sections;
+
+    return sections
+        .map((section) {
+          final items = section.items
+              .where((item) => _matchesSearch(item, query))
+              .toList(growable: false);
+          return InsightSection(
+            id: section.id,
+            title: section.title,
+            items: items,
+            showSeeAll: section.showSeeAll,
+          );
+        })
+        .where((section) => section.items.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  bool _matchesSearch(InsightCardItem item, String query) {
+    final values = [
+      item.title,
+      item.subtitle,
+      item.category,
+      item.body ?? '',
+      item.source ?? '',
+      item.contentType ?? '',
+      ...item.tags,
+    ];
+
+    return values.any((value) => value.toLowerCase().contains(query));
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const InsightsNotificationsScreen()),
+    );
+  }
+
+  void _openLogMood() {
+    Navigator.of(context).pushNamed(RouteNames.logMood);
+  }
+
+  void _openServices() {
+    Navigator.of(context).pushNamed(RouteNames.services);
+  }
+
+  void _openInsightArticle(InsightCardItem item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => InsightArticleDetailScreen(item: item)),
+    );
+  }
+
+  void _openInsightSection(InsightSection section) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InsightSectionDetailScreen(
+          section: section,
+          onItemTap: _openInsightArticle,
+        ),
+      ),
+    );
   }
 }
 
@@ -184,7 +278,10 @@ class _Header extends StatelessWidget {
 }
 
 class _HeroSearchCard extends StatelessWidget {
-  const _HeroSearchCard();
+  const _HeroSearchCard({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -241,35 +338,44 @@ class _HeroSearchCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x28000000),
-                  blurRadius: 7,
-                  offset: Offset(0, 3),
-                ),
-              ],
+          TextField(
+            controller: controller,
+            onChanged: onChanged,
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(
+              color: Color(0xFF2D2618),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
-            child: const Row(
-              children: [
-                Icon(Icons.search, size: 22, color: Color(0xFF2D6EA7)),
-                SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    'Search insights...',
-                    style: TextStyle(
-                      color: Color(0xFF8D7F5E),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+              border: InputBorder.none,
+              hintText: 'Search insights...',
+              hintStyle: const TextStyle(
+                color: Color(0xFF8D7F5E),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 22,
+                color: Color(0xFF2D6EA7),
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 36,
+                minHeight: 32,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
         ],
@@ -484,9 +590,15 @@ class _MetricColumn extends StatelessWidget {
 }
 
 class _InsightSectionView extends StatelessWidget {
-  const _InsightSectionView({required this.section});
+  const _InsightSectionView({
+    required this.section,
+    required this.onItemTap,
+    required this.onSeeAllTap,
+  });
 
   final InsightSection section;
+  final ValueChanged<InsightCardItem> onItemTap;
+  final VoidCallback onSeeAllTap;
 
   @override
   Widget build(BuildContext context) {
@@ -499,12 +611,17 @@ class _InsightSectionView extends StatelessWidget {
               child: Text(section.title, style: _InsightsText.sectionTitle),
             ),
             if (section.showSeeAll)
-              const Text(
-                'See all ->',
-                style: TextStyle(
-                  color: _InsightsPalette.gold,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
+              TextButton(
+                onPressed: onSeeAllTap,
+                style: TextButton.styleFrom(
+                  foregroundColor: _InsightsPalette.gold,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(54, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'See all ->',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
                 ),
               ),
           ],
@@ -524,6 +641,7 @@ class _InsightSectionView extends StatelessWidget {
                     return _InsightCard(
                       item: section.items[index],
                       isPatternCard: section.id == 'patterns',
+                      onTap: () => onItemTap(section.items[index]),
                     );
                   },
                 ),
@@ -533,82 +651,406 @@ class _InsightSectionView extends StatelessWidget {
   }
 }
 
+class InsightSectionDetailScreen extends StatelessWidget {
+  const InsightSectionDetailScreen({
+    super.key,
+    required this.section,
+    required this.onItemTap,
+  });
+
+  final InsightSection section;
+  final ValueChanged<InsightCardItem> onItemTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _InsightsPalette.background,
+      appBar: AppBar(
+        title: Text(section.title),
+        backgroundColor: _InsightsPalette.sun,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: ListView.separated(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
+        itemCount: section.items.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final item = section.items[index];
+          return _SectionDetailCard(item: item, onTap: () => onItemTap(item));
+        },
+      ),
+    );
+  }
+}
+
+class _SectionDetailCard extends StatelessWidget {
+  const _SectionDetailCard({required this.item, required this.onTap});
+
+  final InsightCardItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: _InsightsDecor.card(radius: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: _InsightsPalette.sun,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.insights, color: Colors.black87),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CategoryPill(label: item.category),
+                    const SizedBox(height: 8),
+                    Text(item.title, style: _InsightsText.sectionTitle),
+                    const SizedBox(height: 5),
+                    Text(
+                      item.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF5E533B),
+                        fontSize: 12,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _InsightCard extends StatelessWidget {
-  const _InsightCard({required this.item, required this.isPatternCard});
+  const _InsightCard({
+    required this.item,
+    required this.isPatternCard,
+    required this.onTap,
+  });
 
   final InsightCardItem item;
   final bool isPatternCard;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 203,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isPatternCard
-              ? const Color(0xFFFFDA66)
-              : const Color(0xFFFFD466),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _InsightsPalette.gold, width: 1),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (!isPatternCard && item.imageAsset.isNotEmpty)
-              Image.asset(
-                item.imageAsset,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.shrink(),
-              ),
-            if (!isPatternCard)
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x22FFFFFF), Color(0xAA000000)],
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(11),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: isPatternCard
+                  ? const Color(0xFFFFDA66)
+                  : const Color(0xFFFFD466),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _InsightsPalette.gold, width: 1),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  _CategoryPill(label: item.category),
-                  const Spacer(),
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isPatternCard ? Colors.black : Colors.white,
-                      fontSize: 13,
-                      height: 1.05,
-                      fontWeight: FontWeight.w900,
+                  if (!isPatternCard && item.imageAsset.isNotEmpty)
+                    Image.asset(
+                      item.imageAsset,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isPatternCard
-                          ? const Color(0xFF2B2619)
-                          : Colors.white,
-                      fontSize: 10,
-                      height: 1.25,
-                      fontWeight: FontWeight.w500,
+                  if (!isPatternCard)
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x22FFFFFF), Color(0xAA000000)],
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(11),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CategoryPill(label: item.category),
+                        const Spacer(),
+                        Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isPatternCard ? Colors.black : Colors.white,
+                            fontSize: 13,
+                            height: 1.05,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isPatternCard
+                                ? const Color(0xFF2B2619)
+                                : Colors.white,
+                            fontSize: 10,
+                            height: 1.25,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class InsightArticleDetailScreen extends StatelessWidget {
+  const InsightArticleDetailScreen({super.key, required this.item});
+
+  final InsightCardItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = item.body?.trim().isNotEmpty == true
+        ? item.body!.trim()
+        : item.subtitle;
+    final metadata = _metadataText(item);
+    final isSupportContent =
+        item.contentType == 'support' ||
+        item.tags.any((tag) => tag.toLowerCase().contains('pacc'));
+
+    return Scaffold(
+      backgroundColor: _InsightsPalette.background,
+      appBar: AppBar(
+        title: const Text('Insight'),
+        backgroundColor: _InsightsPalette.sun,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: ListView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
+        children: [
+          if (item.imageAsset.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.asset(
+                  item.imageAsset,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const _ArticleImageFallback(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: _InsightsDecor.card(radius: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _CategoryPill(label: item.category),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  item.title,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    height: 1.08,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF514832),
+                    fontSize: 14,
+                    height: 1.42,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (metadata.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    metadata,
+                    style: const TextStyle(
+                      color: Color(0xFF8D7F5E),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  body,
+                  style: const TextStyle(
+                    color: Color(0xFF2F2A1D),
+                    fontSize: 14,
+                    height: 1.55,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (item.tags.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in item.tags) _ArticleTagChip(label: tag),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isSupportContent) ...[
+            const SizedBox(height: 14),
+            const _ArticleSupportPanel(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _metadataText(InsightCardItem item) {
+    final parts = <String>[];
+    if (item.source?.trim().isNotEmpty == true) {
+      parts.add(item.source!.trim());
+    }
+
+    final publishedAt = item.publishedAt;
+    if (publishedAt != null) {
+      parts.add(_formatDate(publishedAt));
+    }
+
+    return parts.join(' • ');
+  }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+}
+
+class _ArticleImageFallback extends StatelessWidget {
+  const _ArticleImageFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: _InsightsPalette.sun,
+      alignment: Alignment.center,
+      child: const Icon(Icons.insights, size: 44, color: Colors.black87),
+    );
+  }
+}
+
+class _ArticleTagChip extends StatelessWidget {
+  const _ArticleTagChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1BE),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _InsightsPalette.gold.withValues(alpha: .45)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _ArticleSupportPanel extends StatelessWidget {
+  const _ArticleSupportPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _InsightsPalette.sun,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.favorite, size: 24, color: Colors.black87),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'If this feels familiar, PACC support is available. Reaching out early is a healthy support step.',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -635,13 +1077,16 @@ class _CategoryPill extends StatelessWidget {
         ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(_pillIcon(label), size: 13, color: Colors.black87),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
           ),
         ],
       ),
@@ -791,6 +1236,80 @@ class _EmptyInsightState extends StatelessWidget {
           color: Color(0xFF6F654D),
           fontSize: 12,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoInsightResultsState extends StatelessWidget {
+  const _NoInsightResultsState({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _InsightsDecor.card(radius: 12),
+      child: Text(
+        'No insights found for "$query".',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Color(0xFF6F654D),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class InsightsNotificationsScreen extends StatelessWidget {
+  const InsightsNotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _InsightsPalette.background,
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        backgroundColor: _InsightsPalette.sun,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Container(
+          margin: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(22),
+          decoration: _InsightsDecor.card(radius: 12),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.notifications_none,
+                color: _InsightsPalette.gold,
+                size: 42,
+              ),
+              SizedBox(height: 12),
+              Text(
+                'No insight notifications yet',
+                textAlign: TextAlign.center,
+                style: _InsightsText.sectionTitle,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Updates about new recommendations and wellness content will appear here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF6F654D),
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
