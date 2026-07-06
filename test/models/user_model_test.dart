@@ -12,6 +12,7 @@ void main() {
         'lastName': 'Molar',
         'schoolId': '2026-0001',
         'department': 'Information Technology',
+        'course': 'BS Information Technology',
         'role': 'student',
         'createdAt': '2026-06-30T08:15:00.000',
       });
@@ -19,6 +20,7 @@ void main() {
       expect(user.id, 'user_1');
       expect(user.displayName, 'Leonardo Santos Molar');
       expect(user.roleLabel, 'Student');
+      expect(user.course, 'BS Information Technology');
       expect(user.dayStreak, 0);
       expect(user.createdAt, DateTime(2026, 6, 30, 8, 15));
     });
@@ -41,6 +43,7 @@ void main() {
         lastName: 'Rivera',
         schoolId: 'UCU-1',
         department: 'Guidance',
+        course: 'Master of Arts in Education - all major fields',
         role: 'faculty',
         dayStreak: 7,
       ).toProfileUpdateJson();
@@ -48,6 +51,7 @@ void main() {
       expect(user['name'], 'Ana Rivera');
       expect(user['schoolId'], 'UCU-1');
       expect(user['department'], 'Guidance');
+      expect(user['course'], 'Master of Arts in Education - all major fields');
       expect(user['role'], 'faculty');
       expect(user['updatedAt'], isA<String>());
     });

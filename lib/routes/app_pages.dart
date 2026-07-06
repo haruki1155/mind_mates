@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../features/admin/screens/admin_status_dashboard_screen.dart';
-import '../features/authentication/screens/account_gate_screen.dart';
 import '../features/authentication/screens/forgot_password_screen.dart';
 import '../features/authentication/screens/login_screen.dart';
 import '../features/authentication/screens/signup_screen.dart';
@@ -30,7 +29,6 @@ class AppPages {
   static final Map<String, WidgetBuilder> routes = {
     RouteNames.splash: (_) => const SplashScreen(),
     RouteNames.onboarding: (_) => const OnboardingScreen(),
-    RouteNames.accountGate: (_) => const AccountGateScreen(),
     RouteNames.login: (_) => const LoginScreen(),
     RouteNames.signup: (_) => const SignupScreen(),
     RouteNames.forgotPassword: (_) => const ForgotPasswordScreen(),

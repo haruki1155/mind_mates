@@ -3,13 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/quick_assessment/data/quick_assessment_questions.dart';
 import 'package:mind_mates/features/quick_assessment/models/quick_assessment_models.dart';
 import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_category_screen.dart';
+import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_question_screen.dart';
 import 'package:mind_mates/features/quick_assessment/services/quick_assessment_scoring.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
+import 'package:mind_mates/providers/auth_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
+import 'package:mind_mates/repositories/auth_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/routes/route_names.dart';
+import 'package:mind_mates/services/auth/auth_service.dart';
 import 'package:mind_mates/services/firebase/firestore_service.dart';
 import 'package:provider/provider.dart';
 
@@ -222,6 +226,62 @@ void main() {
   });
 
   group('QuickAssessmentCategoryScreen', () {
+    testWidgets('quick assessment completion opens optional full assessment', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final firestore = _FakeFirestoreService();
+      final assessmentProvider =
+          _readyProvider(
+            repository: AssessmentRepository(firestoreService: firestore),
+          )..resetQuestions();
+      final userProvider = UserProvider(_FakeUserRepository())
+        ..setUser(
+          const UserModel(
+            id: 'user_123',
+            email: 'leo@example.com',
+            role: 'student',
+          ),
+        );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AssessmentProvider>.value(
+              value: assessmentProvider,
+            ),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) => AuthProvider(
+                _FakeAuthRepository(currentUserId: 'user_123'),
+              ),
+            ),
+            ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ],
+          child: MaterialApp(
+            routes: {
+              RouteNames.quickAssessmentCategory: (_) =>
+                  const _RouteMarker('optional full assessment target'),
+            },
+            home: const QuickAssessmentQuestionScreen(),
+          ),
+        ),
+      );
+
+      for (final question in QuickAssessmentQuestions.questions) {
+        await tester.tap(find.text(question.options.first.label).first);
+        await tester.pump();
+        await tester.ensureVisible(find.text('Next'));
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('optional full assessment target'), findsOneWidget);
+      expect(firestore.createdDocument?['userId'], 'user_123');
+      expect(firestore.createdDocument?['type'], 'quick');
+    });
+
     testWidgets('blocks full assessment when rolling limit is reached', (
       tester,
     ) async {
@@ -374,7 +434,32 @@ class _EligibilityAssessmentRepository extends AssessmentRepository {
   }
 }
 
-class _FakeUserRepository extends UserRepository {}
+class _FakeAuthRepository extends AuthRepository {
+  _FakeAuthRepository({this.currentUserId}) : super(AuthService());
+
+  @override
+  final String? currentUserId;
+}
+
+class _FakeUserRepository extends UserRepository {
+  UserModel? updatedUser;
+  UserActivityType? recordedActivityType;
+
+  @override
+  Future<void> updateUserProfile(String uid, UserModel user) async {
+    updatedUser = user;
+  }
+
+  @override
+  Future<UserModel?> recordActivity(
+    String uid,
+    UserActivityType type, {
+    DateTime? occurredAt,
+  }) async {
+    recordedActivityType = type;
+    return null;
+  }
+}
 
 class _RouteMarker extends StatelessWidget {
   const _RouteMarker(this.label);

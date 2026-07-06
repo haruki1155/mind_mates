@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../models/quick_assessment_models.dart';
 import '../widgets/quick_assessment_widgets.dart';
@@ -137,7 +139,7 @@ class _QuestionPage extends StatelessWidget {
     }
   }
 
-  void _goNext(BuildContext context) {
+  Future<void> _goNext(BuildContext context) async {
     if (!provider.hasSelectedAnswer) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select an answer to continue.')),
@@ -149,10 +151,65 @@ class _QuestionPage extends StatelessWidget {
     provider.moveToNextQuestion();
 
     if (completed) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(RouteNames.login, (route) => false);
+      await _saveQuickAssessment(context);
+      if (!context.mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        RouteNames.quickAssessmentCategory,
+        (route) => false,
+      );
     }
+  }
+
+  Future<void> _saveQuickAssessment(BuildContext context) async {
+    final userId = _currentUserId(context);
+    if (userId == null || userId.isEmpty) return;
+
+    try {
+      final payload = await provider.saveQuickAssessmentForUser(userId);
+      if (!context.mounted) return;
+
+      final userProvider = context.read<UserProvider>();
+      if (payload != null) {
+        await userProvider.markQuickAssessment(userId);
+      }
+      await _persistSelectedRole(userProvider);
+    } catch (error) {
+      debugPrint('Quick assessment sync failed: $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to sync your quick assessment right now. You can continue.',
+            ),
+          ),
+        );
+    }
+  }
+
+  String? _currentUserId(BuildContext context) {
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      if (userId != null && userId.isNotEmpty) return userId;
+    } on ProviderNotFoundException {
+      // Some previews/tests may only provide UserProvider.
+    }
+
+    try {
+      return context.read<UserProvider>().user?.id;
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  Future<void> _persistSelectedRole(UserProvider userProvider) async {
+    final role = provider.selectedRole;
+    final user = userProvider.user;
+    if (role == null || user == null || user.role == role.name) return;
+
+    await userProvider.updateProfile(user.copyWith(role: role.name));
   }
 }
 

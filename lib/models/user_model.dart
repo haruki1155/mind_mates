@@ -12,6 +12,7 @@ class UserModel {
     this.lastName,
     this.schoolId,
     this.department,
+    this.course,
     this.role,
     this.createdAt,
     this.dayStreak = 0,
@@ -30,6 +31,7 @@ class UserModel {
   final String? lastName;
   final String? schoolId;
   final String? department;
+  final String? course;
   final String? role;
   final DateTime? createdAt;
   final int dayStreak;
@@ -70,6 +72,7 @@ class UserModel {
     String? lastName,
     String? schoolId,
     String? department,
+    String? course,
     String? role,
     DateTime? createdAt,
     int? dayStreak,
@@ -88,6 +91,7 @@ class UserModel {
       lastName: lastName ?? this.lastName,
       schoolId: schoolId ?? this.schoolId,
       department: department ?? this.department,
+      course: course ?? this.course,
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
       dayStreak: dayStreak ?? this.dayStreak,
@@ -109,6 +113,7 @@ class UserModel {
       lastName: _stringOrNull(json['lastName']),
       schoolId: _stringOrNull(json['schoolId']),
       department: _stringOrNull(json['department']),
+      course: _stringOrNull(json['course']),
       role: _stringOrNull(json['role']),
       createdAt: _dateOrNull(json['createdAt']),
       dayStreak: _intOrZero(json['dayStreak']),
@@ -130,6 +135,7 @@ class UserModel {
       'lastName': lastName ?? '',
       'schoolId': schoolId ?? '',
       'department': department ?? '',
+      'course': course ?? '',
       'role': role ?? '',
       'createdAt': createdAt?.toIso8601String(),
       'dayStreak': dayStreak,
@@ -149,6 +155,7 @@ class UserModel {
       'lastName': lastName?.trim() ?? '',
       'schoolId': schoolId?.trim() ?? '',
       'department': department?.trim() ?? '',
+      'course': course?.trim() ?? '',
       'role': role?.trim() ?? '',
       'avatarAssetName': avatarAssetName?.trim() ?? '',
       'updatedAt': DateTime.now().toIso8601String(),

@@ -32,6 +32,7 @@ class AuthRepository {
     required String lastName,
     required String schoolId,
     required String department,
+    required String course,
     String? middleName,
     AssessmentRole? role,
   }) async {
@@ -59,6 +60,7 @@ class AuthRepository {
             ].join(' '),
             'schoolId': schoolId.trim(),
             'department': department.trim(),
+            'course': course.trim(),
             if (role != null) 'role': role.name,
             'dayStreak': 0,
             'longestStreak': 0,

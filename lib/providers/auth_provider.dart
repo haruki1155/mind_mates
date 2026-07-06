@@ -54,6 +54,7 @@ class AuthProvider extends ChangeNotifier {
     required String lastName,
     required String schoolId,
     required String department,
+    required String course,
     String? middleName,
     AssessmentRole? role,
   }) async {
@@ -65,6 +66,7 @@ class AuthProvider extends ChangeNotifier {
         lastName: lastName,
         schoolId: schoolId,
         department: department,
+        course: course,
         middleName: middleName,
         role: role,
       );

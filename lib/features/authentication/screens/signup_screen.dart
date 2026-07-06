@@ -41,10 +41,11 @@ class _SignupBodyState extends State<_SignupBody> {
   final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _schoolIdController = TextEditingController();
-  final _departmentController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  String? _selectedDepartment;
+  String? _selectedCourse;
   bool _acceptedTerms = false;
 
   @override
@@ -53,7 +54,6 @@ class _SignupBodyState extends State<_SignupBody> {
     _middleNameController.dispose();
     _lastNameController.dispose();
     _schoolIdController.dispose();
-    _departmentController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -115,7 +115,8 @@ class _SignupBodyState extends State<_SignupBody> {
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,
       schoolId: _schoolIdController.text,
-      department: _departmentController.text,
+      department: _selectedDepartment ?? '',
+      course: _selectedCourse ?? '',
       middleName: _middleNameController.text,
       role: assessmentProvider.selectedRole,
     );
@@ -170,7 +171,8 @@ class _SignupBodyState extends State<_SignupBody> {
       middleName: _middleNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       schoolId: _schoolIdController.text.trim(),
-      department: _departmentController.text.trim(),
+      department: _selectedDepartment?.trim(),
+      course: _selectedCourse?.trim(),
       role: role?.name,
       createdAt: DateTime.now(),
       dayStreak: 0,
@@ -216,12 +218,22 @@ class _SignupBodyState extends State<_SignupBody> {
                     middleNameController: _middleNameController,
                     lastNameController: _lastNameController,
                     schoolIdController: _schoolIdController,
-                    departmentController: _departmentController,
                     emailController: _emailController,
                     passwordController: _passwordController,
                     confirmPasswordController: _confirmPasswordController,
+                    selectedDepartment: _selectedDepartment,
+                    selectedCourse: _selectedCourse,
                     acceptedTerms: _acceptedTerms,
                     isLoading: authProvider.isLoading,
+                    onDepartmentChanged: (value) {
+                      setState(() {
+                        _selectedDepartment = value;
+                        _selectedCourse = null;
+                      });
+                    },
+                    onCourseChanged: (value) {
+                      setState(() => _selectedCourse = value);
+                    },
                     onTermsChanged: (value) {
                       setState(() => _acceptedTerms = value ?? false);
                     },
@@ -285,12 +297,15 @@ class _SignupFormCard extends StatelessWidget {
     required this.middleNameController,
     required this.lastNameController,
     required this.schoolIdController,
-    required this.departmentController,
     required this.emailController,
     required this.passwordController,
     required this.confirmPasswordController,
+    required this.selectedDepartment,
+    required this.selectedCourse,
     required this.acceptedTerms,
     required this.isLoading,
+    required this.onDepartmentChanged,
+    required this.onCourseChanged,
     required this.onTermsChanged,
     required this.onSignUp,
     required this.requiredValidator,
@@ -303,12 +318,15 @@ class _SignupFormCard extends StatelessWidget {
   final TextEditingController middleNameController;
   final TextEditingController lastNameController;
   final TextEditingController schoolIdController;
-  final TextEditingController departmentController;
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
+  final String? selectedDepartment;
+  final String? selectedCourse;
   final bool acceptedTerms;
   final bool isLoading;
+  final ValueChanged<String?> onDepartmentChanged;
+  final ValueChanged<String?> onCourseChanged;
   final ValueChanged<bool?> onTermsChanged;
   final Future<void> Function() onSignUp;
   final String? Function(String?, String) requiredValidator;
@@ -317,6 +335,8 @@ class _SignupFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedCourses = _coursesForDepartment(selectedDepartment);
+
     return Container(
       width: 346,
       padding: const EdgeInsets.fromLTRB(20, 25, 19, 56),
@@ -366,14 +386,26 @@ class _SignupFormCard extends StatelessWidget {
               validator: (value) => requiredValidator(value, 'School ID'),
             ),
             const SizedBox(height: 7),
-            _SignupField(
-              controller: departmentController,
+            _SignupDropdownField(
               label: 'College or Department',
               icon: Icons.account_balance_outlined,
-              textInputAction: TextInputAction.next,
-              validator: (value) {
-                return requiredValidator(value, 'College or department');
-              },
+              value: selectedDepartment,
+              items: _collegeCourseOptions
+                  .map((option) => option.department)
+                  .toList(growable: false),
+              onChanged: onDepartmentChanged,
+              validator: (value) =>
+                  requiredValidator(value, 'College or department'),
+            ),
+            const SizedBox(height: 7),
+            _SignupDropdownField(
+              label: 'Course or Program',
+              icon: Icons.school_outlined,
+              value: selectedCourse,
+              items: selectedCourses,
+              onChanged: selectedDepartment == null ? null : onCourseChanged,
+              validator: (value) =>
+                  requiredValidator(value, 'Course or program'),
             ),
             const SizedBox(height: 7),
             _SignupField(
@@ -500,6 +532,124 @@ class _SignupField extends StatelessWidget {
               borderSide: const BorderSide(color: _SignupColors.fieldBorder),
             ),
             enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _SignupColors.fieldBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: _SignupColors.button,
+                width: 1.2,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _SignupColors.error),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: _SignupColors.error,
+                width: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SignupDropdownField extends StatelessWidget {
+  const _SignupDropdownField({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    required this.validator,
+  });
+
+  final String label;
+  final IconData icon;
+  final String? value;
+  final List<String> items;
+  final ValueChanged<String?>? onChanged;
+  final String? Function(String?) validator;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveValue = items.contains(value) ? value : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 11, bottom: 5),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: _SignupColors.text,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        DropdownButtonFormField<String>(
+          initialValue: effectiveValue,
+          isExpanded: true,
+          items: [
+            for (final item in items)
+              DropdownMenuItem<String>(
+                value: item,
+                child: Text(item, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onChanged,
+          validator: validator,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+          style: const TextStyle(
+            color: _SignupColors.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: onChanged == null
+                ? const Color(0xFFF7F1E6)
+                : Colors.white,
+            hintText: onChanged == null ? 'Select college first' : label,
+            hintStyle: const TextStyle(
+              color: _SignupColors.hintText,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            prefixIcon: Icon(icon, size: 18, color: _SignupColors.text),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+            ),
+            errorStyle: const TextStyle(
+              fontSize: 9,
+              height: 0.9,
+              fontWeight: FontWeight.w700,
+              color: _SignupColors.error,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _SignupColors.fieldBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _SignupColors.fieldBorder),
+            ),
+            disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: _SignupColors.fieldBorder),
             ),
@@ -700,6 +850,106 @@ class _BubbleSpec {
   final double size;
   final Color color;
 }
+
+class _CollegeCourseOption {
+  const _CollegeCourseOption({required this.department, required this.courses});
+
+  final String department;
+  final List<String> courses;
+}
+
+List<String> _coursesForDepartment(String? department) {
+  if (department == null) return const [];
+  for (final option in _collegeCourseOptions) {
+    if (option.department == department) return option.courses;
+  }
+  return const [];
+}
+
+const _collegeCourseOptions = [
+  _CollegeCourseOption(
+    department: 'College of Accountancy and Business Administration',
+    courses: ['BS Accountancy', 'BS Business Administration', 'BS Management'],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Arts and Sciences / College of Arts and Languages',
+    courses: [
+      'BA Communication / Mass Communication',
+      'BA English',
+      'BA Filipino',
+      'BA Political Science',
+      'BA Psychology',
+    ],
+  ),
+  _CollegeCourseOption(
+    department:
+        'College of Information and Technology Education / College of Computer Studies',
+    courses: [
+      'BS Information Technology',
+      'Bachelor of Library and Information Science',
+      'Associate in Computer Technology',
+    ],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Criminology',
+    courses: ['BS Criminology'],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Education / College of Teacher Education',
+    courses: [
+      'Bachelor of Elementary Education - Preschool Ed, Primary Ed',
+      'Bachelor of Secondary Education - English, Filipino, Mathematics, Science, Social Studies',
+      'Bachelor in Physical Education',
+      'Bachelor in Music',
+      'Bachelor in Fine Arts',
+    ],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Engineering and Architecture',
+    courses: [
+      'BS Architecture',
+      'BS Civil Engineering',
+      'BS Computer Engineering',
+      'BS Electrical Engineering / Electronic Engineering',
+      'BS Mechanical Engineering',
+    ],
+  ),
+  _CollegeCourseOption(department: 'College of Law', courses: ['Juris Doctor']),
+  _CollegeCourseOption(
+    department: 'College of Nursing',
+    courses: ['BS Nursing'],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Pharmacy',
+    courses: ['BS Pharmacy'],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Science and Mathematics',
+    courses: ['BS Mathematics', 'BS Biology / Natural Sciences'],
+  ),
+  _CollegeCourseOption(
+    department: 'College of Social Work',
+    courses: ['BS Social Work'],
+  ),
+  _CollegeCourseOption(
+    department: 'Graduate School / Institute of Graduate and Advanced Studies',
+    courses: [
+      'Doctor of Education',
+      'Master of Arts in Education - all major fields',
+      'Master in Business Administration',
+      'Master of Arts in Nursing',
+    ],
+  ),
+  _CollegeCourseOption(
+    department:
+        'School of Hotel and Restaurant Services and Tourism Management',
+    courses: ['BS Hotel and Restaurant Management', 'BS Tourism Management'],
+  ),
+  _CollegeCourseOption(
+    department: 'School of Midwifery',
+    courses: ['Midwifery Program'],
+  ),
+];
 
 class _SignupColors {
   const _SignupColors._();

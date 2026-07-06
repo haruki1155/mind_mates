@@ -54,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     final routeName = userId == null || userId.isEmpty
-        ? RouteNames.accountGate
+        ? RouteNames.login
         : RouteNames.home;
 
     Navigator.of(context).pushReplacementNamed(routeName);
