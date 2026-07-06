@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../providers/report_provider.dart';
 import '../../../providers/secret_chat_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../screens/secret_chat_screen.dart';
 
 class SecretChatPage extends StatefulWidget {
@@ -36,13 +38,66 @@ class _SecretChatPageState extends State<SecretChatPage> {
       canCreate: provider.canCreate,
       onFilterChanged: provider.setFilter,
       onSearchChanged: provider.setSearchQuery,
-      onCreatePost: provider.createPost,
-      onToggleLike: provider.toggleLike,
-      onToggleSave: provider.toggleSave,
+      onCreatePost: _createPost,
+      onToggleLike: (postId) => _toggleLike(postId),
+      onToggleSave: (postId) => _toggleSave(postId),
       onFetchComments: provider.fetchComments,
-      onAddComment: provider.addComment,
+      onAddComment: _addComment,
       onRetry: provider.loadPosts,
       onBack: () => Navigator.of(context).maybePop(),
     );
+  }
+
+  Future<void> _createPost({
+    required String message,
+    required String category,
+  }) async {
+    await context.read<SecretChatProvider>().createPost(
+      message: message,
+      category: category,
+    );
+    await _refreshProfileAndReport();
+  }
+
+  Future<void> _addComment({
+    required String postId,
+    required String message,
+  }) async {
+    await context.read<SecretChatProvider>().addComment(
+      postId: postId,
+      message: message,
+    );
+    await _refreshProfileAndReport();
+  }
+
+  Future<void> _toggleLike(String postId) async {
+    await context.read<SecretChatProvider>().toggleLike(postId);
+    await _refreshProfileAndReport();
+  }
+
+  Future<void> _toggleSave(String postId) async {
+    await context.read<SecretChatProvider>().toggleSave(postId);
+    await _refreshProfileAndReport();
+  }
+
+  Future<void> _refreshProfileAndReport() async {
+    final userProvider = _readProviderOrNull<UserProvider>();
+    final userId = userProvider?.user?.id;
+    if (userId == null || userId.trim().isEmpty) return;
+
+    try {
+      await userProvider?.loadProfile(userId);
+      await _readProviderOrNull<ReportProvider>()?.refreshWeeklyReport(userId);
+    } catch (_) {
+      // Secret Chat changes remain saved even if the summary refresh is delayed.
+    }
+  }
+
+  T? _readProviderOrNull<T>() {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 }

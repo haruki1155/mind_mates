@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../providers/breathing_provider.dart';
+import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../models/breathing_models.dart';
 
@@ -212,12 +213,32 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     unawaited(_playCue('session_complete.mp3'));
 
     if (userId == null || userId.trim().isEmpty) return;
-    await context.read<BreathingProvider>().completeSession(
+    final saved = await context.read<BreathingProvider>().completeSession(
       userId: userId,
       technique: technique,
       completedSeconds: technique.durationSeconds,
       startedAt: startedAt,
     );
+    if (!mounted || !saved) return;
+    await _refreshProfileAndReport(userId);
+  }
+
+  Future<void> _refreshProfileAndReport(String userId) async {
+    try {
+      await context.read<UserProvider>().loadProfile(userId);
+      await _readProviderOrNull<ReportProvider>()?.refreshWeeklyReport(userId);
+    } catch (_) {
+      // The completed breathing session remains saved even if summary refresh
+      // is temporarily unavailable.
+    }
+  }
+
+  T? _readProviderOrNull<T>() {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 
   Future<void> _togglePause() async {

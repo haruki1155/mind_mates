@@ -532,6 +532,22 @@ void main() {
         isA<bool>(),
       );
     });
+
+    test('reports when the user message was not persisted', () async {
+      final repository = MindAidRepository(
+        datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+        engine: MindAidEngine(),
+        firestoreService: _FailingFirestoreService(),
+      );
+
+      final result = await repository.sendMessage(
+        userId: 'auth_user_1',
+        text: 'I feel anxious',
+      );
+
+      expect(result.userMessageSaved, isFalse);
+      expect(result.message.text, isNotEmpty);
+    });
   });
 }
 
@@ -545,6 +561,13 @@ class _CapturingFirestoreService extends FirestoreService {
   ) async {
     createdDocuments.add({'collection': collection, ...data});
     return 'doc_${createdDocuments.length}';
+  }
+}
+
+class _FailingFirestoreService extends FirestoreService {
+  @override
+  Future<String> createDocument(String collection, Map<String, dynamic> data) {
+    throw StateError('permission denied');
   }
 }
 

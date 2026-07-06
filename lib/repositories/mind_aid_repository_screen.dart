@@ -16,11 +16,13 @@ class MindAidSendResult {
     required this.message,
     required this.suggestions,
     required this.chatResponse,
+    required this.userMessageSaved,
   });
 
   final MindAidMessageModel message;
   final List<MindAidSuggestionModel> suggestions;
   final MindAidChatResponse chatResponse;
+  final bool userMessageSaved;
 }
 
 class MindAidRepository {
@@ -63,7 +65,7 @@ class MindAidRepository {
     MindAidContext context = const MindAidContext(),
   }) async {
     final dataset = await _datasetLoader.load();
-    await _trySaveMessage(
+    final userMessageSaved = await _trySaveMessage(
       userId: userId,
       message: MindAidMessageModel(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -110,6 +112,7 @@ class MindAidRepository {
       message: message,
       suggestions: result.suggestions,
       chatResponse: result,
+      userMessageSaved: userMessageSaved,
     );
   }
 
@@ -140,15 +143,17 @@ class MindAidRepository {
     );
   }
 
-  Future<void> _trySaveMessage({
+  Future<bool> _trySaveMessage({
     required String userId,
     required MindAidMessageModel message,
   }) async {
     try {
       await _saveMessage(userId: userId, message: message);
+      return true;
     } catch (_) {
       // Chat support remains available even while backend persistence is being
       // configured.
+      return false;
     }
   }
 }

@@ -32,6 +32,7 @@ class MindAidProvider extends ChangeNotifier {
   bool isSending = false;
   String? errorMessage;
   String? _conversationSummary;
+  bool _lastUserMessagePersisted = false;
   int _selectedSuggestionCount = 0;
   int _highRiskTriggerCount = 0;
   int _fallbackCount = 0;
@@ -43,6 +44,7 @@ class MindAidProvider extends ChangeNotifier {
     fallbackCount: _fallbackCount,
     commonIntentCounts: Map.unmodifiable(_commonIntentCounts),
   );
+  bool get lastUserMessagePersisted => _lastUserMessagePersisted;
 
   Future<void> loadChat(
     String userId, {
@@ -99,6 +101,7 @@ class MindAidProvider extends ChangeNotifier {
   }) async {
     final effectiveContext = _contextWithSessionMemory(context);
     isSending = true;
+    _lastUserMessagePersisted = false;
     notifyListeners();
 
     try {
@@ -150,6 +153,7 @@ class MindAidProvider extends ChangeNotifier {
         effectiveContext,
       );
       _trackChatResult(result);
+      _lastUserMessagePersisted = result.userMessageSaved;
       _conversationSummary = _summarizeConversation();
       isSending = false;
       notifyListeners();

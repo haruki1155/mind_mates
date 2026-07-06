@@ -2,14 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/report_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
+import '../../../providers/user_provider.dart';
 
-class MentalHealthReportScreen extends StatelessWidget {
+class MentalHealthReportScreen extends StatefulWidget {
   const MentalHealthReportScreen({super.key});
 
   @override
+  State<MentalHealthReportScreen> createState() =>
+      _MentalHealthReportScreenState();
+}
+
+class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
+  String? _loadedUserId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userId = _currentUserId(hydrate: true);
+    if (userId == null || userId.isEmpty || _loadedUserId == userId) return;
+
+    _loadedUserId = userId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refreshReport(userId);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final report = _reportProviderOrNull(context)?.latestReport;
+    final reportProvider = _reportProviderOrNull(context);
+    final report = reportProvider?.latestReport;
+    final userId = _currentUserId();
+    final hasUser = userId != null && userId.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF4E1),
@@ -19,10 +45,25 @@ class MentalHealthReportScreen extends StatelessWidget {
         foregroundColor: Colors.black,
         elevation: 0,
       ),
-      body: report == null
-          ? const _EmptyReport()
-          : _ReportContent(report: report),
+      body: !hasUser
+          ? const _EmptyReport(
+              message: 'Please sign in to view your mental health summary.',
+            )
+          : RefreshIndicator(
+              onRefresh: () => _refreshReport(userId),
+              child: _ReportBody(
+                report: report,
+                isLoading: reportProvider?.isLoading ?? false,
+                errorMessage: reportProvider?.errorMessage,
+              ),
+            ),
     );
+  }
+
+  Future<void> _refreshReport(String userId) async {
+    final reportProvider = _readReportProviderOrNull(context);
+    if (reportProvider == null) return;
+    await reportProvider.refreshWeeklyReport(userId);
   }
 
   ReportProvider? _reportProviderOrNull(BuildContext context) {
@@ -31,6 +72,75 @@ class MentalHealthReportScreen extends StatelessWidget {
     } on ProviderNotFoundException {
       return null;
     }
+  }
+
+  ReportProvider? _readReportProviderOrNull(BuildContext context) {
+    try {
+      return context.read<ReportProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  String? _currentUserId({bool hydrate = false}) {
+    final authProvider = _readProviderOrNull<AuthProvider>();
+    final authUserId =
+        authProvider?.userId ??
+        (hydrate ? authProvider?.hydrateCurrentUser() : null);
+    if (authUserId != null && authUserId.isNotEmpty) return authUserId;
+
+    final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
+    if (profileUserId != null && profileUserId.isNotEmpty) return profileUserId;
+
+    return null;
+  }
+
+  T? _readProviderOrNull<T>() {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+}
+
+class _ReportBody extends StatelessWidget {
+  const _ReportBody({
+    required this.report,
+    required this.isLoading,
+    required this.errorMessage,
+  });
+
+  final ReportModel? report;
+  final bool isLoading;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final loadedReport = report;
+    if (isLoading && report == null) {
+      return const _ScrollableStatus(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (errorMessage != null && report == null) {
+      return _ScrollableStatus(
+        child: _Panel(
+          child: Text(
+            errorMessage!,
+            textAlign: TextAlign.center,
+            style: _ReportText.body,
+          ),
+        ),
+      );
+    }
+
+    if (loadedReport == null) {
+      return const _EmptyReport();
+    }
+
+    return _ReportContent(report: loadedReport);
   }
 }
 
@@ -340,21 +450,43 @@ class _ActionsPanel extends StatelessWidget {
 }
 
 class _EmptyReport extends StatelessWidget {
-  const _EmptyReport();
+  const _EmptyReport({
+    this.message =
+        'Your mental health summary will appear here once assessments, moods, MindAid, breathing, and Secret Chat usage are connected.',
+  });
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: _Panel(
-          child: Text(
-            'Your mental health summary will appear here once assessments, moods, MindAid, breathing, and Secret Chat usage are connected.',
-            textAlign: TextAlign.center,
-            style: _ReportText.body,
-          ),
+    return _ScrollableStatus(
+      child: _Panel(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: _ReportText.body,
         ),
       ),
+    );
+  }
+}
+
+class _ScrollableStatus extends StatelessWidget {
+  const _ScrollableStatus({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      children: [
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * .58,
+          child: Center(child: child),
+        ),
+      ],
     );
   }
 }

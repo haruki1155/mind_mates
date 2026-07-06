@@ -4,11 +4,259 @@ import '../database/firestore_collections.dart';
 import '../models/report_model.dart';
 import '../services/firebase/firestore_service.dart';
 
-class ReportRepository {
-  ReportRepository({FirestoreService? firestoreService})
-    : _firestoreService = firestoreService ?? FirestoreService();
+abstract class ReportRepositoryDataSource {
+  Future<Map<String, dynamic>?> getUserDocument(String userId);
+
+  Future<List<Map<String, dynamic>>> fetchAssessments(String userId);
+
+  Future<List<Map<String, dynamic>>> fetchMindAidMessages({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchUserActivities({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchMoods({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchBreathingSessions({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchSecretChatPosts({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchSecretChatComments({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<List<Map<String, dynamic>>> fetchSecretChatInteractions({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  });
+
+  Future<String> upsertReport(String reportId, Map<String, dynamic> payload);
+
+  Future<void> setAdminStatusSummary(
+    String userId,
+    Map<String, dynamic> payload,
+  );
+}
+
+class FirestoreReportRepositoryDataSource
+    implements ReportRepositoryDataSource {
+  FirestoreReportRepositoryDataSource(this._firestoreService);
 
   final FirestoreService _firestoreService;
+
+  @override
+  Future<Map<String, dynamic>?> getUserDocument(String userId) {
+    return _firestoreService.getDocument(FirestoreCollections.users, userId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchAssessments(String userId) {
+    return _firestoreService.getDocuments(
+      FirestoreCollections.assessments,
+      whereEquals: {'userId': userId},
+      orderBy: 'createdAt',
+      limit: 50,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMindAidMessages({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.mindAidMessages,
+      userField: 'userId',
+      userId: userId,
+      dateField: 'createdAt',
+      since: since,
+      before: before,
+      extraEquals: {'sender': 'user'},
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchUserActivities({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.userActivities,
+      userField: 'userId',
+      userId: userId,
+      dateField: 'occurredAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMoods({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.moods,
+      userField: 'userId',
+      userId: userId,
+      dateField: 'createdAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchBreathingSessions({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.breathingSessions,
+      userField: 'userId',
+      userId: userId,
+      dateField: 'completedAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSecretChatPosts({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.secretChats,
+      userField: 'authorId',
+      userId: userId,
+      dateField: 'createdAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSecretChatComments({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.secretChatComments,
+      userField: 'authorId',
+      userId: userId,
+      dateField: 'createdAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSecretChatInteractions({
+    required String userId,
+    required DateTime since,
+    required DateTime before,
+  }) {
+    return _fetchDateWindow(
+      collection: FirestoreCollections.secretChatInteractions,
+      userField: 'userId',
+      userId: userId,
+      dateField: 'updatedAt',
+      since: since,
+      before: before,
+    );
+  }
+
+  @override
+  Future<String> upsertReport(String reportId, Map<String, dynamic> payload) {
+    return _firestoreService
+        .setDocument(
+          FirestoreCollections.reports,
+          reportId,
+          payload,
+          merge: true,
+        )
+        .then((_) => reportId);
+  }
+
+  @override
+  Future<void> setAdminStatusSummary(
+    String userId,
+    Map<String, dynamic> payload,
+  ) {
+    return _firestoreService.setDocument(
+      FirestoreCollections.adminStatusSummaries,
+      userId,
+      payload,
+      merge: true,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchDateWindow({
+    required String collection,
+    required String userField,
+    required String userId,
+    required String dateField,
+    required DateTime since,
+    required DateTime before,
+    Map<String, Object?> extraEquals = const {},
+  }) async {
+    Query<Map<String, dynamic>> query = _firestoreService.firestore
+        .collection(collection)
+        .where(userField, isEqualTo: userId);
+
+    for (final entry in extraEquals.entries) {
+      query = query.where(entry.key, isEqualTo: entry.value);
+    }
+
+    final snapshot = await query
+        .where(dateField, isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .where(dateField, isLessThan: Timestamp.fromDate(before))
+        .get();
+
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList(growable: false);
+  }
+}
+
+class ReportRepository {
+  ReportRepository({
+    FirestoreService? firestoreService,
+    ReportRepositoryDataSource? dataSource,
+  }) : _firestoreService = firestoreService ?? FirestoreService() {
+    _dataSource =
+        dataSource ?? FirestoreReportRepositoryDataSource(_firestoreService);
+  }
+
+  final FirestoreService _firestoreService;
+  late final ReportRepositoryDataSource _dataSource;
 
   Future<ReportModel?> fetchLatestReport(String userId) async {
     final docs = await _firestoreService.getDocuments(
@@ -48,10 +296,7 @@ class ReportRepository {
     final weekEnd = weekStart.add(const Duration(days: 6));
     final weekEndExclusive = weekStart.add(const Duration(days: 7));
 
-    final userDoc = await _firestoreService.getDocument(
-      FirestoreCollections.users,
-      userId,
-    );
+    final userDoc = await _dataSource.getUserDocument(userId);
     final assessments = await _fetchAssessments(userId);
     final weeklyAssessments = assessments
         .where((assessment) {
@@ -176,10 +421,8 @@ class ReportRepository {
       'hasEnoughData': hasEnoughData,
     };
 
-    final reportId = await _firestoreService.createDocument(
-      FirestoreCollections.reports,
-      reportPayload,
-    );
+    final reportId = _weeklyReportId(userId, weekStart);
+    await _dataSource.upsertReport(reportId, reportPayload);
     await _syncAdminStatusSummary(
       userId: userId,
       userDoc: userDoc,
@@ -201,27 +444,34 @@ class ReportRepository {
     return reportId;
   }
 
+  String _weeklyReportId(String userId, DateTime weekStart) {
+    final month = weekStart.month.toString().padLeft(2, '0');
+    final day = weekStart.day.toString().padLeft(2, '0');
+    return '${userId}_${weekStart.year}$month$day';
+  }
+
   DateTime _weekStartFor(DateTime date) {
     final local = DateTime(date.year, date.month, date.day);
     return local.subtract(Duration(days: local.weekday - 1));
   }
 
   Future<List<Map<String, dynamic>>> _fetchAssessments(String userId) {
-    return _firestoreService.getDocuments(
-      FirestoreCollections.assessments,
-      whereEquals: {'userId': userId},
-      orderBy: 'createdAt',
-      limit: 50,
-    );
+    return _dataSource.fetchAssessments(userId);
   }
 
   _AssessmentSummary _assessmentSummary(
     List<Map<String, dynamic>> assessments,
   ) {
+    final sortedAssessments = [...assessments]
+      ..sort((left, right) {
+        final leftDate = _dateFrom(left['createdAt']) ?? DateTime(0);
+        final rightDate = _dateFrom(right['createdAt']) ?? DateTime(0);
+        return rightDate.compareTo(leftDate);
+      });
     Map<String, dynamic>? latestQuick;
     Map<String, dynamic>? latestFull;
 
-    for (final assessment in assessments) {
+    for (final assessment in sortedAssessments) {
       final type = assessment['type']?.toString().trim().toLowerCase();
       if (type == 'quick') {
         latestQuick ??= assessment;
@@ -239,14 +489,12 @@ class ReportRepository {
     required DateTime since,
     required DateTime before,
   }) async {
-    final snapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.mindAidMessages)
-        .where('userId', isEqualTo: userId)
-        .where('sender', isEqualTo: 'user')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('createdAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-    return snapshot.docs.length;
+    final docs = await _dataSource.fetchMindAidMessages(
+      userId: userId,
+      since: since,
+      before: before,
+    );
+    return docs.length;
   }
 
   Future<Set<String>> _fetchActiveDateKeys({
@@ -254,14 +502,13 @@ class ReportRepository {
     required DateTime since,
     required DateTime before,
   }) async {
-    final snapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.userActivities)
-        .where('userId', isEqualTo: userId)
-        .where('occurredAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('occurredAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-    return snapshot.docs
-        .map((doc) => doc.data()['dateKey']?.toString() ?? '')
+    final docs = await _dataSource.fetchUserActivities(
+      userId: userId,
+      since: since,
+      before: before,
+    );
+    return docs
+        .map((doc) => doc['dateKey']?.toString() ?? '')
         .where((key) => key.trim().isNotEmpty)
         .toSet();
   }
@@ -271,29 +518,26 @@ class ReportRepository {
     required DateTime since,
     required DateTime before,
   }) async {
-    final snapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.moods)
-        .where('userId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('createdAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-    final levels = snapshot.docs
-        .map((doc) => _intOrZero(doc.data()['level']))
+    final docs = await _dataSource.fetchMoods(
+      userId: userId,
+      since: since,
+      before: before,
+    );
+    final levels = docs
+        .map((doc) => _intOrZero(doc['level']))
         .where((level) => level > 0)
         .toList(growable: false);
-    final latest = [...snapshot.docs]
+    final latest = [...docs]
       ..sort((left, right) {
-        final leftDate = _dateFrom(left.data()['createdAt']) ?? DateTime(0);
-        final rightDate = _dateFrom(right.data()['createdAt']) ?? DateTime(0);
+        final leftDate = _dateFrom(left['createdAt']) ?? DateTime(0);
+        final rightDate = _dateFrom(right['createdAt']) ?? DateTime(0);
         return rightDate.compareTo(leftDate);
       });
     final total = levels.fold<int>(0, (total, level) => total + level);
     return _MoodSummary(
       count: levels.length,
       average: levels.isEmpty ? null : total / levels.length,
-      latestLevel: latest.isEmpty
-          ? null
-          : _intOrZero(latest.first.data()['level']),
+      latestLevel: latest.isEmpty ? null : _intOrZero(latest.first['level']),
       positiveCount: levels.where((level) => level >= 4).length,
     );
   }
@@ -303,33 +547,29 @@ class ReportRepository {
     required DateTime since,
     required DateTime before,
   }) async {
-    final postSnapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.secretChats)
-        .where('authorId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('createdAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-    final commentSnapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.secretChatComments)
-        .where('authorId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('createdAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-    final interactionSnapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.secretChatInteractions)
-        .where('userId', isEqualTo: userId)
-        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('updatedAt', isLessThan: Timestamp.fromDate(before))
-        .get();
+    final posts = await _dataSource.fetchSecretChatPosts(
+      userId: userId,
+      since: since,
+      before: before,
+    );
+    final comments = await _dataSource.fetchSecretChatComments(
+      userId: userId,
+      since: since,
+      before: before,
+    );
+    final interactions = await _dataSource.fetchSecretChatInteractions(
+      userId: userId,
+      since: since,
+      before: before,
+    );
 
-    final interactionCount = interactionSnapshot.docs.where((doc) {
-      final data = doc.data();
+    final interactionCount = interactions.where((data) {
       return data['liked'] == true || data['saved'] == true;
     }).length;
 
     return _SecretChatSummary(
-      postCount: postSnapshot.docs.length,
-      commentCount: commentSnapshot.docs.length,
+      postCount: posts.length,
+      commentCount: comments.length,
       interactionCount: interactionCount,
     );
   }
@@ -339,19 +579,16 @@ class ReportRepository {
     required DateTime since,
     required DateTime before,
   }) async {
-    final snapshot = await _firestoreService.firestore
-        .collection(FirestoreCollections.breathingSessions)
-        .where('userId', isEqualTo: userId)
-        .where('completedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .where('completedAt', isLessThan: Timestamp.fromDate(before))
-        .get();
-
-    final completedDocs = snapshot.docs.where(
-      (doc) => doc.data()['completed'] == true,
+    final docs = await _dataSource.fetchBreathingSessions(
+      userId: userId,
+      since: since,
+      before: before,
     );
+
+    final completedDocs = docs.where((doc) => doc['completed'] == true);
     final seconds = completedDocs.fold<int>(
       0,
-      (total, doc) => total + _intOrZero(doc.data()['completedSeconds']),
+      (total, doc) => total + _intOrZero(doc['completedSeconds']),
     );
 
     return _BreathingSummary(
@@ -549,29 +786,28 @@ class ReportRepository {
     required _MentalStatusSummary mentalStatus,
     required bool hasEnoughData,
   }) {
-    return _firestoreService
-        .setDocument(FirestoreCollections.adminStatusSummaries, userId, {
-          'userId': userId,
-          'userLabel': _userLabel(userId, userDoc),
-          'role': userDoc?['role']?.toString().trim() ?? '',
-          'status': mentalStatus.status,
-          'statusRank': _statusRank(mentalStatus.status),
-          'mentalStatusLabel': mentalStatus.label,
-          'latestAssessmentStatus': latestAssessmentStatus ?? '',
-          'quickAssessmentStatus': quickAssessmentStatus ?? '',
-          'fullAssessmentStatus': fullAssessmentStatus ?? '',
-          'mentalStatusSignal': mentalStatusSignal ?? '',
-          'topConcernAreas': topConcernAreas,
-          'moodCheckInCount': moodSummary.count,
-          'averageMoodLevel': moodSummary.average,
-          'activeDayCount': activeDayCount,
-          'assessmentCount': assessmentCount,
-          'mindAidMessageCount': mindAidMessageCount,
-          'breathingSessionCount': breathingSessionCount,
-          'secretChatEngagementCount': secretChatSummary.engagementCount,
-          'totalEngagementCount': totalEngagementCount,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, merge: true);
+    return _dataSource.setAdminStatusSummary(userId, {
+      'userId': userId,
+      'userLabel': _userLabel(userId, userDoc),
+      'role': userDoc?['role']?.toString().trim() ?? '',
+      'status': mentalStatus.status,
+      'statusRank': _statusRank(mentalStatus.status),
+      'mentalStatusLabel': mentalStatus.label,
+      'latestAssessmentStatus': latestAssessmentStatus ?? '',
+      'quickAssessmentStatus': quickAssessmentStatus ?? '',
+      'fullAssessmentStatus': fullAssessmentStatus ?? '',
+      'mentalStatusSignal': mentalStatusSignal ?? '',
+      'topConcernAreas': topConcernAreas,
+      'moodCheckInCount': moodSummary.count,
+      'averageMoodLevel': moodSummary.average,
+      'activeDayCount': activeDayCount,
+      'assessmentCount': assessmentCount,
+      'mindAidMessageCount': mindAidMessageCount,
+      'breathingSessionCount': breathingSessionCount,
+      'secretChatEngagementCount': secretChatSummary.engagementCount,
+      'totalEngagementCount': totalEngagementCount,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   _MentalStatusSummary _mentalStatusFor({
@@ -603,7 +839,7 @@ class ReportRepository {
     }
 
     final moderate =
-        fullStatus.contains('moderate') ||
+        _isModerateConcernStatus(fullStatus) ||
         quickStatus.contains('moderate') ||
         quickSignal == 'watchful' ||
         (quickScore != null && quickScore >= 50) ||
@@ -615,6 +851,11 @@ class ReportRepository {
     }
 
     return const _MentalStatusSummary(status: 'normal', label: 'Stable');
+  }
+
+  bool _isModerateConcernStatus(String status) {
+    if (!status.contains('moderate')) return false;
+    return !status.contains('well-being');
   }
 
   int _statusRank(String status) {

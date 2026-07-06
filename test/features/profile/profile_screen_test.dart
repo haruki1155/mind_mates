@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/profile/screens/mental_health_report_screen.dart';
@@ -68,19 +70,18 @@ void main() {
 
     final userProvider = UserProvider(_FakeUserRepository())
       ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
-    final reportProvider = ReportProvider(
-      _FakeReportRepository(
-        ReportModel(
-          id: 'report_1',
-          userId: 'user_1',
-          title: 'Mental Health Summary',
-          description:
-              'Latest assessment shows moderate concern with a 4-day streak.',
-          generatedAt: DateTime(2026, 7, 3),
-          hasEnoughData: true,
-        ),
+    final reportRepository = _FakeReportRepository(
+      ReportModel(
+        id: 'report_1',
+        userId: 'user_1',
+        title: 'Mental Health Summary',
+        description:
+            'Latest assessment shows moderate concern with a 4-day streak.',
+        generatedAt: DateTime(2026, 7, 3),
+        hasEnoughData: true,
       ),
     );
+    final reportProvider = ReportProvider(reportRepository);
     await reportProvider.loadLatestReport('user_1');
 
     await tester.pumpWidget(
@@ -102,48 +103,52 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final reportProvider = ReportProvider(
-      _FakeReportRepository(
-        ReportModel(
-          id: 'report_1',
-          userId: 'user_1',
-          title: 'Mental Health Summary',
-          description:
-              'Mental status: Watchful with 6 Secret Chat engagements.',
-          generatedAt: DateTime(2026, 7, 3),
-          mentalStatus: 'moderate',
-          mentalStatusLabel: 'Watchful',
-          fullAssessmentScore: 72,
-          fullAssessmentStatus: 'High Concern',
-          fullAssessmentTopConcernAreas: const ['Sleep and Rest'],
-          quickAssessmentScore: 61,
-          quickAssessmentStatus: 'moderate',
-          quickAssessmentSignal: 'watchful',
-          moodCheckInCount: 4,
-          averageMoodLevel: 3.2,
-          mindAidMessageCount: 5,
-          breathingSessionCount: 2,
-          mindfulBreathingMinutes: 8,
-          activeDayCount: 3,
-          currentStreak: 4,
-          secretChatPostCount: 1,
-          secretChatCommentCount: 2,
-          secretChatInteractionCount: 3,
-          secretChatEngagementCount: 6,
-          totalEngagementCount: 22,
-          recommendedNextActions: const ['Review support strategies'],
-          hasEnoughData: true,
-        ),
+    final reportRepository = _FakeReportRepository(
+      ReportModel(
+        id: 'report_1',
+        userId: 'user_1',
+        title: 'Mental Health Summary',
+        description: 'Mental status: Watchful with 6 Secret Chat engagements.',
+        generatedAt: DateTime(2026, 7, 3),
+        mentalStatus: 'moderate',
+        mentalStatusLabel: 'Watchful',
+        fullAssessmentScore: 72,
+        fullAssessmentStatus: 'High Concern',
+        fullAssessmentTopConcernAreas: const ['Sleep and Rest'],
+        quickAssessmentScore: 61,
+        quickAssessmentStatus: 'moderate',
+        quickAssessmentSignal: 'watchful',
+        moodCheckInCount: 4,
+        averageMoodLevel: 3.2,
+        mindAidMessageCount: 5,
+        breathingSessionCount: 2,
+        mindfulBreathingMinutes: 8,
+        activeDayCount: 3,
+        currentStreak: 4,
+        secretChatPostCount: 1,
+        secretChatCommentCount: 2,
+        secretChatInteractionCount: 3,
+        secretChatEngagementCount: 6,
+        totalEngagementCount: 22,
+        recommendedNextActions: const ['Review support strategies'],
+        hasEnoughData: true,
       ),
     );
+    final reportProvider = ReportProvider(reportRepository);
     await reportProvider.loadLatestReport('user_1');
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<ReportProvider>.value(
-        value: reportProvider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+        ],
         child: const MaterialApp(home: MentalHealthReportScreen()),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Watchful'), findsOneWidget);
     expect(find.text('Assessment Results'), findsOneWidget);
@@ -155,6 +160,56 @@ void main() {
     expect(find.text('1 posts, 2 comments'), findsOneWidget);
     expect(find.text('22'), findsOneWidget);
     expect(find.text('Review support strategies'), findsOneWidget);
+    expect(reportRepository.refreshCount, 1);
+  });
+
+  testWidgets('mental health report shows loading while refreshing on open', (
+    tester,
+  ) async {
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+    final reportRepository = _SlowReportRepository(
+      ReportModel(id: 'report_1', generatedAt: DateTime(2026, 7, 3)),
+    );
+    final reportProvider = ReportProvider(reportRepository);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+        ],
+        child: const MaterialApp(home: MentalHealthReportScreen()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    reportRepository.completeRefresh();
+    await tester.pumpAndSettle();
+
+    expect(reportRepository.refreshCount, 1);
+  });
+
+  testWidgets('mental health report asks for sign in when user is missing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ReportProvider>.value(
+        value: ReportProvider(
+          _FakeReportRepository(
+            ReportModel(id: 'report_1', generatedAt: DateTime(2026, 7, 3)),
+          ),
+        ),
+        child: const MaterialApp(home: MentalHealthReportScreen()),
+      ),
+    );
+
+    expect(
+      find.text('Please sign in to view your mental health summary.'),
+      findsOneWidget,
+    );
   });
 }
 
@@ -210,6 +265,11 @@ class _FakeUserRepository extends UserRepository {
   UserModel? updatedUser;
 
   @override
+  Future<UserModel?> fetchUserProfile(String uid) async {
+    return UserModel(id: uid, email: 'leo@example.com');
+  }
+
+  @override
   Future<void> updateUserProfile(String uid, UserModel user) async {
     updatedUser = user;
   }
@@ -219,7 +279,33 @@ class _FakeReportRepository extends ReportRepository {
   _FakeReportRepository(this.report);
 
   final ReportModel report;
+  int refreshCount = 0;
 
   @override
   Future<ReportModel?> fetchLatestReport(String userId) async => report;
+
+  @override
+  Future<String> generateWeeklyReport(String userId, {DateTime? now}) async {
+    refreshCount += 1;
+    return report.id;
+  }
+}
+
+class _SlowReportRepository extends _FakeReportRepository {
+  _SlowReportRepository(super.report);
+
+  final Completer<void> _refreshCompleter = Completer<void>();
+
+  @override
+  Future<String> generateWeeklyReport(String userId, {DateTime? now}) async {
+    refreshCount += 1;
+    await _refreshCompleter.future;
+    return report.id;
+  }
+
+  void completeRefresh() {
+    if (!_refreshCompleter.isCompleted) {
+      _refreshCompleter.complete();
+    }
+  }
 }

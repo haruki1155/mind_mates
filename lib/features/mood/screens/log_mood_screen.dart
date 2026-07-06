@@ -1,6 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../providers/auth_provider.dart';
+import '../../../providers/mood_provider.dart';
+import '../../../providers/report_provider.dart';
+import '../../../providers/user_provider.dart';
 
 class LogMoodScreen extends StatefulWidget {
   const LogMoodScreen({super.key});
@@ -13,6 +19,7 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
   final TextEditingController _noteController = TextEditingController();
   _MoodChoice? _selectedMood;
   int _noteLength = 0;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -38,57 +45,42 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
     return Scaffold(
       backgroundColor: MoodLogPalette.background,
       body: SafeArea(
-        top: false,
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
             const SliverToBoxAdapter(child: _MoodLogHeader()),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 34, 24, 32),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                28 + MediaQuery.paddingOf(context).bottom,
+              ),
               sliver: SliverToBoxAdapter(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= 720;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (wide)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Expanded(child: _MoodLogIntro()),
-                              const SizedBox(width: 24),
-                              SizedBox(
-                                width: math.min(
-                                  340,
-                                  constraints.maxWidth * .34,
-                                ),
-                                height: 190,
-                                child: const _CalmCloudIllustration(),
-                              ),
-                            ],
-                          )
-                        else ...[
-                          const _MoodLogIntro(),
-                          const SizedBox(height: 20),
-                          Center(
-                            child: SizedBox(
-                              width: math.min(280, constraints.maxWidth * .9),
-                              height: 150,
-                              child: const _CalmCloudIllustration(),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
+                        const _MoodLogIntro(),
+                        const SizedBox(height: 16),
                         _MoodChoiceGrid(
                           selectedMood: _selectedMood,
+                          isEnabled: !_isSaving,
                           onSelected: (mood) =>
                               setState(() => _selectedMood = mood),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 18),
                         _ThoughtsBox(
                           controller: _noteController,
                           characterCount: _noteLength,
+                          isEnabled: !_isSaving,
+                        ),
+                        const SizedBox(height: 18),
+                        _SaveMoodButton(
+                          isEnabled: _selectedMood != null && !_isSaving,
+                          isSaving: _isSaving,
+                          onPressed: _saveMood,
                         ),
                       ],
                     );
@@ -101,6 +93,84 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
       ),
     );
   }
+
+  Future<void> _saveMood() async {
+    final mood = _selectedMood;
+    if (mood == null || _isSaving) return;
+
+    final userId = _currentUserId();
+    if (userId == null || userId.isEmpty) {
+      _showSnack('Please sign in to save your mood.');
+      return;
+    }
+
+    final moodProvider = _readProviderOrNull<MoodProvider>();
+    if (moodProvider == null) {
+      _showSnack('Unable to save mood.');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final success = await moodProvider.logMood(
+      userId: userId,
+      level: mood.level,
+      label: mood.label,
+      note: _noteController.text,
+    );
+
+    if (!mounted) return;
+
+    if (!success) {
+      setState(() => _isSaving = false);
+      _showSnack('Unable to save mood.');
+      return;
+    }
+
+    var reportRefreshed = true;
+    try {
+      await _readProviderOrNull<UserProvider>()?.loadProfile(userId);
+      await moodProvider.loadRecentMoods(userId);
+      await _readProviderOrNull<ReportProvider>()?.refreshWeeklyReport(userId);
+    } catch (_) {
+      reportRefreshed = false;
+    }
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    _showSnack(
+      reportRefreshed
+          ? 'Mood check-in saved.'
+          : 'Mood saved. Summary will update later.',
+    );
+    Navigator.of(context).pop();
+  }
+
+  String? _currentUserId() {
+    final authProvider = _readProviderOrNull<AuthProvider>();
+    final authUserId =
+        authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    if (authUserId != null && authUserId.isNotEmpty) return authUserId;
+
+    final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
+    if (profileUserId != null && profileUserId.isNotEmpty) return profileUserId;
+
+    return null;
+  }
+
+  T? _readProviderOrNull<T>() {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
 class _MoodLogHeader extends StatelessWidget {
@@ -108,49 +178,103 @@ class _MoodLogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 142,
-      padding: EdgeInsets.only(
-        left: 40,
-        right: 24,
-        top: MediaQuery.paddingOf(context).top + 18,
-      ),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFE9A3), Color(0xFFFFD975), Color(0xFFFFF3C8)],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 8, 14, 8),
+        decoration: BoxDecoration(
+          color: MoodLogPalette.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: MoodLogPalette.softBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 14,
+              offset: Offset(0, 7),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 14,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _HeaderBackButton(onPressed: () => Navigator.of(context).pop()),
-          const SizedBox(width: 46),
-          const _MindMateMark(),
-          const SizedBox(width: 18),
-          const Flexible(
-            child: Text(
-              'MindMate',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: MoodLogPalette.ink,
-                fontSize: 38,
-                height: 1,
-                fontWeight: FontWeight.w900,
+        child: Row(
+          children: [
+            _HeaderBackButton(onPressed: () => Navigator.of(context).pop()),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Log your mood',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: MoodLogPalette.ink,
+                      fontSize: 20,
+                      height: 1.1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _todayLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: MoodLogPalette.bodyText,
+                      fontSize: 12,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: MoodLogPalette.goldSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.self_improvement_rounded,
+                color: MoodLogPalette.ink,
+                size: 21,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  static String _todayLabel() {
+    final now = DateTime.now();
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day} check-in';
   }
 }
 
@@ -162,18 +286,12 @@ class _HeaderBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox.square(
-      dimension: 74,
+      dimension: 44,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: MoodLogPalette.background,
           shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x25000000),
-              blurRadius: 16,
-              offset: Offset(0, 7),
-            ),
-          ],
+          border: Border.all(color: MoodLogPalette.softBorder),
         ),
         child: IconButton(
           onPressed: onPressed,
@@ -181,22 +299,11 @@ class _HeaderBackButton extends StatelessWidget {
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: MoodLogPalette.ink,
-            size: 34,
+            size: 22,
           ),
+          padding: EdgeInsets.zero,
         ),
       ),
-    );
-  }
-}
-
-class _MindMateMark extends StatelessWidget {
-  const _MindMateMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: 58,
-      child: CustomPaint(painter: _MindMateMarkPainter()),
     );
   }
 }
@@ -206,61 +313,152 @@ class _MoodLogIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'How are you feeling?',
-          style: TextStyle(
-            color: MoodLogPalette.goldText,
-            fontSize: 46,
-            height: 1.05,
-            fontWeight: FontWeight.w900,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: MoodLogPalette.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MoodLogPalette.softBorder),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 14,
+            offset: Offset(0, 7),
           ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showArt = constraints.maxWidth >= 360;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'How are you feeling?',
+                      style: TextStyle(
+                        color: MoodLogPalette.ink,
+                        fontSize: 26,
+                        height: 1.08,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Choose the closest match, then add a few words if you want.',
+                      style: TextStyle(
+                        color: MoodLogPalette.bodyText,
+                        fontSize: 13,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (showArt) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 96,
+                  height: 76,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      const _CalmCloudIllustration(),
+                      Positioned(
+                        right: 4,
+                        top: 3,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: const BoxDecoration(
+                            color: MoodLogPalette.greenSoft,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.favorite_rounded,
+                            color: MoodLogPalette.green,
+                            size: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MoodSectionTitle extends StatelessWidget {
+  const _MoodSectionTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(left: 2, bottom: 10),
+      child: Text(
+        'Pick one',
+        style: TextStyle(
+          color: MoodLogPalette.subtleText,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
         ),
-        SizedBox(height: 20),
-        Text(
-          'Your feelings matter. Check in with yourself.',
-          style: TextStyle(
-            color: MoodLogPalette.bodyText,
-            fontSize: 25,
-            height: 1.25,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
 class _MoodChoiceGrid extends StatelessWidget {
-  const _MoodChoiceGrid({required this.selectedMood, required this.onSelected});
+  const _MoodChoiceGrid({
+    required this.selectedMood,
+    required this.onSelected,
+    required this.isEnabled,
+  });
 
   final _MoodChoice? selectedMood;
   final ValueChanged<_MoodChoice> onSelected;
+  final bool isEnabled;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 760 ? 3 : 2;
-        final gap = constraints.maxWidth >= 760 ? 28.0 : 16.0;
+        final columns = constraints.maxWidth >= 720 ? 3 : 2;
+        final gap = constraints.maxWidth >= 720 ? 14.0 : 10.0;
         final cardWidth =
             (constraints.maxWidth - (gap * (columns - 1))) / columns;
-        return Wrap(
-          alignment: WrapAlignment.center,
-          runSpacing: 16,
-          spacing: gap,
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final mood in _moodChoices)
-              SizedBox(
-                width: cardWidth,
-                child: _MoodChoiceCard(
-                  mood: mood,
-                  selected: mood == selectedMood,
-                  onTap: () => onSelected(mood),
-                ),
-              ),
+            const _MoodSectionTitle(),
+            Wrap(
+              alignment: WrapAlignment.center,
+              runSpacing: gap,
+              spacing: gap,
+              children: [
+                for (final mood in _moodChoices)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _MoodChoiceCard(
+                      mood: mood,
+                      selected: mood == selectedMood,
+                      onTap: isEnabled ? () => onSelected(mood) : null,
+                    ),
+                  ),
+              ],
+            ),
           ],
         );
       },
@@ -277,45 +475,47 @@ class _MoodChoiceCard extends StatelessWidget {
 
   final _MoodChoice mood;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 240;
-        final glyphSize = compact ? 104.0 : 136.0;
+        final compact = constraints.maxWidth < 180;
+        final glyphSize = compact ? 52.0 : 62.0;
+
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(14),
             onTap: onTap,
             child: AnimatedContainer(
               key: ValueKey('mood-card-${mood.label}'),
               duration: const Duration(milliseconds: 180),
-              height: compact ? 282 : 356,
+              curve: Curves.easeOutCubic,
+              height: compact ? 148 : 158,
               padding: EdgeInsets.fromLTRB(
-                compact ? 14 : 18,
-                compact ? 18 : 28,
-                compact ? 14 : 18,
-                compact ? 16 : 22,
+                compact ? 10 : 12,
+                compact ? 11 : 13,
+                compact ? 10 : 12,
+                compact ? 10 : 12,
               ),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: selected ? .98 : .86),
-                borderRadius: BorderRadius.circular(24),
+                color: selected ? mood.auraColor : MoodLogPalette.surface,
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: selected
-                      ? MoodLogPalette.gold
-                      : MoodLogPalette.gold.withValues(alpha: .55),
+                      ? mood.accentColor
+                      : MoodLogPalette.softBorder,
                   width: selected ? 2 : 1.2,
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: selected
-                        ? const Color(0x33F0AA12)
-                        : const Color(0x16EAB14A),
-                    blurRadius: selected ? 24 : 14,
-                    offset: const Offset(0, 10),
+                        ? mood.accentColor.withValues(alpha: 0.2)
+                        : const Color(0x10000000),
+                    blurRadius: selected ? 16 : 10,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -327,7 +527,7 @@ class _MoodChoiceCard extends StatelessWidget {
                     selected: selected,
                     size: glyphSize,
                   ),
-                  SizedBox(height: compact ? 16 : 22),
+                  const SizedBox(height: 9),
                   Text(
                     mood.label,
                     maxLines: 1,
@@ -335,22 +535,24 @@ class _MoodChoiceCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: MoodLogPalette.ink,
-                      fontSize: compact ? 25 : 32,
-                      height: 1,
+                      fontSize: compact ? 15 : 16,
+                      height: 1.05,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  SizedBox(height: compact ? 11 : 16),
-                  Text(
-                    mood.description,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: MoodLogPalette.bodyText,
-                      fontSize: compact ? 17 : 22,
-                      height: 1.28,
-                      fontWeight: FontWeight.w500,
+                  const SizedBox(height: 5),
+                  Flexible(
+                    child: Text(
+                      mood.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: MoodLogPalette.bodyText,
+                        fontSize: compact ? 10.5 : 11.5,
+                        height: 1.2,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -378,24 +580,23 @@ class _MoodEmojiBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
-      width: selected ? size + 4 : size,
-      height: selected ? size + 4 : size,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: mood.auraColor,
+        color: selected ? Colors.white.withValues(alpha: 0.74) : mood.auraColor,
         boxShadow: selected
             ? [
                 BoxShadow(
-                  color: mood.accentColor.withValues(alpha: .28),
-                  blurRadius: 22,
-                  spreadRadius: 1,
+                  color: mood.accentColor.withValues(alpha: 0.18),
+                  blurRadius: 12,
                 ),
               ]
             : null,
       ),
       child: Center(
         child: SizedBox.square(
-          dimension: size * .76,
+          dimension: size * .72,
           child: CustomPaint(
             painter: _MoodGlyphPainter(
               glyph: mood.glyph,
@@ -409,26 +610,30 @@ class _MoodEmojiBadge extends StatelessWidget {
 }
 
 class _ThoughtsBox extends StatelessWidget {
-  const _ThoughtsBox({required this.controller, required this.characterCount});
+  const _ThoughtsBox({
+    required this.controller,
+    required this.characterCount,
+    required this.isEnabled,
+  });
 
   final TextEditingController controller;
   final int characterCount;
+  final bool isEnabled;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 208),
-      padding: const EdgeInsets.fromLTRB(32, 24, 32, 22),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .74),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: MoodLogPalette.gold.withValues(alpha: .68)),
+        color: MoodLogPalette.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MoodLogPalette.softBorder),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x13E8AA32),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+            color: Color(0x12000000),
+            blurRadius: 14,
+            offset: Offset(0, 7),
           ),
         ],
       ),
@@ -437,57 +642,112 @@ class _ThoughtsBox extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.edit_square, color: MoodLogPalette.goldText, size: 28),
-              SizedBox(width: 20),
+              Icon(
+                Icons.edit_note_rounded,
+                color: MoodLogPalette.goldText,
+                size: 22,
+              ),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
                   "What's on your mind today?",
                   style: TextStyle(
                     color: MoodLogPalette.ink,
-                    fontSize: 24,
-                    height: 1.1,
+                    fontSize: 17,
+                    height: 1.2,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          TextField(
-            controller: controller,
-            maxLength: 300,
-            maxLines: 4,
-            minLines: 3,
-            textInputAction: TextInputAction.newline,
-            decoration: const InputDecoration(
-              counterText: '',
-              border: InputBorder.none,
-              hintText: 'Share your thoughts...',
-              hintStyle: TextStyle(
-                color: MoodLogPalette.hintText,
-                fontSize: 24,
-                fontWeight: FontWeight.w400,
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: MoodLogPalette.fieldFill,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: MoodLogPalette.softBorder),
+            ),
+            child: TextField(
+              controller: controller,
+              enabled: isEnabled,
+              maxLength: 300,
+              maxLines: 5,
+              minLines: 3,
+              textInputAction: TextInputAction.newline,
+              decoration: const InputDecoration(
+                counterText: '',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.fromLTRB(14, 12, 14, 12),
+                hintText: 'Share your thoughts...',
+                hintStyle: TextStyle(
+                  color: MoodLogPalette.hintText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: const TextStyle(
+                color: MoodLogPalette.bodyText,
+                fontSize: 14,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            style: const TextStyle(
-              color: MoodLogPalette.bodyText,
-              fontSize: 21,
-              height: 1.25,
-              fontWeight: FontWeight.w500,
-            ),
           ),
+          const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerRight,
             child: Text(
               '$characterCount/300 characters',
               style: const TextStyle(
-                color: MoodLogPalette.bodyText,
-                fontSize: 17,
-                fontWeight: FontWeight.w500,
+                color: MoodLogPalette.subtleText,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SaveMoodButton extends StatelessWidget {
+  const _SaveMoodButton({
+    required this.isEnabled,
+    required this.isSaving,
+    required this.onPressed,
+  });
+
+  final bool isEnabled;
+  final bool isSaving;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: isEnabled ? onPressed : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: MoodLogPalette.gold,
+          foregroundColor: MoodLogPalette.ink,
+          disabledBackgroundColor: MoodLogPalette.softBorder,
+          disabledForegroundColor: MoodLogPalette.subtleText,
+          elevation: isEnabled ? 5 : 0,
+          shadowColor: const Color(0x33000000),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+        ),
+        child: isSaving
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              )
+            : const Text('Save mood check-in'),
       ),
     );
   }
@@ -500,85 +760,6 @@ class _CalmCloudIllustration extends StatelessWidget {
   Widget build(BuildContext context) {
     return const CustomPaint(painter: _CalmCloudPainter());
   }
-}
-
-class _MindMateMarkPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFFFD969)
-      ..style = PaintingStyle.fill;
-    final outline = Paint()
-      ..color = MoodLogPalette.ink
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final center = size.center(Offset.zero);
-    final left = Rect.fromCenter(
-      center: Offset(center.dx - size.width * .12, center.dy),
-      width: size.width * .44,
-      height: size.height * .72,
-    );
-    final right = Rect.fromCenter(
-      center: Offset(center.dx + size.width * .12, center.dy),
-      width: size.width * .44,
-      height: size.height * .72,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(left, Radius.circular(size.width * .2)),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(right, Radius.circular(size.width * .2)),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(left, Radius.circular(size.width * .2)),
-      outline,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(right, Radius.circular(size.width * .2)),
-      outline,
-    );
-    canvas.drawLine(
-      Offset(center.dx, size.height * .18),
-      Offset(center.dx, size.height * .82),
-      outline,
-    );
-    for (final dot in [
-      Offset(size.width * .28, size.height * .28),
-      Offset(size.width * .24, size.height * .48),
-      Offset(size.width * .32, size.height * .66),
-      Offset(size.width * .72, size.height * .28),
-      Offset(size.width * .76, size.height * .48),
-      Offset(size.width * .68, size.height * .66),
-    ]) {
-      canvas.drawCircle(dot, 2.8, Paint()..color = MoodLogPalette.ink);
-    }
-    _drawSpark(canvas, Offset(size.width * .04, size.height * .26), 7);
-    _drawSpark(canvas, Offset(size.width * .08, size.height * .78), 6);
-  }
-
-  void _drawSpark(Canvas canvas, Offset center, double radius) {
-    final paint = Paint()
-      ..color = MoodLogPalette.ink
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawLine(
-      Offset(center.dx - radius, center.dy),
-      Offset(center.dx + radius, center.dy),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, center.dy - radius),
-      Offset(center.dx, center.dy + radius),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _MindMateMarkPainter oldDelegate) => false;
 }
 
 class _CalmCloudPainter extends CustomPainter {
@@ -1122,6 +1303,7 @@ class _MoodChoice {
   const _MoodChoice({
     required this.label,
     required this.description,
+    required this.level,
     required this.glyph,
     required this.auraColor,
     required this.accentColor,
@@ -1129,6 +1311,7 @@ class _MoodChoice {
 
   final String label;
   final String description;
+  final int level;
   final _MoodGlyph glyph;
   final Color auraColor;
   final Color accentColor;
@@ -1138,61 +1321,75 @@ const _moodChoices = [
   _MoodChoice(
     label: 'Great',
     description: 'Feeling good and positive',
+    level: 5,
     glyph: _MoodGlyph.great,
-    auraColor: Color(0xFFD9EDB0),
-    accentColor: Color(0xFF95C45F),
+    auraColor: Color(0xFFE4F3D0),
+    accentColor: Color(0xFF78A94E),
   ),
   _MoodChoice(
     label: 'Okay',
     description: "It's a normal, average day",
+    level: 4,
     glyph: _MoodGlyph.okay,
-    auraColor: Color(0xFFC7DFF2),
-    accentColor: Color(0xFF7EB5DC),
+    auraColor: Color(0xFFDCECF7),
+    accentColor: Color(0xFF5E95BC),
   ),
   _MoodChoice(
     label: 'Stressed',
     description: 'Feeling overwhelmed or anxious',
+    level: 2,
     glyph: _MoodGlyph.stressed,
-    auraColor: Color(0xFFD8C8F2),
-    accentColor: Color(0xFFA48BD7),
+    auraColor: Color(0xFFE4DDF4),
+    accentColor: Color(0xFF8F76C2),
   ),
   _MoodChoice(
     label: 'Sad',
     description: 'Feeling down or low',
+    level: 1,
     glyph: _MoodGlyph.sad,
-    auraColor: Color(0xFFF8E9C7),
-    accentColor: Color(0xFFE3C57D),
+    auraColor: Color(0xFFF4E7C8),
+    accentColor: Color(0xFFC89F3A),
   ),
   _MoodChoice(
     label: 'Angry',
     description: 'Frustrated or irritated',
+    level: 1,
     glyph: _MoodGlyph.angry,
-    auraColor: Color(0xFFFFD0C2),
-    accentColor: Color(0xFFFF8D63),
+    auraColor: Color(0xFFFFDED5),
+    accentColor: Color(0xFFE3704D),
   ),
   _MoodChoice(
     label: 'Tired',
     description: 'Mentally or physically drained',
+    level: 3,
     glyph: _MoodGlyph.tired,
-    auraColor: Color(0xFFD8CFF0),
-    accentColor: Color(0xFF9D8CC7),
+    auraColor: Color(0xFFE1DDF0),
+    accentColor: Color(0xFF8072A8),
   ),
   _MoodChoice(
     label: 'Excited',
     description: 'Looking forward to something',
+    level: 5,
     glyph: _MoodGlyph.excited,
-    auraColor: Color(0xFFFFEFD0),
-    accentColor: Color(0xFFF0B141),
+    auraColor: Color(0xFFFFEBC2),
+    accentColor: Color(0xFFD99B20),
   ),
 ];
 
 class MoodLogPalette {
   const MoodLogPalette._();
 
-  static const background = Color(0xFFFFFEFB);
-  static const ink = Color(0xFF26282D);
-  static const bodyText = Color(0xFF4D535E);
-  static const hintText = Color(0xFF9AA0A9);
-  static const gold = Color(0xFFFFC94F);
-  static const goldText = Color(0xFFEFA208);
+  static const background = Color(0xFFF7F1DF);
+  static const surface = Color(0xFFFFFFFF);
+  static const fieldFill = Color(0xFFFFFCF4);
+  static const softBorder = Color(0xFFE9DFC6);
+  static const ink = Color(0xFF17120A);
+  static const bodyText = Color(0xFF5F655D);
+  static const subtleText = Color(0xFF8B7A58);
+  static const hintText = Color(0xFF9A9489);
+  static const gold = Color(0xFFFFC414);
+  static const goldSoft = Color(0xFFFFE8A3);
+  static const goldText = Color(0xFFB78306);
+  static const green = Color(0xFF4F8A70);
+  static const greenSoft = Color(0xFFDCEEE5);
 }

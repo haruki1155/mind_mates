@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '/providers/mind_aid_provider.dart';
 import '/providers/assessment_provider.dart';
 import '/providers/auth_provider.dart';
+import '/providers/report_provider.dart';
 import '/providers/user_provider.dart';
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
@@ -69,7 +70,9 @@ class _MindAidPageState extends State<MindAidPage> {
       context: contextValue,
     );
     if (!mounted || !sent || userId == 'guest') return;
+    if (!context.read<MindAidProvider>().lastUserMessagePersisted) return;
     await context.read<UserProvider>().markMindAidMessage(userId);
+    await _refreshProfileAndReport(userId);
   }
 
   Future<void> _selectSuggestionAndRecordActivity(
@@ -83,7 +86,26 @@ class _MindAidPageState extends State<MindAidPage> {
       context: contextValue,
     );
     if (!mounted || !sent || userId == 'guest') return;
+    if (!context.read<MindAidProvider>().lastUserMessagePersisted) return;
     await context.read<UserProvider>().markMindAidMessage(userId);
+    await _refreshProfileAndReport(userId);
+  }
+
+  Future<void> _refreshProfileAndReport(String userId) async {
+    try {
+      await context.read<UserProvider>().loadProfile(userId);
+      await _readProviderOrNull<ReportProvider>()?.refreshWeeklyReport(userId);
+    } catch (_) {
+      // MindAid chat remains available even if summary refresh is delayed.
+    }
+  }
+
+  T? _readProviderOrNull<T>() {
+    try {
+      return context.read<T>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 
   MindAidContext _buildMindAidContext(
