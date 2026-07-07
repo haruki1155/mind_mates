@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
@@ -34,6 +35,8 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   bool _isCompleted = false;
   bool _soundEnabled = true;
   double _volume = .45;
+  Set<String> _availableAudioAssets = const {};
+  bool _audioAssetsChecked = false;
 
   @override
   void initState() {
@@ -57,13 +60,37 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   }
 
   Future<void> _prepareAudio() async {
+    const ambientAsset = 'assets/audio/breathing/ambient_calm.mp3';
     try {
-      await _musicPlayer.setAsset('assets/audio/breathing/ambient_calm.mp3');
+      _availableAudioAssets = await _loadAvailableAudioAssets();
+      _audioAssetsChecked = true;
+      if (!_availableAudioAssets.contains(ambientAsset)) {
+        if (mounted) {
+          setState(() => _soundEnabled = false);
+        } else {
+          _soundEnabled = false;
+        }
+        return;
+      }
+      await _musicPlayer.setAsset(ambientAsset);
       await _musicPlayer.setLoopMode(LoopMode.one);
       await _musicPlayer.setVolume(_volume);
     } catch (_) {
-      // Audio assets are optional during development.
+      _audioAssetsChecked = true;
+      if (mounted) {
+        setState(() => _soundEnabled = false);
+      } else {
+        _soundEnabled = false;
+      }
     }
+  }
+
+  Future<Set<String>> _loadAvailableAudioAssets() async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    return manifest
+        .listAssets()
+        .where((asset) => asset.startsWith('assets/audio/breathing/'))
+        .toSet();
   }
 
   @override
@@ -305,7 +332,7 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   }
 
   Future<void> _playMusicIfEnabled() async {
-    if (!_soundEnabled) return;
+    if (!_soundEnabled || !_audioAssetsChecked) return;
     try {
       await _musicPlayer.setVolume(_volume);
       await _musicPlayer.play();
@@ -313,9 +340,11 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   }
 
   Future<void> _playCue(String fileName) async {
-    if (!_soundEnabled) return;
+    if (!_soundEnabled || !_audioAssetsChecked) return;
+    final asset = 'assets/audio/breathing/$fileName';
+    if (!_availableAudioAssets.contains(asset)) return;
     try {
-      await _cuePlayer.setAsset('assets/audio/breathing/$fileName');
+      await _cuePlayer.setAsset(asset);
       await _cuePlayer.play();
     } catch (_) {}
   }

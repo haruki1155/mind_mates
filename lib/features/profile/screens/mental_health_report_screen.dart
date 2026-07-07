@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../models/report_model.dart';
+import '../../../models/mental_health_activity_summary.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/report_provider.dart';
+import '../../../providers/mental_health_activity_provider.dart';
 import '../../../providers/user_provider.dart';
 
 class MentalHealthReportScreen extends StatefulWidget {
@@ -16,6 +16,7 @@ class MentalHealthReportScreen extends StatefulWidget {
 
 class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
   String? _loadedUserId;
+  bool _isRefreshing = false;
 
   @override
   void didChangeDependencies() {
@@ -26,14 +27,14 @@ class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
     _loadedUserId = userId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _refreshReport(userId);
+      _loadSummary(userId);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final reportProvider = _reportProviderOrNull(context);
-    final report = reportProvider?.latestReport;
+    final summaryProvider = _summaryProviderOrNull(context);
+    final summary = summaryProvider?.summary;
     final userId = _currentUserId();
     final hasUser = userId != null && userId.isNotEmpty;
 
@@ -46,37 +47,45 @@ class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
         elevation: 0,
       ),
       body: !hasUser
-          ? const _EmptyReport(
+          ? const _EmptySummary(
               message: 'Please sign in to view your mental health summary.',
             )
           : RefreshIndicator(
-              onRefresh: () => _refreshReport(userId),
-              child: _ReportBody(
-                report: report,
-                isLoading: reportProvider?.isLoading ?? false,
-                errorMessage: reportProvider?.errorMessage,
+              onRefresh: () => _loadSummary(userId),
+              child: _SummaryBody(
+                summary: summary,
+                isLoading: summaryProvider?.isLoading ?? false,
+                errorMessage: summaryProvider?.errorMessage,
               ),
             ),
     );
   }
 
-  Future<void> _refreshReport(String userId) async {
-    final reportProvider = _readReportProviderOrNull(context);
-    if (reportProvider == null) return;
-    await reportProvider.refreshWeeklyReport(userId);
+  Future<void> _loadSummary(String userId) async {
+    if (_isRefreshing) return;
+    final summaryProvider = _readSummaryProviderOrNull(context);
+    if (summaryProvider == null) return;
+    _isRefreshing = true;
+    try {
+      await summaryProvider.loadDailySummary(userId);
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
-  ReportProvider? _reportProviderOrNull(BuildContext context) {
+  MentalHealthActivityProvider? _summaryProviderOrNull(BuildContext context) {
     try {
-      return context.watch<ReportProvider>();
+      return context.watch<MentalHealthActivityProvider>();
     } on ProviderNotFoundException {
       return null;
     }
   }
 
-  ReportProvider? _readReportProviderOrNull(BuildContext context) {
+  MentalHealthActivityProvider? _readSummaryProviderOrNull(
+    BuildContext context,
+  ) {
     try {
-      return context.read<ReportProvider>();
+      return context.read<MentalHealthActivityProvider>();
     } on ProviderNotFoundException {
       return null;
     }
@@ -104,93 +113,80 @@ class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
   }
 }
 
-class _ReportBody extends StatelessWidget {
-  const _ReportBody({
-    required this.report,
+class _SummaryBody extends StatelessWidget {
+  const _SummaryBody({
+    required this.summary,
     required this.isLoading,
     required this.errorMessage,
   });
 
-  final ReportModel? report;
+  final MentalHealthActivitySummary? summary;
   final bool isLoading;
   final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
-    final loadedReport = report;
-    if (isLoading && report == null) {
+    if (isLoading && summary == null) {
       return const _ScrollableStatus(
         child: Center(child: CircularProgressIndicator()),
       );
     }
 
-    if (errorMessage != null && report == null) {
+    if (errorMessage != null && summary == null) {
       return _ScrollableStatus(
         child: _Panel(
           child: Text(
             errorMessage!,
             textAlign: TextAlign.center,
-            style: _ReportText.body,
+            style: _SummaryText.body,
           ),
         ),
       );
     }
 
-    if (loadedReport == null) {
-      return const _EmptyReport();
-    }
-
-    return _ReportContent(report: loadedReport);
+    final loadedSummary =
+        summary ?? MentalHealthActivitySummary.empty(date: DateTime.now());
+    return _SummaryContent(summary: loadedSummary);
   }
 }
 
-class _ReportContent extends StatelessWidget {
-  const _ReportContent({required this.report});
+class _SummaryContent extends StatelessWidget {
+  const _SummaryContent({required this.summary});
 
-  final ReportModel report;
+  final MentalHealthActivitySummary summary;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
       children: [
-        _StatusPanel(report: report),
+        _StatusPanel(summary: summary),
         const SizedBox(height: 14),
-        _AssessmentPanel(report: report),
+        _UsageGrid(summary: summary),
         const SizedBox(height: 14),
-        _UsageGrid(report: report),
-        if (report.recommendedNextActions.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _ActionsPanel(actions: report.recommendedNextActions),
-        ],
+        _RecentActivityPanel(summary: summary),
       ],
     );
   }
 }
 
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({required this.report});
+  const _StatusPanel({required this.summary});
 
-  final ReportModel report;
+  final MentalHealthActivitySummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = switch (report.mentalStatus) {
-      'severe' => const Color(0xFFB3261E),
-      'moderate' => const Color(0xFFB06A00),
-      _ => const Color(0xFF2E7D32),
-    };
-
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: Text(
-                  report.title,
-                  style: const TextStyle(
+                  "Today's activity",
+                  style: TextStyle(
                     color: Colors.black,
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
@@ -203,13 +199,13 @@ class _StatusPanel extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: .12),
+                  color: const Color(0xFFFFB800).withValues(alpha: .16),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  report.mentalStatusLabel,
-                  style: TextStyle(
-                    color: statusColor,
+                  summary.hasActivity ? 'Live' : 'No activity yet',
+                  style: const TextStyle(
+                    color: Color(0xFF6B5D00),
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
@@ -217,93 +213,25 @@ class _StatusPanel extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          Text(summary.dateLabel, style: _SummaryText.muted),
           const SizedBox(height: 10),
-          Text(report.description, style: _ReportText.body),
-        ],
-      ),
-    );
-  }
-}
-
-class _AssessmentPanel extends StatelessWidget {
-  const _AssessmentPanel({required this.report});
-
-  final ReportModel report;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Assessment Results', style: _ReportText.sectionTitle),
-          const SizedBox(height: 12),
-          _AssessmentRow(
-            title: 'Full Assessment',
-            status: report.fullAssessmentStatus,
-            score: report.fullAssessmentScore,
-            detail: report.fullAssessmentTopConcernAreas.isEmpty
-                ? 'No full assessment result this week'
-                : 'Focus: ${report.fullAssessmentTopConcernAreas.join(', ')}',
-          ),
-          const Divider(height: 22),
-          _AssessmentRow(
-            title: 'Quick Assessment',
-            status: report.quickAssessmentStatus,
-            score: report.quickAssessmentScore,
-            detail: report.quickAssessmentSignal == null
-                ? 'No quick assessment result this week'
-                : 'Signal: ${report.quickAssessmentSignal}',
+          Text(
+            summary.hasActivity
+                ? 'Your day-to-day activity is shown here as it is recorded. Weekly reports can still run in the background for admin monitoring and insights.'
+                : 'No activity yet today. Start with a mood check-in, breathing session, MindAid, or Secret Chat support.',
+            style: _SummaryText.body,
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AssessmentRow extends StatelessWidget {
-  const _AssessmentRow({
-    required this.title,
-    required this.status,
-    required this.score,
-    required this.detail,
-  });
-
-  final String title;
-  final String? status;
-  final int? score;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: _ReportText.cardTitle),
-              const SizedBox(height: 4),
-              Text(status ?? 'Not available', style: _ReportText.body),
-              const SizedBox(height: 4),
-              Text(detail, style: _ReportText.muted),
-            ],
-          ),
-        ),
-        if (score != null)
-          Text('$score/100', style: _ReportText.score)
-        else
-          const Text('--', style: _ReportText.score),
-      ],
     );
   }
 }
 
 class _UsageGrid extends StatelessWidget {
-  const _UsageGrid({required this.report});
+  const _UsageGrid({required this.summary});
 
-  final ReportModel report;
+  final MentalHealthActivitySummary summary;
 
   @override
   Widget build(BuildContext context) {
@@ -311,39 +239,39 @@ class _UsageGrid extends StatelessWidget {
       _UsageItem(
         icon: Icons.mood_rounded,
         label: 'Mood',
-        value: '${report.moodCheckInCount}',
-        detail: 'Avg ${report.averageMoodLabel}/5',
+        value: '${summary.moodCheckIns}',
+        detail: 'Avg ${summary.averageMoodLabel}/5',
       ),
       _UsageItem(
         icon: Icons.chat_bubble_outline_rounded,
         label: 'MindAid',
-        value: '${report.mindAidMessageCount}',
+        value: '${summary.mindAidMessages}',
         detail: 'messages',
       ),
       _UsageItem(
         icon: Icons.air_rounded,
         label: 'Breathing',
-        value: '${report.breathingSessionCount}',
-        detail: '${report.mindfulBreathingMinutes} min',
+        value: '${summary.breathingSessions}',
+        detail: '${summary.breathingMinutes} min',
       ),
       _UsageItem(
         icon: Icons.local_fire_department_rounded,
         label: 'Activity',
-        value: '${report.activeDayCount}',
-        detail: '${report.currentStreak}-day streak',
+        value: '${summary.activeDayCount}',
+        detail: '${summary.currentStreak}-day streak',
       ),
       _UsageItem(
         icon: Icons.forum_outlined,
         label: 'Secret Chat',
-        value: '${report.secretChatEngagementCount}',
+        value: '${summary.secretChatEngagementCount}',
         detail:
-            '${report.secretChatPostCount} posts, ${report.secretChatCommentCount} comments',
+            '${summary.secretChatPosts} posts, ${summary.secretChatComments} comments',
       ),
       _UsageItem(
         icon: Icons.monitor_heart_outlined,
         label: 'Engagement',
-        value: '${report.totalEngagementCount}',
-        detail: 'weekly actions',
+        value: '${summary.totalActions}',
+        detail: "today's actions",
       ),
     ];
 
@@ -365,6 +293,71 @@ class _UsageGrid extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _RecentActivityPanel extends StatelessWidget {
+  const _RecentActivityPanel({required this.summary});
+
+  final MentalHealthActivitySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final activities = summary.recentActivities;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Recent Activity', style: _SummaryText.sectionTitle),
+          const SizedBox(height: 12),
+          if (activities.isEmpty)
+            const Text('No activity yet today.', style: _SummaryText.body)
+          else
+            for (final activity in activities) ...[
+              _RecentActivityRow(activity: activity),
+              if (activity != activities.last) const Divider(height: 18),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentActivityRow extends StatelessWidget {
+  const _RecentActivityRow({required this.activity});
+
+  final MentalHealthActivityItem activity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(_iconForType(activity.type), color: const Color(0xFFFFB800)),
+        const SizedBox(width: 10),
+        Expanded(child: Text(activity.label, style: _SummaryText.cardTitle)),
+        Text(activity.timeLabel, style: _SummaryText.muted),
+      ],
+    );
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'moodCheckIn':
+        return Icons.mood_rounded;
+      case 'mindAidMessage':
+        return Icons.chat_bubble_outline_rounded;
+      case 'breathingSession':
+        return Icons.air_rounded;
+      case 'secretChatPost':
+      case 'secretChatComment':
+      case 'secretChatInteraction':
+        return Icons.forum_outlined;
+      case 'quickAssessment':
+      case 'fullAssessment':
+        return Icons.assignment_turned_in_outlined;
+      default:
+        return Icons.check_circle_outline_rounded;
+    }
   }
 }
 
@@ -398,61 +391,23 @@ class _UsageCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.label, style: _ReportText.cardTitle),
+                Text(item.label, style: _SummaryText.cardTitle),
                 const SizedBox(height: 3),
-                Text(item.detail, style: _ReportText.muted),
+                Text(item.detail, style: _SummaryText.muted),
               ],
             ),
           ),
-          Text(item.value, style: _ReportText.score),
+          Text(item.value, style: _SummaryText.score),
         ],
       ),
     );
   }
 }
 
-class _ActionsPanel extends StatelessWidget {
-  const _ActionsPanel({required this.actions});
-
-  final List<String> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Recommended Next Actions',
-            style: _ReportText.sectionTitle,
-          ),
-          const SizedBox(height: 10),
-          for (final action in actions.take(4))
-            Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    size: 17,
-                    color: Color(0xFFFFB800),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(action, style: _ReportText.body)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyReport extends StatelessWidget {
-  const _EmptyReport({
+class _EmptySummary extends StatelessWidget {
+  const _EmptySummary({
     this.message =
-        'Your mental health summary will appear here once assessments, moods, MindAid, breathing, and Secret Chat usage are connected.',
+        'Your daily mental health activity will appear here once moods, MindAid, breathing, and Secret Chat usage are connected.',
   });
 
   final String message;
@@ -464,7 +419,7 @@ class _EmptyReport extends StatelessWidget {
         child: Text(
           message,
           textAlign: TextAlign.center,
-          style: _ReportText.body,
+          style: _SummaryText.body,
         ),
       ),
     );
@@ -518,8 +473,8 @@ class _Panel extends StatelessWidget {
   }
 }
 
-class _ReportText {
-  const _ReportText._();
+class _SummaryText {
+  const _SummaryText._();
 
   static const sectionTitle = TextStyle(
     color: Colors.black,

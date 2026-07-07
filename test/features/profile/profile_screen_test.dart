@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/profile/screens/mental_health_report_screen.dart';
 import 'package:mind_mates/features/profile/screens/profile_screen.dart';
+import 'package:mind_mates/models/mental_health_activity_summary.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
+import 'package:mind_mates/providers/mental_health_activity_provider.dart';
 import 'package:mind_mates/providers/report_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
+import 'package:mind_mates/repositories/mental_health_activity_repository.dart';
 import 'package:mind_mates/repositories/report_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/routes/app_pages.dart';
@@ -97,45 +100,27 @@ void main() {
     );
   });
 
-  testWidgets('mental health report shows assessment and usage summary', (
+  testWidgets('mental health report shows daily activity summary', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final reportRepository = _FakeReportRepository(
-      ReportModel(
-        id: 'report_1',
-        userId: 'user_1',
-        title: 'Mental Health Summary',
-        description: 'Mental status: Watchful with 6 Secret Chat engagements.',
-        generatedAt: DateTime(2026, 7, 3),
-        mentalStatus: 'moderate',
-        mentalStatusLabel: 'Watchful',
-        fullAssessmentScore: 72,
-        fullAssessmentStatus: 'High Concern',
-        fullAssessmentTopConcernAreas: const ['Sleep and Rest'],
-        quickAssessmentScore: 61,
-        quickAssessmentStatus: 'moderate',
-        quickAssessmentSignal: 'watchful',
-        moodCheckInCount: 4,
+    final activityRepository = _FakeActivityRepository(
+      _dailySummary(
+        moodCheckIns: 4,
         averageMoodLevel: 3.2,
-        mindAidMessageCount: 5,
-        breathingSessionCount: 2,
-        mindfulBreathingMinutes: 8,
-        activeDayCount: 3,
+        mindAidMessages: 5,
+        breathingSessions: 2,
+        breathingMinutes: 8,
         currentStreak: 4,
-        secretChatPostCount: 1,
-        secretChatCommentCount: 2,
-        secretChatInteractionCount: 3,
-        secretChatEngagementCount: 6,
-        totalEngagementCount: 22,
-        recommendedNextActions: const ['Review support strategies'],
-        hasEnoughData: true,
+        secretChatPosts: 1,
+        secretChatComments: 2,
+        secretChatInteractions: 3,
+        assessmentCount: 1,
       ),
     );
-    final reportProvider = ReportProvider(reportRepository);
-    await reportProvider.loadLatestReport('user_1');
+    final activityProvider = MentalHealthActivityProvider(activityRepository);
     final userProvider = UserProvider(_FakeUserRepository())
       ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
 
@@ -143,24 +128,61 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<UserProvider>.value(value: userProvider),
-          ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+          ChangeNotifierProvider<MentalHealthActivityProvider>.value(
+            value: activityProvider,
+          ),
         ],
         child: const MaterialApp(home: MentalHealthReportScreen()),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Watchful'), findsOneWidget);
-    expect(find.text('Assessment Results'), findsOneWidget);
-    expect(find.text('High Concern'), findsOneWidget);
-    expect(find.text('72/100'), findsOneWidget);
-    expect(find.text('moderate'), findsOneWidget);
-    expect(find.text('61/100'), findsOneWidget);
+    expect(find.text("Today's activity"), findsOneWidget);
+    expect(find.text('Live'), findsOneWidget);
+    expect(find.text('Avg 3.2/5'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    expect(find.text('8 min'), findsOneWidget);
+    expect(find.text('4-day streak'), findsOneWidget);
     expect(find.text('Secret Chat'), findsOneWidget);
     expect(find.text('1 posts, 2 comments'), findsOneWidget);
-    expect(find.text('22'), findsOneWidget);
-    expect(find.text('Review support strategies'), findsOneWidget);
-    expect(reportRepository.refreshCount, 1);
+    expect(find.text('Recent Activity'), findsOneWidget);
+    expect(activityRepository.loadCount, 1);
+  });
+
+  testWidgets('mental health report shows empty daily activity state', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final activityRepository = _FakeActivityRepository(
+      MentalHealthActivitySummary.empty(
+        date: DateTime(2026, 7, 7),
+        currentStreak: 2,
+      ),
+    );
+    final activityProvider = MentalHealthActivityProvider(activityRepository);
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MentalHealthActivityProvider>.value(
+            value: activityProvider,
+          ),
+        ],
+        child: const MaterialApp(home: MentalHealthReportScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Today's activity"), findsOneWidget);
+    expect(find.text('No activity yet'), findsOneWidget);
+    expect(find.textContaining('No activity yet today'), findsWidgets);
+    expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('0'), findsWidgets);
   });
 
   testWidgets('mental health report shows loading while refreshing on open', (
@@ -168,16 +190,18 @@ void main() {
   ) async {
     final userProvider = UserProvider(_FakeUserRepository())
       ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
-    final reportRepository = _SlowReportRepository(
-      ReportModel(id: 'report_1', generatedAt: DateTime(2026, 7, 3)),
+    final activityRepository = _SlowActivityRepository(
+      _dailySummary(moodCheckIns: 1),
     );
-    final reportProvider = ReportProvider(reportRepository);
+    final activityProvider = MentalHealthActivityProvider(activityRepository);
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<UserProvider>.value(value: userProvider),
-          ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
+          ChangeNotifierProvider<MentalHealthActivityProvider>.value(
+            value: activityProvider,
+          ),
         ],
         child: const MaterialApp(home: MentalHealthReportScreen()),
       ),
@@ -186,21 +210,19 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    reportRepository.completeRefresh();
+    activityRepository.completeLoad();
     await tester.pumpAndSettle();
 
-    expect(reportRepository.refreshCount, 1);
+    expect(activityRepository.loadCount, 1);
   });
 
   testWidgets('mental health report asks for sign in when user is missing', (
     tester,
   ) async {
     await tester.pumpWidget(
-      ChangeNotifierProvider<ReportProvider>.value(
-        value: ReportProvider(
-          _FakeReportRepository(
-            ReportModel(id: 'report_1', generatedAt: DateTime(2026, 7, 3)),
-          ),
+      ChangeNotifierProvider<MentalHealthActivityProvider>.value(
+        value: MentalHealthActivityProvider(
+          _FakeActivityRepository(_dailySummary()),
         ),
         child: const MaterialApp(home: MentalHealthReportScreen()),
       ),
@@ -291,21 +313,81 @@ class _FakeReportRepository extends ReportRepository {
   }
 }
 
-class _SlowReportRepository extends _FakeReportRepository {
-  _SlowReportRepository(super.report);
+class _FakeActivityRepository extends MentalHealthActivityRepository {
+  _FakeActivityRepository(this.summary);
 
-  final Completer<void> _refreshCompleter = Completer<void>();
+  final MentalHealthActivitySummary summary;
+  int loadCount = 0;
 
   @override
-  Future<String> generateWeeklyReport(String userId, {DateTime? now}) async {
-    refreshCount += 1;
-    await _refreshCompleter.future;
-    return report.id;
+  Future<MentalHealthActivitySummary> fetchDailySummary(
+    String userId, {
+    DateTime? date,
+  }) async {
+    loadCount += 1;
+    return summary;
+  }
+}
+
+class _SlowActivityRepository extends _FakeActivityRepository {
+  _SlowActivityRepository(super.summary);
+
+  final Completer<void> _loadCompleter = Completer<void>();
+
+  @override
+  Future<MentalHealthActivitySummary> fetchDailySummary(
+    String userId, {
+    DateTime? date,
+  }) async {
+    loadCount += 1;
+    await _loadCompleter.future;
+    return summary;
   }
 
-  void completeRefresh() {
-    if (!_refreshCompleter.isCompleted) {
-      _refreshCompleter.complete();
+  void completeLoad() {
+    if (!_loadCompleter.isCompleted) {
+      _loadCompleter.complete();
     }
   }
+}
+
+MentalHealthActivitySummary _dailySummary({
+  int moodCheckIns = 0,
+  double? averageMoodLevel,
+  int mindAidMessages = 0,
+  int breathingSessions = 0,
+  int breathingMinutes = 0,
+  int secretChatPosts = 0,
+  int secretChatComments = 0,
+  int secretChatInteractions = 0,
+  int assessmentCount = 0,
+  int currentStreak = 0,
+}) {
+  return MentalHealthActivitySummary(
+    date: DateTime(2026, 7, 7),
+    moodCheckIns: moodCheckIns,
+    averageMoodLevel: averageMoodLevel,
+    mindAidMessages: mindAidMessages,
+    breathingSessions: breathingSessions,
+    breathingMinutes: breathingMinutes,
+    secretChatPosts: secretChatPosts,
+    secretChatComments: secretChatComments,
+    secretChatInteractions: secretChatInteractions,
+    assessmentCount: assessmentCount,
+    currentStreak: currentStreak,
+    recentActivities: [
+      if (moodCheckIns > 0)
+        MentalHealthActivityItem(
+          type: 'moodCheckIn',
+          label: 'Logged mood',
+          occurredAt: DateTime(2026, 7, 7, 9, 15),
+        ),
+      if (secretChatComments > 0)
+        MentalHealthActivityItem(
+          type: 'secretChatComment',
+          label: 'Replied in Secret Chat',
+          occurredAt: DateTime(2026, 7, 7, 10, 30),
+        ),
+    ],
+  );
 }

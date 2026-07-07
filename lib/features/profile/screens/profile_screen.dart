@@ -54,23 +54,36 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_requestedProfile || widget.data != null) return;
+    if (widget.data != null) return;
 
     final authProvider = _authProviderOrNull(context);
     final userId = authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    if (userId == null) return;
+
     final userProvider = context.read<UserProvider>();
-    if (userId != null && userProvider.user == null) {
-      _requestedProfile = true;
-      userProvider.loadProfile(userId);
-    }
-    if (userId != null && !_requestedReport) {
-      _requestedReport = true;
-      final reportProvider = _reportProviderOrNull(context);
-      reportProvider?.loadLatestReport(userId).then((_) {
-        if (!mounted) return;
-        reportProvider.ensureWeeklyPlaceholder(userId);
-      });
-    }
+    final shouldLoadProfile = userProvider.user == null && !_requestedProfile;
+    final shouldLoadReport = !_requestedReport;
+
+    if (!shouldLoadProfile && !shouldLoadReport) return;
+
+    if (shouldLoadProfile) _requestedProfile = true;
+    if (shouldLoadReport) _requestedReport = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      if (shouldLoadProfile) {
+        userProvider.loadProfile(userId);
+      }
+
+      if (shouldLoadReport) {
+        final reportProvider = _reportProviderOrNull(context);
+        reportProvider?.loadLatestReport(userId).then((_) {
+          if (!mounted) return;
+          reportProvider.ensureWeeklyPlaceholder(userId);
+        });
+      }
+    });
   }
 
   @override

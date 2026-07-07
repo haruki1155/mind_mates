@@ -8,6 +8,7 @@ import 'providers/assessment_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/breathing_provider.dart';
 import 'providers/insights_provider.dart';
+import 'providers/mental_health_activity_provider.dart';
 import 'providers/mind_aid_provider.dart';
 import 'providers/journal_provider.dart';
 import 'providers/mood_provider.dart';
@@ -19,6 +20,7 @@ import 'repositories/auth_repository.dart';
 import 'repositories/breathing_repository.dart';
 import 'repositories/insights_repository.dart';
 import 'repositories/journal_repository.dart';
+import 'repositories/mental_health_activity_repository.dart';
 import 'repositories/mind_aid_repository_screen.dart';
 import 'repositories/mood_repository.dart';
 import 'repositories/report_repository.dart';
@@ -43,6 +45,10 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => ReportProvider(ReportRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              MentalHealthActivityProvider(MentalHealthActivityRepository()),
         ),
         ChangeNotifierProvider(
           create: (_) => InsightsProvider(InsightsRepository()),
