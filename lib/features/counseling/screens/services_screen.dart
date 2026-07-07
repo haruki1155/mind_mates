@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../routes/route_names.dart';
+import 'pacc_counseling_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -137,8 +138,7 @@ class ServicesScreen extends StatelessWidget {
                   _AnimatedServicesSection(
                     delay: 420,
                     child: _SupportServicesCard(
-                      onContact: () =>
-                          _openBlankPage(context, 'Contact Counselor'),
+                      onContact: () => _openPaccCounseling(context),
                     ),
                   ),
                 ]),
@@ -154,6 +154,12 @@ class ServicesScreen extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => _BlankServicesPage(title: title)));
+  }
+
+  static void _openPaccCounseling(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PaccCounselingScreen()));
   }
 }
 
