@@ -573,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    if (title == 'Mindful breathing') {
+    if (title == 'Mindful breathing' || title == 'Breathing exercise') {
       Navigator.of(context).pushNamed(RouteNames.mindfulBreathing);
       return;
     }

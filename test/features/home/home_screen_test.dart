@@ -215,6 +215,56 @@ void main() {
     expect(find.text('Anger'), findsOneWidget);
   });
 
+  testWidgets('home Breathing exercise toolkit opens breathing screen', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<MoodProvider>(
+            create: (_) => MoodProvider(_FakeMoodRepository()),
+          ),
+          ChangeNotifierProvider<ReportProvider>(
+            create: (_) => ReportProvider(_FakeReportRepository()),
+          ),
+          ChangeNotifierProvider<InsightsProvider>(
+            create: (_) => InsightsProvider(InsightsRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AssessmentProvider(AssessmentRepository()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => BreathingProvider(_FakeBreathingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          routes: _testRoutes(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('Breathing exercise'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Breathing exercise'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('Breathing'), findsOneWidget);
+    expect(find.text('Breath to reduce'), findsOneWidget);
+  });
+
   testWidgets('home blocks main assessment when rolling limit is reached', (
     tester,
   ) async {
