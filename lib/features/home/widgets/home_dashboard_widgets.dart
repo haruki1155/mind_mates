@@ -304,6 +304,7 @@ class HomeWelcomeCard extends StatelessWidget {
     required this.onNotificationTap,
     required this.onStreakTap,
     required this.onMoodTap,
+    required this.actionLabel,
   });
 
   final HomeUserData user;
@@ -311,6 +312,7 @@ class HomeWelcomeCard extends StatelessWidget {
   final VoidCallback onNotificationTap;
   final VoidCallback onStreakTap;
   final VoidCallback onMoodTap;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -374,11 +376,7 @@ class HomeWelcomeCard extends StatelessWidget {
           const SizedBox(height: 14),
           _StreakCard(data: streak, onTap: onStreakTap),
           const SizedBox(height: 14),
-          HomeWideButton(
-            label: 'Log your mood',
-            icon: Icons.add,
-            onTap: onMoodTap,
-          ),
+          HomeWideButton(label: actionLabel, icon: Icons.add, onTap: onMoodTap),
         ],
       ),
     );
@@ -546,7 +544,7 @@ class HomePaccServicesSection extends StatelessWidget {
             return GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: services.length,
+              itemCount: services.length > 2 ? 2 : services.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 mainAxisSpacing: 12,
@@ -564,7 +562,10 @@ class HomePaccServicesSection extends StatelessWidget {
           },
         ),
         const SizedBox(height: 16),
-        HomeOutlinedButton(label: 'View all 7 PACC services', onTap: onViewAll),
+        HomeOutlinedButton(
+          label: 'View all ${services.length} PACC services',
+          onTap: onViewAll,
+        ),
       ],
     );
   }

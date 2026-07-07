@@ -116,6 +116,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               _openPlaceholder('Notifications'),
                           onStreakTap: () => _openPlaceholder('Streak Details'),
                           onMoodTap: _openLogMood,
+                          actionLabel:
+                              (context.watch<MoodProvider>().hasCheckedInToday)
+                              ? 'View today’s mood'
+                              : 'Log your mood',
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -189,8 +193,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final latestReport = _watchProviderOrNull<ReportProvider>(
       context,
     )?.latestReport;
-    final moods =
-        _watchProviderOrNull<MoodProvider>(context)?.moods ?? const [];
+    final moodProvider = _watchProviderOrNull<MoodProvider>(context);
+    final moods = moodProvider?.moods ?? const [];
 
     final backendActivityDates =
         user?.activeDateKeys

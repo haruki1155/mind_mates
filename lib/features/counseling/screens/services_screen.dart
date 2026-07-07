@@ -12,7 +12,7 @@ class ServicesScreen extends StatelessWidget {
       title: 'Information Services',
       subtitle: 'Educational content, resources, and mental health guidance',
       description:
-          'Information Services provide students and staff with educational, occupational, and personal guidance. This includes mental health awareness materials, self-help resources, wellness tips, and access to evidence-based information about mental health conditions and treatments.',
+          'Information Services provide students and staff with educational content, resources, and mental health guidance. This includes mental health awareness materials, self-help resources, wellness tips, and access to evidence‑based information about mental health conditions and treatments.',
       icon: Icons.menu_book_rounded,
       headerColor: Color(0xFFFFCE3C),
       features: [
@@ -25,22 +25,22 @@ class ServicesScreen extends StatelessWidget {
       title: 'Individual Inventory Services',
       subtitle: 'Collect and organize student data, abilities, and concerns',
       description:
-          'Individual Inventory Services help collect and organize data regarding students abilities, interests, and concerns. This includes maintaining comprehensive profiles, tracking progress over time, and organizing personal information to support effective counseling interventions.',
+          'Individual Inventory Services collect and organize data about students\' abilities, interests, and concerns. We maintain comprehensive profiles, track progress over time, and organize personal information to support tailored counseling interventions.',
       icon: Icons.assignment_outlined,
-      headerColor: Color(0xFFB8BECD),
+      headerColor: Color(0xFFECEFF3),
       features: [
-        'Student profiles and background data',
-        'Progress monitoring records',
-        'Organized support information',
+        'Student profile management',
+        'Personal information collection',
+        'Interest and abilities assessment',
       ],
     ),
     _ServiceItemData(
       title: 'Counseling Services',
       subtitle: 'Professional mental health support and guidance',
       description:
-          'Counseling Services provide professional support for personal and mental health concerns. Students and staff can book appointments with licensed counselors, receive one-on-one support, and access crisis intervention when needed.',
+          'Counseling Services offer professional mental health support. Students and staff can book appointments with licensed counselors, receive one‑on‑one counseling, and access crisis intervention and short‑term support.',
       icon: Icons.groups_2_outlined,
-      headerColor: Color(0xFFB8BECD),
+      headerColor: Color(0xFFBEE3F5),
       features: [
         'One-on-one counseling sessions',
         'Crisis intervention support',
@@ -51,24 +51,24 @@ class ServicesScreen extends StatelessWidget {
       title: 'Career Guidance and Placement Services',
       subtitle: 'Assist students in making informed career decisions',
       description:
-          'Career Guidance and Placement Services assist students in making informed career decisions and connecting them with opportunities. This includes career assessments, guidance on academic paths, job placement support, and professional development resources.',
+          'Career Guidance and Placement Services help students make informed career choices and connect with opportunities. We provide career assessments, academic and career path guidance, employer connections, and professional development resources.',
       icon: Icons.track_changes_outlined,
-      headerColor: Color(0xFFDAB3AE),
+      headerColor: Color(0xFFF3C7C7),
       features: [
         'Career interest assessments',
-        'Academic path guidance',
-        'Job placement assistance',
+        'Academic and career path guidance',
+        'Job placement and employer connections',
       ],
     ),
     _ServiceItemData(
       title: 'Referral Services',
       subtitle: 'Connect individuals with external specialists',
       description:
-          'Referral Services connect individuals with external specialists or agencies when necessary. This includes referrals to psychiatrists for medication management, specialized therapists, medical professionals, and community mental health resources when cases require expertise beyond PACC capabilities.',
+          'Referral Services connect individuals with external specialists and partner organizations when additional expertise is needed. This includes referrals to psychiatrists, specialized therapists, and medical professionals.',
       icon: Icons.handshake_outlined,
       headerColor: Color(0xFF86B995),
       features: [
-        'Psychiatric referrals',
+        'Psychiatric referrals (medication management)',
         'Specialized therapy referrals',
         'Medical professional connections',
       ],
@@ -77,13 +77,13 @@ class ServicesScreen extends StatelessWidget {
       title: 'Follow-up Services',
       subtitle: 'Monitor student progress after interventions',
       description:
-          'Follow-up Services monitor students progress after interventions, ensuring continued support and tracking improvements over time. This includes mood tracking, progress check-ins, reassessments, and adjustments to treatment plans as needed.',
+          'Follow-up Services monitor progress after interventions to ensure ongoing support. Services include mood tracking, regular progress check‑ins, reassessments, and adjustments to care plans as needed.',
       icon: Icons.track_changes_outlined,
-      headerColor: Color(0xFFDAB3AE),
+      headerColor: Color(0xFFF3D6D6),
       features: [
         'Progress check-ins',
-        'Academic path guidance',
-        'Job placement assistance',
+        'Reassessments and treatment adjustments',
+        'Mood tracking and ongoing support',
       ],
     ),
   ];
@@ -363,7 +363,7 @@ class _SupportServicesCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('PAACC support services', style: _ServicesText.supportTitle),
+        const Text('PACC support services', style: _ServicesText.supportTitle),
         const SizedBox(height: 12),
         Container(
           width: double.infinity,
