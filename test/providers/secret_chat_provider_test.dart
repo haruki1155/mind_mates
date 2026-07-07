@@ -45,9 +45,35 @@ void main() {
     expect(provider.posts.single.commentCount, 1);
     expect(repository.comments.single.message, contains('support'));
   });
+
+  test('unavailable thread exposes friendly comment error', () async {
+    final repository = _FakeSecretChatRepository(
+      commentError: const SecretChatThreadUnavailableException(),
+    );
+    final provider = SecretChatProvider(repository);
+    await provider.loadPosts();
+
+    await expectLater(
+      provider.addComment(
+        postId: 'post_1',
+        message: 'I feel this too. Support helps a lot.',
+      ),
+      throwsA(isA<SecretChatActionException>()),
+    );
+
+    expect(provider.posts.single.commentCount, 0);
+    expect(repository.comments, isEmpty);
+    expect(
+      provider.errorMessage,
+      'This thread is no longer available for replies.',
+    );
+  });
 }
 
 class _FakeSecretChatRepository extends SecretChatRepository {
+  _FakeSecretChatRepository({this.commentError});
+
+  final Object? commentError;
   final createdMessages = <String>[];
   final comments = <SecretChatComment>[];
 
@@ -96,6 +122,9 @@ class _FakeSecretChatRepository extends SecretChatRepository {
     required String message,
     List<String> safetyLabels = const [],
   }) async {
+    final error = commentError;
+    if (error != null) throw error;
+
     final comment = SecretChatComment(
       id: 'comment_1',
       postId: postId,

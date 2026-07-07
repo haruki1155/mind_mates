@@ -31,6 +31,7 @@ void main() {
       expect(report['latestAssessmentSource'], 'quickAssessment');
       expect(report['mentalStatus'], 'severe');
       expect(report['mentalStatusLabel'], 'Needs support');
+      expect(report['reportStatus'], 'draft');
       expect(report['weekStart'].toDate(), DateTime(2026, 6, 29));
       expect(report['weekEnd'].toDate(), DateTime(2026, 7, 5));
     });
@@ -157,6 +158,13 @@ void main() {
             {
               'authorId': 'user_1',
               'message': 'private anonymous post',
+              'moderationStatus': 'active',
+              'createdAt': DateTime(2026, 7, 2),
+            },
+            {
+              'authorId': 'user_1',
+              'message': 'private inactive post',
+              'moderationStatus': 'removed',
               'createdAt': DateTime(2026, 7, 2),
             },
           ],
@@ -164,6 +172,13 @@ void main() {
             {
               'authorId': 'user_1',
               'message': 'private anonymous comment',
+              'moderationStatus': 'active',
+              'createdAt': DateTime(2026, 7, 2),
+            },
+            {
+              'authorId': 'user_1',
+              'message': 'private inactive comment',
+              'moderationStatus': 'hidden',
               'createdAt': DateTime(2026, 7, 2),
             },
           ],
@@ -220,7 +235,11 @@ void main() {
         ],
         activities: [_activity('2026-07-02'), _activity('2026-07-03')],
         secretChatPosts: [
-          {'authorId': 'user_1', 'createdAt': DateTime(2026, 7, 2)},
+          {
+            'authorId': 'user_1',
+            'moderationStatus': 'active',
+            'createdAt': DateTime(2026, 7, 2),
+          },
         ],
       );
       final repository = ReportRepository(dataSource: dataSource);

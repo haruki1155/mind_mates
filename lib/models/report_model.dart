@@ -7,6 +7,7 @@ class ReportModel {
     this.userId,
     this.title = 'Mental Health Summary',
     this.description = "This week's positive moods",
+    this.reportStatus = 'final',
     this.weekStart,
     this.weekEnd,
     this.moodCheckInCount = 0,
@@ -45,6 +46,7 @@ class ReportModel {
   final String? userId;
   final String title;
   final String description;
+  final String reportStatus;
   final DateTime? weekStart;
   final DateTime? weekEnd;
   final int moodCheckInCount;
@@ -78,15 +80,17 @@ class ReportModel {
   final bool hasEnoughData;
 
   factory ReportModel.fromJson(Map<String, dynamic> json, {String? id}) {
+    final weekEnd = dateTimeFromFirestore(json['weekEnd']);
     return ReportModel(
       id: (json['id'] ?? id ?? '').toString(),
       userId: json['userId']?.toString(),
       title: (json['title'] ?? 'Mental Health Summary').toString(),
       description: (json['description'] ?? "This week's positive moods")
           .toString(),
+      reportStatus: _statusFromJson(json['reportStatus'], weekEnd: weekEnd),
       generatedAt: dateTimeFromFirestoreOrNow(json['generatedAt']),
       weekStart: dateTimeFromFirestore(json['weekStart']),
-      weekEnd: dateTimeFromFirestore(json['weekEnd']),
+      weekEnd: weekEnd,
       moodCheckInCount: intFromFirestore(json['moodCheckInCount']),
       averageMoodLevel: _doubleOrNull(json['averageMoodLevel']),
       latestMoodLevel: _intOrNull(json['latestMoodLevel']),
@@ -138,6 +142,7 @@ class ReportModel {
       'userId': userId ?? this.userId,
       'title': title,
       'description': description,
+      'reportStatus': reportStatus,
       'generatedAt': generatedAt,
       'weekStart': weekStart,
       'weekEnd': weekEnd,
@@ -177,6 +182,53 @@ class ReportModel {
     final average = averageMoodLevel;
     if (average == null) return '-';
     return average.toStringAsFixed(1);
+  }
+
+  bool get isFinalReport {
+    if (reportStatus == 'final') return true;
+    final end = weekEnd;
+    if (end == null) return false;
+    final today = DateTime.now();
+    final currentDay = DateTime(today.year, today.month, today.day);
+    final endDay = DateTime(end.year, end.month, end.day);
+    return currentDay.isAfter(endDay);
+  }
+
+  bool get isDraftReport => !isFinalReport;
+
+  String get weekDateRangeLabel {
+    final start = weekStart;
+    final end = weekEnd;
+    if (start == null || end == null) return '';
+    return '${_shortDate(start)} - ${_shortDate(end)}';
+  }
+
+  static String _shortDate(DateTime value) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[value.month - 1]} ${value.day}, ${value.year}';
+  }
+
+  static String _statusFromJson(Object? value, {DateTime? weekEnd}) {
+    final status = value?.toString().trim().toLowerCase();
+    if (status == 'draft' || status == 'final') return status!;
+    if (weekEnd == null) return 'final';
+    final today = DateTime.now();
+    final currentDay = DateTime(today.year, today.month, today.day);
+    final endDay = DateTime(weekEnd.year, weekEnd.month, weekEnd.day);
+    return currentDay.isAfter(endDay) ? 'final' : 'draft';
   }
 
   static String? _stringOrNull(Object? value) {

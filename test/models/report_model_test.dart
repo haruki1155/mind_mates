@@ -9,7 +9,10 @@ void main() {
         'userId': 'user_1',
         'title': 'Mental Health Summary',
         'description': 'Latest assessment shows moderate concern.',
+        'reportStatus': 'final',
         'generatedAt': '2026-07-03T10:00:00.000',
+        'weekStart': '2026-06-29T00:00:00.000',
+        'weekEnd': '2026-07-05T00:00:00.000',
         'moodCheckInCount': 5,
         'averageMoodLevel': 3.4,
         'latestMoodLevel': 4,
@@ -43,6 +46,9 @@ void main() {
       expect(report.moodCheckInCount, 5);
       expect(report.averageMoodLevel, 3.4);
       expect(report.averageMoodLabel, '3.4');
+      expect(report.reportStatus, 'final');
+      expect(report.isFinalReport, isTrue);
+      expect(report.weekDateRangeLabel, 'Jun 29, 2026 - Jul 5, 2026');
       expect(report.latestMoodLevel, 4);
       expect(report.quickAssessmentScore, 62);
       expect(report.quickAssessmentStatus, 'moderate');
@@ -70,6 +76,26 @@ void main() {
       expect(report.mentalStatusSignal, 'watchful');
       expect(report.topConcernAreas, ['Sleep and Rest', 'Academic Stress']);
       expect(report.hasEnoughData, isTrue);
+    });
+
+    test('treats current-week reports as drafts when no status exists', () {
+      final now = DateTime.now();
+      final weekStart = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
+      final weekEnd = weekStart.add(const Duration(days: 6));
+
+      final report = ReportModel.fromJson({
+        'id': 'report_current',
+        'generatedAt': now.toIso8601String(),
+        'weekStart': weekStart.toIso8601String(),
+        'weekEnd': weekEnd.toIso8601String(),
+      });
+
+      expect(report.reportStatus, 'draft');
+      expect(report.isDraftReport, isTrue);
     });
   });
 }

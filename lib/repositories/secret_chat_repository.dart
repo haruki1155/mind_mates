@@ -14,6 +14,13 @@ class SecretChatAuthException implements Exception {
   String toString() => 'Please sign in to use Secret Chat.';
 }
 
+class SecretChatThreadUnavailableException implements Exception {
+  const SecretChatThreadUnavailableException();
+
+  @override
+  String toString() => 'This thread is no longer available for replies.';
+}
+
 class SecretChatRepository {
   SecretChatRepository({
     FirestoreService? firestoreService,
@@ -181,6 +188,12 @@ class SecretChatRepository {
         .doc();
 
     await _firestoreService.firestore.runTransaction((transaction) async {
+      final postSnapshot = await transaction.get(postRef);
+      final postData = postSnapshot.data();
+      if (!postSnapshot.exists || postData?['moderationStatus'] != 'active') {
+        throw const SecretChatThreadUnavailableException();
+      }
+
       transaction.set(commentRef, {
         'postId': postId,
         'authorId': uid,

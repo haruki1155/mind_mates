@@ -163,6 +163,7 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
     final validation = _validator.validateComment(message);
     if (!validation.isAllowed) {
       setState(() => _validation = validation);
+      _showReplyMessage(validation.message);
       return;
     }
 
@@ -174,18 +175,37 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
         _validation = null;
         _commentsFuture = widget.fetchComments(widget.post.id);
       });
+      _showReplyMessage('Reply posted anonymously.');
     } on SecretChatValidationException catch (error) {
       setState(() => _validation = error.result);
+      _showReplyMessage(error.result.message);
+    } on SecretChatActionException catch (error) {
+      setState(
+        () => _validation = SecretChatValidationResult(
+          code: SecretChatValidationCode.unsafe,
+          message: error.message,
+        ),
+      );
+      _showReplyMessage(error.message);
     } catch (_) {
+      const message = 'Unable to send this reply. Please try again.';
       setState(
         () => _validation = const SecretChatValidationResult(
           code: SecretChatValidationCode.unsafe,
-          message: 'Unable to send this reply. Please try again.',
+          message: message,
         ),
       );
+      _showReplyMessage(message);
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+  }
+
+  void _showReplyMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

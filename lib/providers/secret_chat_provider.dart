@@ -138,11 +138,21 @@ class SecretChatProvider extends ChangeNotifier {
       throw SecretChatValidationException(validation);
     }
 
-    await repository.addComment(
-      postId: postId,
-      message: message,
-      safetyLabels: validation.labels,
-    );
+    try {
+      await repository.addComment(
+        postId: postId,
+        message: message,
+        safetyLabels: validation.labels,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Unable to send Secret Chat reply: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      final message = _friendlyError(error);
+      _errorMessage = message;
+      notifyListeners();
+      throw SecretChatActionException(message);
+    }
+
     _posts = [
       for (final post in _posts)
         post.id == postId
@@ -179,6 +189,9 @@ class SecretChatProvider extends ChangeNotifier {
     if (error is SecretChatValidationException) {
       return error.result.message;
     }
+    if (error is SecretChatThreadUnavailableException) {
+      return 'This thread is no longer available for replies.';
+    }
     return 'Secret Chat is unavailable right now. Please try again.';
   }
 }
@@ -190,4 +203,13 @@ class SecretChatValidationException implements Exception {
 
   @override
   String toString() => result.message;
+}
+
+class SecretChatActionException implements Exception {
+  const SecretChatActionException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

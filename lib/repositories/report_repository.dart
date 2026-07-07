@@ -158,6 +158,7 @@ class FirestoreReportRepositoryDataSource
       dateField: 'createdAt',
       since: since,
       before: before,
+      extraEquals: {'moderationStatus': 'active'},
     );
   }
 
@@ -174,6 +175,7 @@ class FirestoreReportRepositoryDataSource
       dateField: 'createdAt',
       since: since,
       before: before,
+      extraEquals: {'moderationStatus': 'active'},
     );
   }
 
@@ -376,6 +378,7 @@ class ReportRepository {
         secretChatSummary: secretChatSummary,
         mentalStatusLabel: mentalStatus.label,
       ),
+      'reportStatus': 'draft',
       'generatedAt': FieldValue.serverTimestamp(),
       'weekStart': Timestamp.fromDate(weekStart),
       'weekEnd': Timestamp.fromDate(weekEnd),
@@ -563,15 +566,21 @@ class ReportRepository {
       before: before,
     );
 
+    final activePosts = posts.where(_isActiveSecretChatContent);
+    final activeComments = comments.where(_isActiveSecretChatContent);
     final interactionCount = interactions.where((data) {
       return data['liked'] == true || data['saved'] == true;
     }).length;
 
     return _SecretChatSummary(
-      postCount: posts.length,
-      commentCount: comments.length,
+      postCount: activePosts.length,
+      commentCount: activeComments.length,
       interactionCount: interactionCount,
     );
+  }
+
+  bool _isActiveSecretChatContent(Map<String, dynamic> data) {
+    return data['moderationStatus']?.toString().trim() == 'active';
   }
 
   Future<_BreathingSummary> _fetchBreathingSummary({

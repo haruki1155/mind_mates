@@ -23,7 +23,9 @@ class ReportProvider extends ChangeNotifier {
 
     try {
       _latestReport = await _repository.fetchLatestReport(userId);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Unable to load mental health summary: $error');
+      debugPrintStack(stackTrace: stackTrace);
       _errorMessage = 'Unable to load mental health summary.';
     } finally {
       _isLoading = false;
@@ -37,7 +39,9 @@ class ReportProvider extends ChangeNotifier {
     try {
       await _repository.createPlaceholderWeeklyReport(userId);
       await loadLatestReport(userId);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Unable to prepare mental health summary: $error');
+      debugPrintStack(stackTrace: stackTrace);
       _errorMessage = 'Unable to prepare mental health summary.';
       notifyListeners();
     }
@@ -51,7 +55,9 @@ class ReportProvider extends ChangeNotifier {
     try {
       await _repository.generateWeeklyReport(userId);
       _latestReport = await _repository.fetchLatestReport(userId);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Unable to refresh mental health summary: $error');
+      debugPrintStack(stackTrace: stackTrace);
       _errorMessage = 'Unable to refresh mental health summary.';
     } finally {
       _isLoading = false;
