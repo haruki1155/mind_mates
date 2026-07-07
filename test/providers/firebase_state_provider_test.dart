@@ -27,6 +27,31 @@ void main() {
       expect(provider.moods.first.level, 4);
       expect(repository.createdUserId, 'user_1');
     });
+
+    test('tracks daily mood state after a successful check-in', () async {
+      final repository = _FakeMoodRepository();
+      final provider = MoodProvider(repository);
+      final now = DateTime(2026, 7, 7, 12);
+
+      await provider.loadTodayMood('user_1', now: now);
+
+      expect(provider.hasCheckedInToday, isFalse);
+      expect(provider.todayMood, isNull);
+
+      final success = await provider.logDailyMood(
+        userId: 'user_1',
+        level: 3,
+        label: 'Okay',
+        note: 'Steady day',
+        now: now,
+      );
+
+      expect(success, isTrue);
+      expect(provider.hasCheckedInToday, isTrue);
+      expect(provider.todayMood?.level, 3);
+      expect(provider.dailySaveResult?.created, isTrue);
+      expect(repository.saveCalls, 1);
+    });
   });
 
   group('JournalProvider', () {
@@ -93,6 +118,7 @@ void main() {
 
 class _FakeMoodRepository extends MoodRepository {
   String? createdUserId;
+  int saveCalls = 0;
 
   @override
   Future<String> createMood({
@@ -103,6 +129,33 @@ class _FakeMoodRepository extends MoodRepository {
   }) async {
     createdUserId = userId;
     return 'mood_1';
+  }
+
+  @override
+  Future<MoodModel?> fetchTodayMood(String userId, {DateTime? now}) async {
+    return null;
+  }
+
+  @override
+  Future<DailyMoodSaveResult> saveDailyMood({
+    required String userId,
+    required int level,
+    String? label,
+    String? note,
+    DateTime? now,
+  }) async {
+    saveCalls += 1;
+    return DailyMoodSaveResult(
+      mood: MoodModel(
+        id: 'daily_user_1_20260707',
+        userId: userId,
+        level: level,
+        label: label,
+        note: note,
+        createdAt: now ?? DateTime(2026, 7, 7, 12),
+      ),
+      created: true,
+    );
   }
 
   @override

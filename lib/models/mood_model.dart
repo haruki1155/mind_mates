@@ -8,6 +8,8 @@ class MoodModel {
     this.userId,
     this.label,
     this.note,
+    this.dateKey,
+    this.timezone,
   });
 
   final String id;
@@ -16,6 +18,8 @@ class MoodModel {
   final String? userId;
   final String? label;
   final String? note;
+  final String? dateKey;
+  final String? timezone;
 
   factory MoodModel.fromJson(Map<String, dynamic> json, {String? id}) {
     return MoodModel(
@@ -24,6 +28,8 @@ class MoodModel {
       level: intFromFirestore(json['level']),
       label: json['label']?.toString(),
       note: json['note']?.toString(),
+      dateKey: json['dateKey']?.toString(),
+      timezone: json['timezone']?.toString(),
       createdAt: dateTimeFromFirestoreOrNow(json['createdAt']),
     );
   }
@@ -34,6 +40,8 @@ class MoodModel {
       'level': level,
       'label': label ?? '',
       'note': note ?? '',
+      'dateKey': dateKey ?? '',
+      'timezone': timezone ?? '',
       'createdAt': createdAt,
     };
   }

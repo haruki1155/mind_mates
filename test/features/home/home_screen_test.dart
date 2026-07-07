@@ -349,6 +349,11 @@ class _FakeMoodRepository extends MoodRepository {
   }
 
   @override
+  Future<MoodModel?> fetchTodayMood(String userId, {DateTime? now}) async {
+    return null;
+  }
+
+  @override
   Future<List<MoodModel>> fetchRecentMoods(String userId, {int limit = 14}) {
     return Future.value(const []);
   }

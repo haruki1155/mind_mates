@@ -49,10 +49,11 @@ class _MentalHealthInsightsScreenState
     final data = insightsProvider?.data;
     final visibleSections = _filteredSections(data?.sections ?? const []);
     final hasSearchQuery = _searchQuery.trim().isNotEmpty;
-    final moods =
-        _watchProviderOrNull<MoodProvider>(context)?.moods ?? const [];
+    final moodProvider = _watchProviderOrNull<MoodProvider>(context);
+    final moods = moodProvider?.moods ?? const [];
     final report = _watchProviderOrNull<ReportProvider>(context)?.latestReport;
     final metrics = InsightMetricsSummary.from(moods: moods, report: report);
+    final hasCheckedInToday = moodProvider?.hasCheckedInToday == true;
 
     return Scaffold(
       backgroundColor: _InsightsPalette.background,
@@ -81,6 +82,9 @@ class _MentalHealthInsightsScreenState
                       _WeeklyGlanceCard(
                         metrics: metrics,
                         onLogMoodTap: _openLogMood,
+                        actionLabel: hasCheckedInToday
+                            ? 'View today’s mood'
+                            : 'Log mood ->',
                       ),
                       const SizedBox(height: 24),
                       if (insightsProvider?.isLoading ?? false)
@@ -489,10 +493,15 @@ class _CategoryTile extends StatelessWidget {
 }
 
 class _WeeklyGlanceCard extends StatelessWidget {
-  const _WeeklyGlanceCard({required this.metrics, required this.onLogMoodTap});
+  const _WeeklyGlanceCard({
+    required this.metrics,
+    required this.onLogMoodTap,
+    required this.actionLabel,
+  });
 
   final InsightMetricsSummary metrics;
   final VoidCallback onLogMoodTap;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -535,9 +544,12 @@ class _WeeklyGlanceCard extends StatelessWidget {
                   minimumSize: const Size(72, 30),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'Log mood ->',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                child: Text(
+                  actionLabel,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],

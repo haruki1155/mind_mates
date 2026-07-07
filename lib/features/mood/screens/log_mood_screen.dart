@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../models/mood_model.dart';
+import '../../../repositories/mood_repository.dart';
 
 class LogMoodScreen extends StatefulWidget {
   const LogMoodScreen({super.key});
@@ -15,16 +18,44 @@ class LogMoodScreen extends StatefulWidget {
   State<LogMoodScreen> createState() => _LogMoodScreenState();
 }
 
-class _LogMoodScreenState extends State<LogMoodScreen> {
+class _LogMoodScreenState extends State<LogMoodScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _noteController = TextEditingController();
   _MoodChoice? _selectedMood;
   int _noteLength = 0;
   bool _isSaving = false;
+  bool _isLoadingToday = false;
+  String? _todayError;
+  MoodModel? _todayMood;
+  String? _loadedUserId;
+  Timer? _midnightTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _noteController.addListener(_handleNoteChanged);
+    _scheduleMidnightRefresh();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userId = _currentUserId();
+    if (userId == null || userId.isEmpty || _loadedUserId == userId) return;
+    _loadedUserId = userId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadTodayMood(userId);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final userId = _currentUserId();
+      if (userId != null && userId.isNotEmpty) _loadTodayMood(userId);
+      _scheduleMidnightRefresh();
+    }
   }
 
   @override
@@ -32,6 +63,8 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
     _noteController
       ..removeListener(_handleNoteChanged)
       ..dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightTimer?.cancel();
     super.dispose();
   }
 
@@ -48,7 +81,9 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            const SliverToBoxAdapter(child: _MoodLogHeader()),
+            SliverToBoxAdapter(
+              child: _MoodLogHeader(showingResult: _todayMood != null),
+            ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 16,
@@ -59,31 +94,7 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
               sliver: SliverToBoxAdapter(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _MoodLogIntro(),
-                        const SizedBox(height: 16),
-                        _MoodChoiceGrid(
-                          selectedMood: _selectedMood,
-                          isEnabled: !_isSaving,
-                          onSelected: (mood) =>
-                              setState(() => _selectedMood = mood),
-                        ),
-                        const SizedBox(height: 18),
-                        _ThoughtsBox(
-                          controller: _noteController,
-                          characterCount: _noteLength,
-                          isEnabled: !_isSaving,
-                        ),
-                        const SizedBox(height: 18),
-                        _SaveMoodButton(
-                          isEnabled: _selectedMood != null && !_isSaving,
-                          isSaving: _isSaving,
-                          onPressed: _saveMood,
-                        ),
-                      ],
-                    );
+                    return _buildContent();
                   },
                 ),
               ),
@@ -92,6 +103,70 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildContent() {
+    if (_isLoadingToday) {
+      return const SizedBox(
+        height: 360,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_todayError != null) {
+      return _MoodLoadError(
+        message: _todayError!,
+        onRetry: () {
+          final userId = _currentUserId();
+          if (userId != null) _loadTodayMood(userId);
+        },
+      );
+    }
+    if (_todayMood != null) {
+      return _DailyMoodResult(
+        mood: _todayMood!,
+        currentStreak: _readProviderOrNull<UserProvider>()?.user?.dayStreak,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _MoodLogIntro(),
+        const SizedBox(height: 16),
+        _MoodChoiceGrid(
+          selectedMood: _selectedMood,
+          isEnabled: !_isSaving,
+          onSelected: (mood) => setState(() => _selectedMood = mood),
+        ),
+        const SizedBox(height: 18),
+        _ThoughtsBox(
+          controller: _noteController,
+          characterCount: _noteLength,
+          isEnabled: !_isSaving,
+        ),
+        const SizedBox(height: 18),
+        _SaveMoodButton(
+          isEnabled: _selectedMood != null && !_isSaving,
+          isSaving: _isSaving,
+          onPressed: _saveMood,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _loadTodayMood(String userId) async {
+    final provider = _readProviderOrNull<MoodProvider>();
+    if (provider == null) return;
+    setState(() {
+      _isLoadingToday = true;
+      _todayError = null;
+    });
+    await provider.loadTodayMood(userId);
+    if (!mounted) return;
+    setState(() {
+      _isLoadingToday = false;
+      _todayMood = provider.todayMood;
+      _todayError = provider.errorMessage;
+    });
   }
 
   Future<void> _saveMood() async {
@@ -112,7 +187,7 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
 
     setState(() => _isSaving = true);
 
-    final success = await moodProvider.logMood(
+    final success = await moodProvider.logDailyMood(
       userId: userId,
       level: mood.level,
       label: mood.label,
@@ -137,13 +212,38 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
     }
 
     if (!mounted) return;
-    setState(() => _isSaving = false);
+    setState(() {
+      _isSaving = false;
+      _todayMood = moodProvider.todayMood;
+      _selectedMood = null;
+      _noteController.clear();
+      _noteLength = 0;
+      _todayError = null;
+    });
     _showSnack(
       reportRefreshed
           ? 'Mood check-in saved.'
           : 'Mood saved. Summary will update later.',
     );
-    Navigator.of(context).pop();
+  }
+
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final manila = MoodRepository.manilaWallClock(now);
+    final nextMidnight = DateTime(manila.year, manila.month, manila.day + 1);
+    final delay = nextMidnight.difference(manila) + const Duration(seconds: 1);
+    _midnightTimer = Timer(delay, () {
+      if (!mounted) return;
+      setState(() {
+        _todayMood = null;
+        _selectedMood = null;
+        _noteController.clear();
+      });
+      final userId = _currentUserId();
+      if (userId != null) _loadTodayMood(userId);
+      _scheduleMidnightRefresh();
+    });
   }
 
   String? _currentUserId() {
@@ -173,8 +273,181 @@ class _LogMoodScreenState extends State<LogMoodScreen> {
   }
 }
 
+class _MoodLoadError extends StatelessWidget {
+  const _MoodLoadError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: MoodLogPalette.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MoodLogPalette.softBorder),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 38),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyMoodResult extends StatelessWidget {
+  const _DailyMoodResult({required this.mood, required this.currentStreak});
+
+  final MoodModel mood;
+  final int? currentStreak;
+
+  @override
+  Widget build(BuildContext context) {
+    final choice = _choiceFor(mood);
+    final note = (mood.note ?? '').trim();
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
+          decoration: BoxDecoration(
+            color: MoodLogPalette.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: MoodLogPalette.softBorder),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 16,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _MoodEmojiBadge(mood: choice, selected: true, size: 96),
+              const SizedBox(height: 18),
+              const Text(
+                "Today's check-in is complete",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: MoodLogPalette.ink,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                mood.label?.trim().isNotEmpty == true
+                    ? mood.label!.trim()
+                    : choice.label,
+                style: TextStyle(
+                  color: choice.accentColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Saved at ${_timeLabel(mood.createdAt)}',
+                style: const TextStyle(
+                  color: MoodLogPalette.bodyText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (currentStreak != null) ...[
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.local_fire_department_rounded,
+                      color: MoodLogPalette.goldText,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$currentStreak-day activity streak',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (note.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: MoodLogPalette.fieldFill,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: MoodLogPalette.softBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your private note',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                Text(note, style: const TextStyle(height: 1.45)),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        const Text(
+          'You can check in again tomorrow. This is a wellness record, not a diagnosis.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: MoodLogPalette.bodyText,
+            fontSize: 12,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static _MoodChoice _choiceFor(MoodModel mood) {
+    for (final choice in _moodChoices) {
+      if (choice.label.toLowerCase() == (mood.label ?? '').toLowerCase()) {
+        return choice;
+      }
+    }
+    return _moodChoices.reduce(
+      (current, choice) =>
+          (choice.level - mood.level).abs() < (current.level - mood.level).abs()
+          ? choice
+          : current,
+    );
+  }
+
+  static String _timeLabel(DateTime instant) {
+    final time = MoodRepository.manilaWallClock(instant);
+    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${time.hour >= 12 ? 'PM' : 'AM'}';
+  }
+}
+
 class _MoodLogHeader extends StatelessWidget {
-  const _MoodLogHeader();
+  const _MoodLogHeader({required this.showingResult});
+
+  final bool showingResult;
 
   @override
   Widget build(BuildContext context) {
@@ -202,11 +475,11 @@ class _MoodLogHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Log your mood',
+                  Text(
+                    showingResult ? "Today's mood" : 'Log your mood',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: MoodLogPalette.ink,
                       fontSize: 20,
                       height: 1.1,
@@ -249,7 +522,7 @@ class _MoodLogHeader extends StatelessWidget {
   }
 
   static String _todayLabel() {
-    final now = DateTime.now();
+    final now = MoodRepository.manilaWallClock(DateTime.now());
     const weekdays = [
       'Monday',
       'Tuesday',

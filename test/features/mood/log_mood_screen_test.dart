@@ -95,7 +95,9 @@ void main() {
     expect(userRepository.loadedUid, 'user_1');
     expect(moodRepository.fetchedUserId, 'user_1');
     expect(reportRepository.generatedForUserId, 'user_1');
-    expect(find.byType(LogMoodScreen), findsNothing);
+    expect(find.byType(LogMoodScreen), findsOneWidget);
+    expect(find.text("Today's check-in is complete"), findsOneWidget);
+    expect(find.text('Exams feel heavy.'), findsOneWidget);
   });
 
   testWidgets('save failure keeps screen visible and shows error', (
@@ -215,6 +217,37 @@ class _FakeMoodRepository extends MoodRepository {
     createdLabel = label;
     createdNote = note;
     return 'mood_1';
+  }
+
+  @override
+  Future<MoodModel?> fetchTodayMood(String userId, {DateTime? now}) async {
+    return null;
+  }
+
+  @override
+  Future<DailyMoodSaveResult> saveDailyMood({
+    required String userId,
+    required int level,
+    String? label,
+    String? note,
+    DateTime? now,
+  }) async {
+    if (throwsOnCreate) throw StateError('save failed');
+    createdUserId = userId;
+    createdLevel = level;
+    createdLabel = label;
+    createdNote = note;
+    return DailyMoodSaveResult(
+      mood: MoodModel(
+        id: 'daily_user_1_20260707',
+        userId: userId,
+        level: level,
+        label: label,
+        note: note,
+        createdAt: now ?? DateTime(2026, 7, 7, 12),
+      ),
+      created: true,
+    );
   }
 
   @override
