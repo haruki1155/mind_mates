@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../models/quick_assessment_models.dart';
 import '../widgets/quick_assessment_widgets.dart';
@@ -11,6 +12,14 @@ class QuickAssessmentRoleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      if (context.watch<UserProvider>().user?.quickAssessmentCompleted == true) {
+        return const _CompletedAssessmentRedirect();
+      }
+    } on ProviderNotFoundException {
+      // Standalone previews can render without authentication state.
+    }
+
     return QuickAssessmentScaffold(
       showBottomBubble: false,
       topClusters: const [
@@ -41,6 +50,34 @@ class QuickAssessmentRoleScreen extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+class _CompletedAssessmentRedirect extends StatefulWidget {
+  const _CompletedAssessmentRedirect();
+
+  @override
+  State<_CompletedAssessmentRedirect> createState() =>
+      _CompletedAssessmentRedirectState();
+}
+
+class _CompletedAssessmentRedirectState
+    extends State<_CompletedAssessmentRedirect> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        RouteNames.home,
+        (route) => false,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 

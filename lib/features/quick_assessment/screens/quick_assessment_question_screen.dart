@@ -121,7 +121,12 @@ class _QuestionPage extends StatelessWidget {
           padding: EdgeInsets.only(
             bottom: 48 + MediaQuery.paddingOf(context).bottom,
           ),
-          child: QuickNextButton(onPressed: () => _goNext(context)),
+          child: QuickNextButton(
+            onPressed: provider.isSavingQuickAssessment
+                ? null
+                : () => _goNext(context),
+            isLoading: provider.isSavingQuickAssessment,
+          ),
         ),
       ],
     );
@@ -151,8 +156,9 @@ class _QuestionPage extends StatelessWidget {
     provider.moveToNextQuestion();
 
     if (completed) {
-      await _saveQuickAssessment(context);
+      final saved = await _saveQuickAssessment(context);
       if (!context.mounted) return;
+      if (!saved) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
         RouteNames.quickAssessmentCategory,
         (route) => false,
@@ -160,31 +166,39 @@ class _QuestionPage extends StatelessWidget {
     }
   }
 
-  Future<void> _saveQuickAssessment(BuildContext context) async {
+  Future<bool> _saveQuickAssessment(BuildContext context) async {
     final userId = _currentUserId(context);
-    if (userId == null || userId.isEmpty) return;
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to save your assessment.')),
+      );
+      return false;
+    }
 
     try {
       final payload = await provider.saveQuickAssessmentForUser(userId);
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
 
       final userProvider = context.read<UserProvider>();
       if (payload != null) {
         await userProvider.markQuickAssessment(userId);
+        await userProvider.loadProfile(userId);
       }
       await _persistSelectedRole(userProvider);
+      return payload != null;
     } catch (error) {
       debugPrint('Quick assessment sync failed: $error');
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
             content: Text(
-              'Unable to sync your quick assessment right now. You can continue.',
+              'Unable to save your quick assessment. Please try again.',
             ),
           ),
         );
+      return false;
     }
   }
 

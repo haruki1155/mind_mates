@@ -22,6 +22,7 @@ class AssessmentProvider extends ChangeNotifier {
   List<StudentAssessmentQuestion> _studentQuestions = const [];
   final List<StudentAssessmentAnswer> _studentAnswers = [];
   StudentAssessmentResult? _studentResult;
+  bool _isSavingQuickAssessment = false;
 
   AssessmentRole? get selectedRole => _selectedRole;
   String get name => _name;
@@ -32,6 +33,7 @@ class AssessmentProvider extends ChangeNotifier {
   List<StudentAssessmentAnswer> get studentAnswers =>
       List.unmodifiable(_studentAnswers);
   StudentAssessmentResult? get studentResult => _studentResult;
+  bool get isSavingQuickAssessment => _isSavingQuickAssessment;
 
   List<QuickAssessmentQuestion> get questions =>
       QuickAssessmentQuestions.questions;
@@ -182,11 +184,25 @@ class AssessmentProvider extends ChangeNotifier {
     );
   }
 
-  Future<Map<String, Object>?> saveQuickAssessmentForUser(String userId) {
+  Future<Map<String, Object>?> saveQuickAssessmentForUser(String userId) async {
     final result = _quickResult;
-    if (result == null) return Future.value();
+    if (result == null || _isSavingQuickAssessment) return null;
 
-    return _repository.saveQuickAssessment(userId: userId, result: result);
+    _isSavingQuickAssessment = true;
+    notifyListeners();
+    try {
+      return await _repository.saveQuickAssessment(
+        userId: userId,
+        result: result,
+      );
+    } finally {
+      _isSavingQuickAssessment = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> ensureQuickAssessmentCompletion(String userId) {
+    return _repository.ensureQuickAssessmentCompletion(userId);
   }
 
   void startStudentAssessment() {

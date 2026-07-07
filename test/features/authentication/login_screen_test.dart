@@ -81,6 +81,8 @@ class _LoginHarness extends StatelessWidget {
         home: const LoginScreen(),
         routes: {
           RouteNames.onboarding: (_) =>
+              const Scaffold(body: Center(child: Text('onboarding target'))),
+          RouteNames.home: (_) =>
               const Scaffold(body: Center(child: Text('home target'))),
         },
       ),
@@ -118,4 +120,7 @@ class _FakeUserRepository extends UserRepository {
   }
 }
 
-class _FakeAssessmentRepository extends AssessmentRepository {}
+class _FakeAssessmentRepository extends AssessmentRepository {
+  @override
+  Future<bool> ensureQuickAssessmentCompletion(String userId) async => true;
+}

@@ -25,6 +25,7 @@ void main() {
       expect(user.sector, isNull);
       expect(user.dayStreak, 0);
       expect(user.createdAt, DateTime(2026, 6, 30, 8, 15));
+      expect(user.quickAssessmentCompleted, isFalse);
     });
 
     test('missing createdAt does not crash', () {
@@ -121,6 +122,21 @@ void main() {
       expect(user['department'], '');
       expect(user['course'], '');
       expect(user['role'], 'staff');
+    });
+
+    test('maps durable quick assessment completion fields', () {
+      final user = UserModel.fromJson({
+        'id': 'user_8',
+        'email': 'user@mindmate.local',
+        'quickAssessmentCompleted': true,
+        'quickAssessmentCompletedAt': '2026-07-07T09:30:00.000',
+      });
+
+      expect(user.quickAssessmentCompleted, isTrue);
+      expect(
+        user.quickAssessmentCompletedAt,
+        DateTime(2026, 7, 7, 9, 30),
+      );
     });
   });
 }

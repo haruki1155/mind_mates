@@ -1,5 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class FirestoreSetOperation {
+  const FirestoreSetOperation({
+    required this.collection,
+    required this.documentId,
+    required this.data,
+    this.merge = false,
+  });
+
+  final String collection;
+  final String documentId;
+  final Map<String, dynamic> data;
+  final bool merge;
+}
+
 class FirestoreService {
   FirestoreService({FirebaseFirestore? firestore}) {
     _firestore = firestore;
@@ -27,6 +41,23 @@ class FirestoreService {
         .collection(collection)
         .doc(documentId)
         .set(data, SetOptions(merge: merge));
+  }
+
+  Future<void> setDocumentsAtomically(
+    List<FirestoreSetOperation> operations,
+  ) async {
+    final batch = firestore.batch();
+    for (final operation in operations) {
+      final reference = firestore
+          .collection(operation.collection)
+          .doc(operation.documentId);
+      batch.set(
+        reference,
+        operation.data,
+        SetOptions(merge: operation.merge),
+      );
+    }
+    await batch.commit();
   }
 
   Future<Map<String, dynamic>?> getDocument(

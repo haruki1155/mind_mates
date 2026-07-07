@@ -4,8 +4,10 @@ import 'package:mind_mates/features/authentication/auth_flow_routes.dart';
 import 'package:mind_mates/features/splash/screens/splash_screen.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/auth_provider.dart';
+import 'package:mind_mates/providers/assessment_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/auth_repository.dart';
+import 'package:mind_mates/repositories/assessment_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/routes/route_names.dart';
 import 'package:mind_mates/services/auth/auth_service.dart';
@@ -49,17 +51,17 @@ void main() {
     expect(userRepository.loadedUid, 'user_1');
   });
 
-  test('post-auth destination opens onboarding when no assessment is pending', () {
+  test('post-auth destination opens onboarding before quick assessment', () {
     expect(
-      destinationAfterAuthentication(savedQuickAssessment: false),
+      destinationAfterAuthentication(hasCompletedQuickAssessment: false),
       RouteNames.onboarding,
     );
   });
 
-  test('post-auth destination opens onboarding even with pending assessment', () {
+  test('post-auth destination opens home after quick assessment', () {
     expect(
-      destinationAfterAuthentication(savedQuickAssessment: true),
-      RouteNames.onboarding,
+      destinationAfterAuthentication(hasCompletedQuickAssessment: true),
+      RouteNames.home,
     );
   });
 }
@@ -79,6 +81,9 @@ class _SplashHarness extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+        ChangeNotifierProvider<AssessmentProvider>(
+          create: (_) => AssessmentProvider(_FakeAssessmentRepository()),
+        ),
       ],
       child: MaterialApp(
         initialRoute: RouteNames.splash,
@@ -121,4 +126,9 @@ class _FakeUserRepository extends UserRepository {
     loadedUid = uid;
     return user;
   }
+}
+
+class _FakeAssessmentRepository extends AssessmentRepository {
+  @override
+  Future<bool> ensureQuickAssessmentCompletion(String userId) async => true;
 }

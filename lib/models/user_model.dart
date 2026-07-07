@@ -22,6 +22,8 @@ class UserModel {
     this.lastActiveAt,
     this.activeDateKeys = const [],
     this.avatarAssetName,
+    this.quickAssessmentCompleted = false,
+    this.quickAssessmentCompletedAt,
   });
 
   final String id;
@@ -42,6 +44,8 @@ class UserModel {
   final DateTime? lastActiveAt;
   final List<String> activeDateKeys;
   final String? avatarAssetName;
+  final bool quickAssessmentCompleted;
+  final DateTime? quickAssessmentCompletedAt;
 
   String get displayName {
     final parts =
@@ -84,6 +88,8 @@ class UserModel {
     DateTime? lastActiveAt,
     List<String>? activeDateKeys,
     String? avatarAssetName,
+    bool? quickAssessmentCompleted,
+    DateTime? quickAssessmentCompletedAt,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -104,6 +110,10 @@ class UserModel {
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       activeDateKeys: activeDateKeys ?? this.activeDateKeys,
       avatarAssetName: avatarAssetName ?? this.avatarAssetName,
+      quickAssessmentCompleted:
+          quickAssessmentCompleted ?? this.quickAssessmentCompleted,
+      quickAssessmentCompletedAt:
+          quickAssessmentCompletedAt ?? this.quickAssessmentCompletedAt,
     );
   }
 
@@ -127,6 +137,10 @@ class UserModel {
       lastActiveAt: _dateOrNull(json['lastActiveAt']),
       activeDateKeys: _stringList(json['activeDateKeys']),
       avatarAssetName: _stringOrNull(json['avatarAssetName']),
+      quickAssessmentCompleted: json['quickAssessmentCompleted'] == true,
+      quickAssessmentCompletedAt: _dateOrNull(
+        json['quickAssessmentCompletedAt'],
+      ),
     );
   }
 
@@ -150,6 +164,9 @@ class UserModel {
       'lastActiveAt': lastActiveAt?.toIso8601String(),
       'activeDateKeys': activeDateKeys,
       'avatarAssetName': avatarAssetName ?? '',
+      'quickAssessmentCompleted': quickAssessmentCompleted,
+      'quickAssessmentCompletedAt': quickAssessmentCompletedAt
+          ?.toIso8601String(),
     };
   }
 

@@ -85,6 +85,8 @@ class AuthRepository {
             'lastActivityDateKey': '',
             'activeDateKeys': <String>[],
             'avatarAssetName': '',
+            'quickAssessmentCompleted': false,
+            'quickAssessmentCompletedAt': null,
             'lastActiveAt': FieldValue.serverTimestamp(),
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),

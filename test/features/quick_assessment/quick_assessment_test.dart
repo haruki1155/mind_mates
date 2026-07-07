@@ -4,6 +4,7 @@ import 'package:mind_mates/features/quick_assessment/data/quick_assessment_quest
 import 'package:mind_mates/features/quick_assessment/models/quick_assessment_models.dart';
 import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_category_screen.dart';
 import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_question_screen.dart';
+import 'package:mind_mates/features/quick_assessment/screens/quick_assessment_role_screen.dart';
 import 'package:mind_mates/features/quick_assessment/services/quick_assessment_scoring.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
@@ -220,9 +221,44 @@ void main() {
         expect(payload['signalGeneratedAt'], isA<String>());
         expect(payload['responses'], isA<List<Object>>());
         expect(firestore.collection, 'assessments');
+        expect(firestore.createdDocumentId, 'quick_user_123');
         expect(firestore.createdDocument?['userId'], 'user_123');
       },
     );
+
+    test('repeated save keeps one deterministic quick assessment', () async {
+      final firestore = _FakeFirestoreService();
+      final repository = AssessmentRepository(firestoreService: firestore);
+      final provider = _readyProvider(repository: repository);
+
+      for (final question in QuickAssessmentQuestions.questions) {
+        provider.selectAnswer(question.options.first);
+        provider.moveToNextQuestion();
+      }
+
+      await provider.saveQuickAssessmentForUser('user_1');
+      await provider.saveQuickAssessmentForUser('user_1');
+
+      expect(firestore.atomicWriteCount, 1);
+      expect(firestore.createdDocumentId, 'quick_user_1');
+      expect(firestore.setDocumentData?['quickAssessmentCompleted'], isTrue);
+    });
+
+    test('legacy quick assessment backfills profile completion', () async {
+      final firestore = _FakeFirestoreService(
+        legacyDocuments: [
+          {'id': 'legacy_1', 'userId': 'user_1', 'type': 'quick'},
+        ],
+      );
+      final repository = AssessmentRepository(firestoreService: firestore);
+
+      final completed = await repository.ensureQuickAssessmentCompletion(
+        'user_1',
+      );
+
+      expect(completed, isTrue);
+      expect(firestore.setDocumentData?['quickAssessmentCompleted'], isTrue);
+    });
   });
 
   group('QuickAssessmentCategoryScreen', () {
@@ -233,10 +269,9 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       final firestore = _FakeFirestoreService();
-      final assessmentProvider =
-          _readyProvider(
-            repository: AssessmentRepository(firestoreService: firestore),
-          )..resetQuestions();
+      final assessmentProvider = _readyProvider(
+        repository: AssessmentRepository(firestoreService: firestore),
+      )..resetQuestions();
       final userProvider = UserProvider(_FakeUserRepository())
         ..setUser(
           const UserModel(
@@ -253,9 +288,8 @@ void main() {
               value: assessmentProvider,
             ),
             ChangeNotifierProvider<AuthProvider>(
-              create: (_) => AuthProvider(
-                _FakeAuthRepository(currentUserId: 'user_123'),
-              ),
+              create: (_) =>
+                  AuthProvider(_FakeAuthRepository(currentUserId: 'user_123')),
             ),
             ChangeNotifierProvider<UserProvider>.value(value: userProvider),
           ],
@@ -377,6 +411,38 @@ void main() {
       expect(find.text('student assessment target'), findsOneWidget);
     });
   });
+
+  testWidgets('completed user cannot reopen quick assessment entry', (
+    tester,
+  ) async {
+    final userProvider = UserProvider(_FakeUserRepository())
+      ..setUser(
+        const UserModel(
+          id: 'user_1',
+          email: 'user@mindmate.local',
+          quickAssessmentCompleted: true,
+        ),
+      );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+          ChangeNotifierProvider<AssessmentProvider>(
+            create: (_) => AssessmentProvider(AssessmentRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          routes: {RouteNames.home: (_) => const _RouteMarker('home target')},
+          home: const QuickAssessmentRoleScreen(),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('home target'), findsOneWidget);
+  });
 }
 
 AssessmentProvider _readyProvider({
@@ -391,9 +457,37 @@ AssessmentProvider _readyProvider({
 }
 
 class _FakeFirestoreService extends FirestoreService {
+  _FakeFirestoreService({this.legacyDocuments = const []});
+
   String? collection;
+  String? createdDocumentId;
   Map<String, dynamic>? createdDocument;
   Map<String, dynamic>? setDocumentData;
+  int atomicWriteCount = 0;
+  final List<Map<String, dynamic>> legacyDocuments;
+  final Map<String, Map<String, dynamic>> _documents = {};
+
+  @override
+  Future<Map<String, dynamic>?> getDocument(
+    String collection,
+    String documentId,
+  ) async => _documents['$collection/$documentId'];
+
+  @override
+  Future<List<Map<String, dynamic>>> getDocuments(
+    String collection, {
+    Map<String, Object?> whereEquals = const {},
+    String? orderBy,
+    bool descending = true,
+    int? limit,
+  }) async {
+    final matches = legacyDocuments.where((document) {
+      return whereEquals.entries.every(
+        (entry) => document[entry.key] == entry.value,
+      );
+    }).toList();
+    return limit == null ? matches : matches.take(limit).toList();
+  }
 
   @override
   Future<String> createDocument(
@@ -413,6 +507,26 @@ class _FakeFirestoreService extends FirestoreService {
     bool merge = false,
   }) async {
     setDocumentData = data;
+    _documents['$collection/$documentId'] = data;
+  }
+
+  @override
+  Future<void> setDocumentsAtomically(
+    List<FirestoreSetOperation> operations,
+  ) async {
+    atomicWriteCount += 1;
+    for (final operation in operations) {
+      _documents['${operation.collection}/${operation.documentId}'] =
+          operation.data;
+      if (operation.collection == 'assessments') {
+        collection = operation.collection;
+        createdDocumentId = operation.documentId;
+        createdDocument = operation.data;
+      }
+      if (operation.collection == 'users') {
+        setDocumentData = operation.data;
+      }
+    }
   }
 }
 

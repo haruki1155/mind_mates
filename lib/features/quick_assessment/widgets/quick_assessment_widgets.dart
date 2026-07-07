@@ -184,9 +184,14 @@ class QuickProgressHeader extends StatelessWidget {
 }
 
 class QuickNextButton extends StatelessWidget {
-  const QuickNextButton({super.key, required this.onPressed});
+  const QuickNextButton({
+    super.key,
+    required this.onPressed,
+    this.isLoading = false,
+  });
 
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -205,14 +210,20 @@ class QuickNextButton extends StatelessWidget {
           ),
           textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Next'),
-            SizedBox(width: 6),
-            Icon(Icons.chevron_right_rounded, size: 19),
-          ],
-        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Next'),
+                  SizedBox(width: 6),
+                  Icon(Icons.chevron_right_rounded, size: 19),
+                ],
+              ),
       ),
     );
   }

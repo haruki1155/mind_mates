@@ -61,6 +61,7 @@ class _LoginBodyState extends State<_LoginBody> {
 
     final authProvider = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
+    final assessmentProvider = context.read<AssessmentProvider>();
     final userId = await authProvider.signIn(
       schoolId: schoolId,
       password: password,
@@ -81,30 +82,35 @@ class _LoginBodyState extends State<_LoginBody> {
       return;
     }
 
-    final savedQuickAssessment = await _savePendingQuickAssessment(userId);
-    if (savedQuickAssessment) {
-      await userProvider.markQuickAssessment(userId);
-    }
-    await userProvider.loadProfile(userId);
-
-    if (!mounted) return;
-    final destination = destinationAfterAuthentication(
-      savedQuickAssessment: savedQuickAssessment,
-    );
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(destination, (route) => false);
-  }
-
-  Future<bool> _savePendingQuickAssessment(String userId) async {
     try {
-      final payload = await context
-          .read<AssessmentProvider>()
-          .saveQuickAssessmentForUser(userId);
-      return payload != null;
+      await userProvider.loadProfile(userId);
+      final hasCompletedQuickAssessment = await assessmentProvider
+          .ensureQuickAssessmentCompletion(userId);
+      if (hasCompletedQuickAssessment &&
+          userProvider.user?.quickAssessmentCompleted != true) {
+        await userProvider.loadProfile(userId);
+      }
+
+      if (!mounted) return;
+      final destination = destinationAfterAuthentication(
+        hasCompletedQuickAssessment: hasCompletedQuickAssessment,
+      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(destination, (route) => false);
     } catch (error) {
-      debugPrint('Quick assessment sync failed after login: $error');
-      return false;
+      debugPrint('Unable to verify quick assessment completion: $error');
+      await authProvider.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to verify your assessment status. Please try again.',
+            ),
+          ),
+        );
     }
   }
 

@@ -19,6 +19,16 @@ class AssessmentRepository {
     required String userId,
     required QuickAssessmentResult result,
   }) async {
+    final documentId = quickAssessmentDocumentId(userId);
+    final existing = await _firestoreService.getDocument(
+      FirestoreCollections.assessments,
+      documentId,
+    );
+    if (existing != null) {
+      await _markQuickAssessmentCompleted(userId);
+      return Map<String, Object>.from(existing);
+    }
+
     final payload = <String, Object>{
       'userId': userId,
       'type': 'quick',
@@ -26,12 +36,67 @@ class AssessmentRepository {
       'createdAt': FieldValue.serverTimestamp(),
     };
 
-    await _firestoreService.createDocument(
-      FirestoreCollections.assessments,
-      Map<String, dynamic>.from(payload),
-    );
+    await _firestoreService.setDocumentsAtomically([
+      FirestoreSetOperation(
+        collection: FirestoreCollections.assessments,
+        documentId: documentId,
+        data: Map<String, dynamic>.from(payload),
+      ),
+      FirestoreSetOperation(
+        collection: FirestoreCollections.users,
+        documentId: userId,
+        data: {
+          'quickAssessmentCompleted': true,
+          'quickAssessmentCompletedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        merge: true,
+      ),
+    ]);
 
     return payload;
+  }
+
+  static String quickAssessmentDocumentId(String userId) => 'quick_$userId';
+
+  Future<bool> ensureQuickAssessmentCompletion(String userId) async {
+    final user = await _firestoreService.getDocument(
+      FirestoreCollections.users,
+      userId,
+    );
+    if (user?['quickAssessmentCompleted'] == true) return true;
+
+    final deterministic = await _firestoreService.getDocument(
+      FirestoreCollections.assessments,
+      quickAssessmentDocumentId(userId),
+    );
+    if (deterministic != null && deterministic['type'] == 'quick') {
+      await _markQuickAssessmentCompleted(userId);
+      return true;
+    }
+
+    final legacy = await _firestoreService.getDocuments(
+      FirestoreCollections.assessments,
+      whereEquals: {'userId': userId, 'type': 'quick'},
+      limit: 1,
+    );
+    if (legacy.isEmpty) return false;
+
+    await _markQuickAssessmentCompleted(userId);
+    return true;
+  }
+
+  Future<void> _markQuickAssessmentCompleted(String userId) {
+    return _firestoreService.setDocument(
+      FirestoreCollections.users,
+      userId,
+      {
+        'quickAssessmentCompleted': true,
+        'quickAssessmentCompletedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      merge: true,
+    );
   }
 
   Future<Map<String, Object>> saveStudentAssessment({
