@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function validProfileImage(fileName) {
+      return fileName.matches('^avatar_[0-9]+[.](jpg|png)$')
+        && request.resource != null
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('^image/(jpeg|png)$');
+    }
+
+    match /secret_chat_profiles/{userId}/{fileName} {
+      allow read: if signedIn();
+      allow create: if isOwner(userId) && validProfileImage(fileName);
+      allow update: if isOwner(userId) && validProfileImage(fileName);
+      allow delete: if isOwner(userId);
+    }
+  }
+}

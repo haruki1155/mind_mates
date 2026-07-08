@@ -17,5 +17,9 @@ class FirestoreCollections {
   static const secretChats = 'secret_chats';
   static const secretChatComments = 'secret_chat_comments';
   static const secretChatInteractions = 'secret_chat_interactions';
+  static const secretChatProfiles = 'secret_chat_profiles';
+  static const secretChatAliases = 'secret_chat_aliases';
+  static const secretChatProfileStats = 'secret_chat_profile_stats';
+  static const secretChatEvents = '_secret_chat_events';
   static const mindAidMessages = 'mind_aid_messages';
 }

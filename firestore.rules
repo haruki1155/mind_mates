@@ -35,6 +35,18 @@ service cloud.firestore {
         || (isOwner(resource.data.userId) && resource.data.type != 'quick');
     }
 
+    function validSecretChatCategories(data) {
+      return data.categories is list
+        && data.categories.size() >= 1
+        && data.categories.size() <= 3
+        && data.categories.toSet().size() == data.categories.size()
+        && data.categories.toSet().hasOnly([
+          'Mental Health', 'Anxiety', 'Stress', 'Gratitude', 'Self-care',
+          'School Pressure', 'Support'
+        ])
+        && data.category == data.categories[0];
+    }
+
     match /moods/{moodId} {
       allow create: if isOwner(request.resource.data.userId)
         && moodId.matches('^daily_' + request.auth.uid + '_[0-9]{8}$')
@@ -103,11 +115,23 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.isAnonymous == true
-        && request.resource.data.moderationStatus == 'active';
-      allow update: if isAdmin() || (signedIn()
-        && resource.data.moderationStatus == 'active'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likeCount', 'commentCount', 'updatedAt']));
+        && request.resource.data.moderationStatus == 'active'
+        && request.resource.data.keys().hasOnly([
+          'authorId', 'message', 'category', 'categories', 'createdAt',
+          'updatedAt', 'likeCount', 'commentCount', 'readCount',
+          'moderationStatus', 'safetyLabels', 'isAnonymous'
+        ])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 8
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.safetyLabels is list
+        && validSecretChatCategories(request.resource.data)
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0
+        && request.resource.data.readCount == 0
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin();
       allow delete: if isAdmin()
         || (signedIn() && resource.data.authorId == request.auth.uid);
     }
@@ -119,17 +143,110 @@ service cloud.firestore {
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.isAnonymous == true
         && request.resource.data.moderationStatus == 'active'
+        && request.resource.data.keys().hasOnly([
+          'postId', 'authorId', 'message', 'createdAt', 'updatedAt',
+          'moderationStatus', 'safetyLabels', 'isAnonymous'
+        ])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 3
+        && request.resource.data.message.size() <= 400
+        && request.resource.data.safetyLabels is list
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
         && exists(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId))
         && get(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId)).data.moderationStatus == 'active';
-      allow update, delete: if isAdmin()
+      allow update: if isAdmin();
+      allow delete: if isAdmin()
         || (signedIn() && resource.data.authorId == request.auth.uid);
     }
 
     match /secret_chat_interactions/{interactionId} {
-      allow read, delete: if signedIn()
+      allow read: if signedIn()
         && resource.data.userId == request.auth.uid;
-      allow create, update: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && interactionId == request.auth.uid + '_' + request.resource.data.postId
+        && request.resource.data.keys().hasOnly([
+          'userId', 'postId', 'liked', 'saved', 'readAt', 'updatedAt'
+        ])
+        && (!('liked' in request.resource.data) || request.resource.data.liked is bool)
+        && (!('saved' in request.resource.data) || request.resource.data.saved is bool)
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId))
+        && (!('readAt' in request.resource.data)
+          || (request.resource.data.readAt == request.time
+            && get(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId)).data.authorId != request.auth.uid));
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.postId == resource.data.postId
+        && interactionId == request.auth.uid + '_' + request.resource.data.postId
+        && request.resource.data.keys().hasOnly([
+          'userId', 'postId', 'liked', 'saved', 'readAt', 'updatedAt'
+        ])
+        && (!('liked' in request.resource.data) || request.resource.data.liked is bool)
+        && (!('saved' in request.resource.data) || request.resource.data.saved is bool)
+        && request.resource.data.updatedAt == request.time
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['readAt'])
+          || (!('readAt' in resource.data)
+            && request.resource.data.readAt == request.time
+            && get(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId)).data.authorId != request.auth.uid));
+    }
+
+    match /secret_chat_profiles/{userId} {
+      allow get: if signedIn();
+      allow list: if signedIn();
+      allow create, update: if isOwner(userId)
+        && request.resource.data.userId == userId
+        && request.resource.data.keys().hasOnly([
+          'userId', 'alias', 'aliasKey', 'photoUrl', 'photoPath',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.alias is string
+        && request.resource.data.alias.size() >= 1
+        && request.resource.data.alias.size() <= 30
+        && request.resource.data.alias.matches('^[A-Za-z0-9]+( [A-Za-z0-9]+)*$')
+        && request.resource.data.aliasKey is string
+        && request.resource.data.updatedAt == request.time
+        && ((!exists(/databases/$(database)/documents/secret_chat_profiles/$(userId))
+              && request.resource.data.createdAt == request.time)
+          || (exists(/databases/$(database)/documents/secret_chat_profiles/$(userId))
+              && request.resource.data.createdAt == resource.data.createdAt))
+        && (!('photoUrl' in request.resource.data) || request.resource.data.photoUrl is string)
+        && (!('photoPath' in request.resource.data)
+          || (request.resource.data.photoPath is string
+            && request.resource.data.photoPath.matches('^secret_chat_profiles/' + userId + '/avatar_[0-9]+\\.(jpg|png)$')))
+        && getAfter(/databases/$(database)/documents/secret_chat_aliases/$(request.resource.data.aliasKey)).data.userId == userId;
+      allow delete: if false;
+    }
+
+    match /secret_chat_aliases/{aliasKey} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['userId', 'alias', 'updatedAt'])
+        && request.resource.data.alias is string
+        && request.resource.data.updatedAt == request.time
+        && !exists(/databases/$(database)/documents/secret_chat_aliases/$(aliasKey))
+        && getAfter(/databases/$(database)/documents/secret_chat_profiles/$(request.auth.uid)).data.aliasKey == aliasKey;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['userId', 'alias', 'updatedAt'])
+        && request.resource.data.alias is string
+        && request.resource.data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/secret_chat_profiles/$(request.auth.uid)).data.aliasKey == aliasKey;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /secret_chat_profile_stats/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+    }
+
+    match /_secret_chat_events/{eventId} {
+      allow read, write: if false;
     }
 
     match /appointments/{appointmentId} {

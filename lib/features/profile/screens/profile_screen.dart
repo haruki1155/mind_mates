@@ -156,8 +156,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                             delay: 120,
                             child: _ActionListCard(
                               actions: _actions,
-                              onActionTap: (action) =>
-                                  _openPlaceholder(context, action.label),
+                              onActionTap: (action) {
+                                if (action.label == 'Secret Chats profile') {
+                                  Navigator.of(
+                                    context,
+                                  ).pushNamed(RouteNames.secretChatProfile);
+                                  return;
+                                }
+                                _openPlaceholder(context, action.label);
+                              },
                             ),
                           ),
                           const SizedBox(height: 18),

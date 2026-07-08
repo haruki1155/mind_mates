@@ -70,5 +70,7 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>MindMate uses the camera to estimate your mood check-in. Photos are not stored.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MindMate lets you choose an optional Secret Chat profile photo.</string>
 </dict>
 </plist>
