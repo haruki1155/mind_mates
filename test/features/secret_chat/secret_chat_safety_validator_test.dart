@@ -34,4 +34,50 @@ void main() {
 
     expect(result.code, SecretChatValidationCode.crisisSupport);
   });
+
+  test('allows ordinary contextual comments without wellbeing keywords', () {
+    expect(validator.validateComment('Same here!').isAllowed, isTrue);
+    expect(
+      validator.validateComment('I disagree, but I hear you.').isAllowed,
+      isTrue,
+    );
+    expect(validator.validateComment('You got this').isAllowed, isTrue);
+  });
+
+  test('comments still block personal information and unsafe language', () {
+    expect(
+      validator.validateComment('Message me at person@example.com').code,
+      SecretChatValidationCode.containsPersonalInfo,
+    );
+    expect(
+      validator.validateComment('I will hurt you').code,
+      SecretChatValidationCode.unsafe,
+    );
+    expect(
+      validator.validateComment('I want to kill myself').code,
+      SecretChatValidationCode.crisisSupport,
+    );
+  });
+
+  test('boundary-aware filters avoid harmless substring false positives', () {
+    expect(
+      validator.validateComment('My class is in Essex.').isAllowed,
+      isTrue,
+    );
+    expect(
+      validator.validateComment('I study weaponry in history.').isAllowed,
+      isTrue,
+    );
+  });
+
+  test('comment length stays between 3 and 400 characters', () {
+    expect(
+      validator.validateComment('ok').code,
+      SecretChatValidationCode.tooShort,
+    );
+    expect(
+      validator.validateComment(List.filled(401, 'a').join()).code,
+      SecretChatValidationCode.tooLong,
+    );
+  });
 }

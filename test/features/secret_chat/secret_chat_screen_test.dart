@@ -45,6 +45,19 @@ void main() {
     expect(find.text('You are not alone in this.'), findsOneWidget);
   });
 
+  testWidgets('profile header button opens custom profile action', (
+    tester,
+  ) async {
+    var opened = false;
+    await tester.pumpWidget(
+      _app(posts: [_post()], onProfile: () => opened = true),
+    );
+
+    await tester.tap(find.byTooltip('Secret Chat profile'));
+
+    expect(opened, isTrue);
+  });
+
   testWidgets('thread shows friendly message when reply cannot be saved', (
     tester,
   ) async {
@@ -97,6 +110,7 @@ void main() {
 Widget _app({
   required List<SecretChatModel> posts,
   AddSecretComment? onAddComment,
+  VoidCallback? onProfile,
 }) {
   return MaterialApp(
     home: SecretChatScreen(
@@ -114,7 +128,7 @@ Widget _app({
       canCreate: true,
       onFilterChanged: (_) {},
       onSearchChanged: (_) {},
-      onCreatePost: ({required message, required category}) async {},
+      onCreatePost: ({required message, required categories}) async {},
       onToggleLike: (_) {},
       onToggleSave: (_) {},
       onFetchComments: (_) async => [
@@ -129,6 +143,7 @@ Widget _app({
           onAddComment ?? ({required postId, required message}) async {},
       onRetry: () {},
       onBack: () {},
+      onProfile: onProfile,
     ),
   );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/secret_chat_model.dart';
 import 'secret_chat_background.dart';
+import 'secret_chat_avatar.dart';
 
 class SecretChatPostCard extends StatelessWidget {
   const SecretChatPostCard({
@@ -12,6 +13,7 @@ class SecretChatPostCard extends StatelessWidget {
     required this.onLike,
     required this.onSave,
     required this.onComments,
+    this.onRetry,
   });
 
   final SecretChatModel post;
@@ -20,6 +22,7 @@ class SecretChatPostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onSave;
   final VoidCallback onComments;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -55,14 +58,17 @@ class SecretChatPostCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _AnonymousAvatar(),
+                SecretChatAvatar(
+                  alias: post.authorAlias,
+                  photoUrl: post.authorPhotoUrl,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Anonymous',
+                      Text(
+                        post.authorAlias,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -72,20 +78,8 @@ class SecretChatPostCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 1),
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(text: _formatDate(post.createdAt)),
-                            const TextSpan(text: ' - '),
-                            TextSpan(
-                              text: post.category,
-                              style: TextStyle(
-                                color: categoryColor,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
+                      Text(
+                        _formatDate(post.createdAt),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -105,8 +99,64 @@ class SecretChatPostCard extends StatelessWidget {
                     PopupMenuItem(value: 'report', child: Text('Report')),
                   ],
                 ),
+                if (post.isPending)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, top: 10),
+                    child: SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
               ],
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 5,
+              children: [
+                for (final category in post.categoryList)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          (category == post.primaryCategory
+                                  ? categoryColor
+                                  : SecretChatPalette.background)
+                              .withAlpha(
+                                category == post.primaryCategory ? 70 : 255,
+                              ),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      category,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (post.hasFailed) ...[
+              const SizedBox(height: 7),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Not synced. Retry post'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  foregroundColor: const Color(0xFFB45309),
+                  textStyle: const TextStyle(
+                    color: Color(0xFFB45309),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Text(
               post.message,
@@ -165,46 +215,6 @@ class SecretChatPostCard extends StatelessWidget {
       'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}';
-  }
-}
-
-class _AnonymousAvatar extends StatelessWidget {
-  const _AnonymousAvatar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFFE3EF),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Container(
-          width: 28,
-          height: 18,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFB4D0), Color(0xFFFF7BA5)],
-            ),
-            borderRadius: BorderRadius.circular(99),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x22000000),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.visibility_off,
-            color: Colors.white,
-            size: 13,
-          ),
-        ),
-      ),
-    );
   }
 }
 

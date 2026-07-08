@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/models/secret_chat_model.dart';
 import 'package:mind_mates/providers/secret_chat_provider.dart';
@@ -9,7 +11,10 @@ void main() {
     final provider = SecretChatProvider(repository);
 
     await expectLater(
-      provider.createPost(message: 'Selling shoes today', category: 'Support'),
+      provider.createPost(
+        message: 'Selling shoes today',
+        categories: ['Support'],
+      ),
       throwsA(isA<SecretChatValidationException>()),
     );
 
@@ -23,13 +28,51 @@ void main() {
 
     await provider.createPost(
       message: 'I feel stressed about exams and need support.',
-      category: 'Stress',
+      categories: ['Stress'],
     );
 
     expect(provider.posts, hasLength(1));
     expect(provider.selectedFilter, SecretChatFilter.mine);
     expect(provider.visiblePosts.single.isMine, isTrue);
     expect(repository.createdMessages.single, contains('stressed'));
+  });
+
+  test('post appears optimistically while Firestore is pending', () async {
+    final gate = Completer<void>();
+    final repository = _FakeSecretChatRepository(createGate: gate);
+    final provider = SecretChatProvider(repository);
+
+    final completion = provider.createPost(
+      message: 'I feel stressed about exams and need support.',
+      categories: ['Stress', 'Support'],
+    );
+
+    expect(provider.posts.single.isPending, isTrue);
+    expect(provider.posts.single.categoryList, ['Stress', 'Support']);
+    gate.complete();
+    await completion;
+    expect(provider.posts.single.isPending, isFalse);
+  });
+
+  test('rejects missing duplicate or more than three categories', () async {
+    final provider = SecretChatProvider(_FakeSecretChatRepository());
+    const message = 'I feel stressed about exams and need support.';
+
+    await expectLater(
+      provider.createPost(message: message, categories: []),
+      throwsArgumentError,
+    );
+    await expectLater(
+      provider.createPost(message: message, categories: ['Stress', 'Stress']),
+      throwsArgumentError,
+    );
+    await expectLater(
+      provider.createPost(
+        message: message,
+        categories: ['Stress', 'Support', 'Anxiety', 'Gratitude'],
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('allowed comment increments local count', () async {
@@ -44,6 +87,16 @@ void main() {
 
     expect(provider.posts.single.commentCount, 1);
     expect(repository.comments.single.message, contains('support'));
+  });
+
+  test('ordinary comment without wellness keywords is accepted', () async {
+    final repository = _FakeSecretChatRepository();
+    final provider = SecretChatProvider(repository);
+    await provider.loadPosts();
+
+    await provider.addComment(postId: 'post_1', message: 'Same here!');
+
+    expect(repository.comments.single.message, 'Same here!');
   });
 
   test('unavailable thread exposes friendly comment error', () async {
@@ -71,14 +124,18 @@ void main() {
 }
 
 class _FakeSecretChatRepository extends SecretChatRepository {
-  _FakeSecretChatRepository({this.commentError});
+  _FakeSecretChatRepository({this.commentError, this.createGate});
 
   final Object? commentError;
+  final Completer<void>? createGate;
   final createdMessages = <String>[];
   final comments = <SecretChatComment>[];
 
   @override
   bool get hasSignedInUser => true;
+
+  @override
+  String newPostId() => 'post_created';
 
   @override
   Future<List<SecretChatModel>> fetchPosts() async {
@@ -99,15 +156,18 @@ class _FakeSecretChatRepository extends SecretChatRepository {
   @override
   Future<SecretChatModel> createPost({
     required String message,
-    required String category,
+    required List<String> categories,
+    String? postId,
     List<String> safetyLabels = const [],
   }) async {
+    await createGate?.future;
     createdMessages.add(message);
     return SecretChatModel(
       id: 'post_created',
       message: message,
       createdAt: DateTime(2026, 7, 3),
-      category: category,
+      category: categories.first,
+      categories: categories,
       likeCount: 0,
       commentCount: 0,
       authorId: 'user_1',
@@ -120,6 +180,7 @@ class _FakeSecretChatRepository extends SecretChatRepository {
   Future<SecretChatComment> addComment({
     required String postId,
     required String message,
+    String? commentId,
     List<String> safetyLabels = const [],
   }) async {
     final error = commentError;

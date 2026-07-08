@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/secret_chat_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../routes/route_names.dart';
 import '../screens/secret_chat_screen.dart';
 
 class SecretChatPage extends StatefulWidget {
@@ -45,18 +46,22 @@ class _SecretChatPageState extends State<SecretChatPage> {
       onAddComment: _addComment,
       onRetry: provider.loadPosts,
       onBack: () => Navigator.of(context).maybePop(),
+      onProfile: () =>
+          Navigator.pushNamed(context, RouteNames.secretChatProfile),
+      onPostOpened: provider.recordUniqueRead,
+      onRetryPost: provider.retryPost,
     );
   }
 
   Future<void> _createPost({
     required String message,
-    required String category,
+    required List<String> categories,
   }) async {
     await context.read<SecretChatProvider>().createPost(
       message: message,
-      category: category,
+      categories: categories,
     );
-    await _refreshProfileAndReport();
+    _refreshProfileAndReport();
   }
 
   Future<void> _addComment({
@@ -67,17 +72,17 @@ class _SecretChatPageState extends State<SecretChatPage> {
       postId: postId,
       message: message,
     );
-    await _refreshProfileAndReport();
+    _refreshProfileAndReport();
   }
 
   Future<void> _toggleLike(String postId) async {
     await context.read<SecretChatProvider>().toggleLike(postId);
-    await _refreshProfileAndReport();
+    _refreshProfileAndReport();
   }
 
   Future<void> _toggleSave(String postId) async {
     await context.read<SecretChatProvider>().toggleSave(postId);
-    await _refreshProfileAndReport();
+    _refreshProfileAndReport();
   }
 
   Future<void> _refreshProfileAndReport() async {

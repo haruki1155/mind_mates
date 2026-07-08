@@ -8,7 +8,10 @@ import '../widgets/secret_chat_header.dart';
 import '../widgets/secret_chat_post_card.dart';
 
 typedef CreateSecretPost =
-    Future<void> Function({required String message, required String category});
+    Future<void> Function({
+      required String message,
+      required List<String> categories,
+    });
 
 typedef AddSecretComment =
     Future<void> Function({required String postId, required String message});
@@ -33,6 +36,9 @@ class SecretChatScreen extends StatefulWidget {
     required this.onAddComment,
     required this.onRetry,
     required this.onBack,
+    this.onProfile,
+    this.onPostOpened,
+    this.onRetryPost,
   });
 
   final List<SecretChatModel> posts;
@@ -52,6 +58,9 @@ class SecretChatScreen extends StatefulWidget {
   final AddSecretComment onAddComment;
   final VoidCallback onRetry;
   final VoidCallback onBack;
+  final VoidCallback? onProfile;
+  final Future<void> Function(String postId)? onPostOpened;
+  final Future<void> Function(String postId)? onRetryPost;
 
   @override
   State<SecretChatScreen> createState() => _SecretChatScreenState();
@@ -104,6 +113,7 @@ class _SecretChatScreenState extends State<SecretChatScreen>
                     onBack: widget.onBack,
                     onSearchChanged: widget.onSearchChanged,
                     onFilterChanged: widget.onFilterChanged,
+                    onProfile: widget.onProfile,
                   ),
                 ),
                 SliverPadding(
@@ -161,10 +171,13 @@ class _SecretChatScreenState extends State<SecretChatScreen>
           key: ValueKey(post.id),
           post: post,
           index: index - 1,
-          categoryColor: _categoryColor(post.category),
+          categoryColor: _categoryColor(post.primaryCategory),
           onLike: () => widget.onToggleLike(post.id),
           onSave: () => widget.onToggleSave(post.id),
           onComments: () => _openCommentsSheet(post),
+          onRetry: post.hasFailed && widget.onRetryPost != null
+              ? () => widget.onRetryPost!(post.id)
+              : null,
         );
       },
     );
@@ -197,11 +210,13 @@ class _SecretChatScreenState extends State<SecretChatScreen>
   }
 
   Future<void> _openCommentsSheet(SecretChatModel post) async {
+    await widget.onPostOpened?.call(post.id);
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SecretChatThreadScreen(
           post: post,
-          categoryColor: _categoryColor(post.category),
+          categoryColor: _categoryColor(post.primaryCategory),
           fetchComments: widget.onFetchComments,
           addComment: widget.onAddComment,
           onToggleLike: widget.onToggleLike,

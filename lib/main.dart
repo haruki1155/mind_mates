@@ -28,10 +28,16 @@ import 'repositories/report_repository.dart';
 import 'repositories/secret_chat_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/auth/auth_service.dart';
+import 'services/firebase/firebase_app_check_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await FirebaseAppCheckService.activate();
+  } catch (error) {
+    debugPrint('Firebase App Check activation failed: $error');
+  }
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

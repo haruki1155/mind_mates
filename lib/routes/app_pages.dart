@@ -17,6 +17,7 @@ import '../features/quick_assessment/screens/quick_assessment_name_screen.dart';
 import '../features/quick_assessment/screens/quick_assessment_question_screen.dart';
 import '../features/quick_assessment/screens/quick_assessment_role_screen.dart';
 import '../features/secret_chat/pages/secret_chat_page.dart';
+import '../features/secret_chat/screens/secret_chat_profile_screen.dart';
 import '../features/splash/screens/splash_screen.dart';
 import '../features/student_assessment/screens/student_assessment_complete_screen.dart';
 import '../features/student_assessment/screens/student_assessment_screen.dart';
@@ -45,6 +46,7 @@ class AppPages {
     RouteNames.services: (_) => const ServicesScreen(),
     RouteNames.mindAid: (_) => const MindAidPage(),
     RouteNames.secretChat: (_) => const SecretChatPage(),
+    RouteNames.secretChatProfile: (_) => const SecretChatProfileScreen(),
     RouteNames.insights: (_) => const MentalHealthInsightsScreen(),
     RouteNames.profile: (_) => const ProfileScreen(),
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),

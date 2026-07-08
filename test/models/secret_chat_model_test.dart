@@ -32,4 +32,27 @@ void main() {
     expect(comment.safetyLabels, isEmpty);
     expect(comment.isAnonymous, isTrue);
   });
+
+  test('legacy category becomes a one-item category list', () {
+    final post = SecretChatModel.fromJson({
+      'id': 'legacy',
+      'message': 'Legacy post',
+      'category': 'Stress',
+    });
+
+    expect(post.categoryList, ['Stress']);
+    expect(post.primaryCategory, 'Stress');
+  });
+
+  test('new category list preserves selection order', () {
+    final post = SecretChatModel.fromJson({
+      'id': 'new',
+      'message': 'New post',
+      'category': 'Support',
+      'categories': ['Support', 'Anxiety', 'School Pressure'],
+    });
+
+    expect(post.categoryList, ['Support', 'Anxiety', 'School Pressure']);
+    expect(post.primaryCategory, 'Support');
+  });
 }

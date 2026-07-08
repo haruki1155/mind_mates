@@ -29,17 +29,28 @@ class SecretChatSafetyValidator {
   static const commentMaxLength = 400;
 
   SecretChatValidationResult validatePost(String text) {
-    return _validate(text, minLength: 8, maxLength: postMaxLength);
+    return _validate(
+      text,
+      minLength: 8,
+      maxLength: postMaxLength,
+      requireWellbeingTopic: true,
+    );
   }
 
   SecretChatValidationResult validateComment(String text) {
-    return _validate(text, minLength: 3, maxLength: commentMaxLength);
+    return _validate(
+      text,
+      minLength: 3,
+      maxLength: commentMaxLength,
+      requireWellbeingTopic: false,
+    );
   }
 
   SecretChatValidationResult _validate(
     String text, {
     required int minLength,
     required int maxLength,
+    required bool requireWellbeingTopic,
   }) {
     final normalized = text.trim().toLowerCase();
     if (normalized.length < minLength) {
@@ -76,7 +87,7 @@ class SecretChatSafetyValidator {
             'Let us keep this space supportive. Please remove harmful, explicit, or attacking language.',
       );
     }
-    if (!_isWellbeingRelated(normalized)) {
+    if (requireWellbeingTopic && !_isWellbeingRelated(normalized)) {
       return const SecretChatValidationResult(
         code: SecretChatValidationCode.offTopic,
         message:
@@ -95,7 +106,12 @@ class SecretChatSafetyValidator {
     final patterns = [
       RegExp(r'\b[\w\.\-]+@[\w\.\-]+\.\w{2,}\b'),
       RegExp(r'\b(?:\+?\d[\d\-\s()]{7,}\d)\b'),
-      RegExp(r'\b(?:facebook|instagram|tiktok|telegram|discord)\b'),
+      RegExp(
+        r'\b(?:facebook|instagram|tiktok|telegram|discord)\s*[:@]\s*\w{3,}\b',
+      ),
+      RegExp(
+        r'\b(?:my|add me on|follow me on)\s+(?:facebook|instagram|tiktok|telegram|discord)\b',
+      ),
       RegExp(r'@\w{3,}'),
       RegExp(r'\b(?:http|www\.)\S+'),
       RegExp(r'\b(?:student id|school id|id number)\b'),
@@ -104,36 +120,31 @@ class SecretChatSafetyValidator {
   }
 
   bool _containsCrisisLanguage(String text) {
-    const phrases = [
-      'kill myself',
-      'end my life',
-      'suicide',
-      'suicidal',
-      'self harm',
-      'self-harm',
-      'hurt myself',
-      'not want to live',
-      'don\'t want to live',
+    final patterns = [
+      RegExp(r'\bkill\s+myself\b'),
+      RegExp(r'\bend\s+my\s+life\b'),
+      RegExp(r'\bsuicid(?:e|al)\b'),
+      RegExp(r'\bself[ -]?harm\b'),
+      RegExp(r'\bhurt\s+myself\b'),
+      RegExp(r"\b(?:do not|don't|dont|not)\s+want\s+to\s+live\b"),
     ];
-    return phrases.any(text.contains);
+    return patterns.any((pattern) => pattern.hasMatch(text));
   }
 
   bool _containsUnsafeLanguage(String text) {
-    const phrases = [
-      'porn',
-      'sex',
-      'nude',
-      'buy now',
-      'promo code',
-      'free money',
-      'hate you',
-      'stupid idiot',
-      'beat them',
-      'hurt them',
-      'weapon',
-      'drugs for sale',
+    final patterns = [
+      RegExp(r'\b(?:porn|sex|sexual|nudes?|explicit\s+sexual)\b'),
+      RegExp(r'\b(?:buy\s+now|promo\s+code|free\s+money)\b'),
+      RegExp(
+        r'\b(?:(?:drugs?|weapons?)\s+for\s+sale|(?:selling|buy)\s+(?:cocaine|meth|ecstasy|illegal\s+drugs?))\b',
+      ),
+      RegExp(r'\b(?:i\s+will\s+)?(?:beat|hurt|kill)\s+(?:you|him|her|them)\b'),
+      RegExp(r'\b(?:hate\s+you|stupid\s+idiot)\b'),
+      RegExp(r"\byou(?:\s+are|'re)\s+(?:stupid|worthless|an\s+idiot)\b"),
+      RegExp(r'(?:https?://|www\.)\S+(?:\s+\S+){2,}'),
+      RegExp(r'\b(?:click|follow)\s+(?:this|my)\s+link\b'),
     ];
-    return phrases.any(text.contains);
+    return patterns.any((pattern) => pattern.hasMatch(text));
   }
 
   bool _isWellbeingRelated(String text) {

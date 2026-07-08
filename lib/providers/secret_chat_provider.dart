@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../features/secret_chat/domain/secret_chat_safety_validator.dart';
 import '../models/secret_chat_model.dart';
+import '../models/secret_chat_profile.dart';
 import '../repositories/secret_chat_repository.dart';
 
 class SecretChatProvider extends ChangeNotifier {
@@ -28,6 +31,14 @@ class SecretChatProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   String? _errorMessage;
+  SecretChatProfile? _profile;
+  SecretChatProfileStats _profileStats = SecretChatProfileStats.empty;
+  bool _isProfileLoading = false;
+  bool _isProfileSaving = false;
+  String? _profileError;
+  List<SecretChatModel> _recentPosts = [];
+  final Set<String> _pendingLikes = {};
+  final Set<String> _pendingSaves = {};
 
   List<SecretChatModel> get posts => List.unmodifiable(_posts);
   SecretChatFilter get selectedFilter => _selectedFilter;
@@ -36,6 +47,12 @@ class SecretChatProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get canCreate => repository.hasSignedInUser;
   int get savedCount => _posts.where((post) => post.isSaved).length;
+  SecretChatProfile? get profile => _profile;
+  SecretChatProfileStats get profileStats => _profileStats;
+  bool get isProfileLoading => _isProfileLoading;
+  bool get isProfileSaving => _isProfileSaving;
+  String? get profileError => _profileError;
+  List<SecretChatModel> get recentPosts => List.unmodifiable(_recentPosts);
 
   List<SecretChatModel> get visiblePosts {
     Iterable<SecretChatModel> result = _posts;
@@ -53,7 +70,9 @@ class SecretChatProvider extends ChangeNotifier {
     if (query.isNotEmpty) {
       result = result.where((post) {
         return post.message.toLowerCase().contains(query) ||
-            post.category.toLowerCase().contains(query);
+            post.categoryList.any(
+              (category) => category.toLowerCase().contains(query),
+            );
       });
     }
 
@@ -89,7 +108,7 @@ class SecretChatProvider extends ChangeNotifier {
 
   Future<void> createPost({
     required String message,
-    required String category,
+    required List<String> categories,
   }) async {
     final validation = validator.validatePost(message);
     if (!validation.isAllowed) {
@@ -98,29 +117,168 @@ class SecretChatProvider extends ChangeNotifier {
       throw SecretChatValidationException(validation);
     }
 
-    final post = await repository.createPost(
-      message: message,
-      category: category,
+    if (categories.isEmpty ||
+        categories.length > 3 ||
+        categories.toSet().length != categories.length) {
+      throw ArgumentError('Choose between 1 and 3 unique categories.');
+    }
+    final id = repository.newPostId();
+    final optimistic = SecretChatModel(
+      id: id,
+      message: message.trim(),
+      createdAt: DateTime.now(),
+      category: categories.first,
+      categories: categories,
+      likeCount: 0,
+      commentCount: 0,
+      authorId: _profile?.userId,
+      authorAlias: _profile?.alias ?? 'Anonymous',
+      authorPhotoUrl: _profile?.photoUrl,
       safetyLabels: validation.labels,
+      isMine: true,
+      isPending: true,
     );
-    _posts = [post, ..._posts];
+    _posts = [optimistic, ..._posts];
     _selectedFilter = SecretChatFilter.mine;
     _errorMessage = null;
     notifyListeners();
+    try {
+      await repository.createPost(
+        message: message,
+        categories: categories,
+        postId: id,
+        safetyLabels: validation.labels,
+      );
+      _replacePost(optimistic.copyWith(isPending: false, hasFailed: false));
+    } catch (error) {
+      _replacePost(optimistic.copyWith(isPending: false, hasFailed: true));
+      rethrow;
+    }
   }
 
   Future<void> toggleLike(String postId) async {
     final post = _findPost(postId);
+    if (post == null || _pendingLikes.contains(postId)) return;
+    _pendingLikes.add(postId);
+    final optimistic = post.copyWith(
+      isLiked: !post.isLiked,
+      likeCount: (post.likeCount + (post.isLiked ? -1 : 1)).clamp(0, 1 << 31),
+      isPending: true,
+    );
+    _replacePost(optimistic);
+    try {
+      await repository.toggleLike(post);
+      _replacePost(optimistic.copyWith(isPending: false, hasFailed: false));
+    } catch (_) {
+      _replacePost(post.copyWith(hasFailed: true));
+      rethrow;
+    } finally {
+      _pendingLikes.remove(postId);
+    }
+  }
+
+  Future<void> retryPost(String postId) async {
+    final post = _findPost(postId);
+    if (post == null || !post.hasFailed || post.isPending) return;
+    _replacePost(post.copyWith(isPending: true, hasFailed: false));
+    try {
+      await repository.createPost(
+        message: post.message,
+        categories: post.categoryList,
+        postId: post.id,
+        safetyLabels: post.safetyLabels,
+      );
+      _replacePost(post.copyWith(isPending: false, hasFailed: false));
+    } catch (_) {
+      _replacePost(post.copyWith(isPending: false, hasFailed: true));
+      rethrow;
+    }
+  }
+
+  Future<void> recordUniqueRead(String postId) async {
+    final post = _findPost(postId);
     if (post == null) return;
-    final updated = await repository.toggleLike(post);
+    final updated = await repository.recordUniqueRead(post);
     _replacePost(updated);
+  }
+
+  Future<void> loadProfile() async {
+    _isProfileLoading = true;
+    _profileError = null;
+    notifyListeners();
+    try {
+      final values = await Future.wait([
+        repository.fetchCurrentProfile(),
+        repository.fetchProfileStats(),
+        repository.fetchRecentPosts(),
+      ]);
+      _profile = values[0] as SecretChatProfile?;
+      _profileStats = values[1] as SecretChatProfileStats;
+      _recentPosts = values[2] as List<SecretChatModel>;
+    } catch (error) {
+      _profileError = _friendlyError(error);
+    }
+    _isProfileLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> saveProfile(String alias) async {
+    await _runProfileSave(() => repository.saveProfile(alias: alias));
+  }
+
+  Future<void> uploadProfilePhoto(Uint8List bytes, String contentType) async {
+    await _runProfileSave(
+      () => repository.uploadProfilePhoto(bytes, contentType: contentType),
+    );
+  }
+
+  Future<void> removeProfilePhoto() async {
+    await _runProfileSave(repository.removeProfilePhoto);
+  }
+
+  Future<void> _runProfileSave(
+    Future<SecretChatProfile?> Function() action,
+  ) async {
+    _isProfileSaving = true;
+    _profileError = null;
+    notifyListeners();
+    try {
+      _profile = await action();
+      final cleanupWarning = repository.takePhotoCleanupWarning();
+      final values = await Future.wait([
+        repository.fetchProfileStats(),
+        repository.fetchRecentPosts(),
+      ]);
+      _profileStats = values[0] as SecretChatProfileStats;
+      _recentPosts = values[1] as List<SecretChatModel>;
+      if (cleanupWarning != null) _profileError = cleanupWarning;
+    } catch (error) {
+      _profileError = error.toString().replaceFirst(
+        'Invalid argument(s): ',
+        '',
+      );
+      rethrow;
+    } finally {
+      _isProfileSaving = false;
+      notifyListeners();
+    }
   }
 
   Future<void> toggleSave(String postId) async {
     final post = _findPost(postId);
-    if (post == null) return;
-    final updated = await repository.toggleSave(post);
-    _replacePost(updated);
+    if (post == null || _pendingSaves.contains(postId)) return;
+    _pendingSaves.add(postId);
+    final optimistic = post.copyWith(isSaved: !post.isSaved, isPending: true);
+    _replacePost(optimistic);
+    try {
+      await repository.toggleSave(post);
+      _replacePost(optimistic.copyWith(isPending: false, hasFailed: false));
+    } catch (_) {
+      _replacePost(post.copyWith(hasFailed: true));
+      rethrow;
+    } finally {
+      _pendingSaves.remove(postId);
+    }
   }
 
   Future<List<SecretChatComment>> fetchComments(String postId) {
@@ -138,6 +296,10 @@ class SecretChatProvider extends ChangeNotifier {
       throw SecretChatValidationException(validation);
     }
 
+    final original = _findPost(postId);
+    if (original != null) {
+      _replacePost(original.copyWith(commentCount: original.commentCount + 1));
+    }
     try {
       await repository.addComment(
         postId: postId,
@@ -145,6 +307,7 @@ class SecretChatProvider extends ChangeNotifier {
         safetyLabels: validation.labels,
       );
     } catch (error, stackTrace) {
+      if (original != null) _replacePost(original);
       debugPrint('Unable to send Secret Chat reply: $error');
       debugPrintStack(stackTrace: stackTrace);
       final message = _friendlyError(error);
@@ -153,12 +316,6 @@ class SecretChatProvider extends ChangeNotifier {
       throw SecretChatActionException(message);
     }
 
-    _posts = [
-      for (final post in _posts)
-        post.id == postId
-            ? post.copyWith(commentCount: post.commentCount + 1)
-            : post,
-    ];
     _errorMessage = null;
     notifyListeners();
   }
@@ -192,6 +349,7 @@ class SecretChatProvider extends ChangeNotifier {
     if (error is SecretChatThreadUnavailableException) {
       return 'This thread is no longer available for replies.';
     }
+    if (error is SecretChatAliasTakenException) return error.toString();
     return 'Secret Chat is unavailable right now. Please try again.';
   }
 }

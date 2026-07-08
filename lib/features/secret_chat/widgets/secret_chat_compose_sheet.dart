@@ -23,7 +23,7 @@ class SecretChatComposeSheet extends StatefulWidget {
 class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
   final _controller = TextEditingController();
   final _validator = const SecretChatSafetyValidator();
-  late String _category = widget.categories.first.label;
+  final List<String> _selectedCategories = [];
   bool _isSubmitting = false;
   SecretChatValidationResult? _validation;
 
@@ -84,12 +84,26 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
               runSpacing: 8,
               children: [
                 for (final category in widget.categories)
-                  ChoiceChip(
+                  FilterChip(
                     label: Text(category.label),
-                    selected: _category == category.label,
+                    selected: _selectedCategories.contains(category.label),
                     selectedColor: category.color.withAlpha(115),
-                    onSelected: (_) {
-                      setState(() => _category = category.label);
+                    onSelected: (selected) {
+                      if (selected && _selectedCategories.length == 3) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You can choose up to 3 categories.'),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        if (selected) {
+                          _selectedCategories.add(category.label);
+                        } else {
+                          _selectedCategories.remove(category.label);
+                        }
+                      });
                     },
                   ),
               ],
@@ -162,6 +176,15 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
   Future<void> _submit() async {
     final message = _controller.text.trim();
     if (message.isEmpty) return;
+    if (_selectedCategories.isEmpty) {
+      setState(
+        () => _validation = const SecretChatValidationResult(
+          code: SecretChatValidationCode.offTopic,
+          message: 'Choose at least one category.',
+        ),
+      );
+      return;
+    }
     final validation = _validator.validatePost(message);
     if (!validation.isAllowed) {
       setState(() => _validation = validation);
@@ -170,10 +193,14 @@ class _SecretChatComposeSheetState extends State<SecretChatComposeSheet> {
 
     setState(() => _isSubmitting = true);
     try {
-      await widget.onSubmit(message: message, category: _category);
+      final submission = widget.onSubmit(
+        message: message,
+        categories: List.unmodifiable(_selectedCategories),
+      );
       if (mounted) {
         Navigator.of(context).pop();
       }
+      await submission;
     } on SecretChatValidationException catch (error) {
       if (mounted) setState(() => _validation = error.result);
     } catch (_) {

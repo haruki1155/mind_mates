@@ -5,6 +5,7 @@ import '../../../providers/secret_chat_provider.dart';
 import '../domain/secret_chat_safety_validator.dart';
 import '../widgets/secret_chat_background.dart';
 import '../widgets/secret_chat_post_card.dart';
+import '../widgets/secret_chat_avatar.dart';
 
 class SecretChatThreadScreen extends StatefulWidget {
   const SecretChatThreadScreen({
@@ -32,14 +33,16 @@ class SecretChatThreadScreen extends StatefulWidget {
 class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
   final _controller = TextEditingController();
   final _validator = const SecretChatSafetyValidator();
-  late Future<List<SecretChatComment>> _commentsFuture;
+  List<SecretChatComment> _comments = [];
+  bool _isLoadingComments = true;
+  bool _commentsFailed = false;
   SecretChatValidationResult? _validation;
   bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    _commentsFuture = widget.fetchComments(widget.post.id);
+    _loadComments();
   }
 
   @override
@@ -80,16 +83,15 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
                     ),
                   ),
                   const SliverToBoxAdapter(child: _ThreadSafetyNotice()),
-                  FutureBuilder<List<SecretChatComment>>(
-                    future: _commentsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
+                  Builder(
+                    builder: (context) {
+                      if (_isLoadingComments) {
                         return const SliverFillRemaining(
                           hasScrollBody: false,
                           child: Center(child: CircularProgressIndicator()),
                         );
                       }
-                      if (snapshot.hasError) {
+                      if (_commentsFailed) {
                         return SliverFillRemaining(
                           hasScrollBody: false,
                           child: _ThreadMessage(
@@ -100,8 +102,7 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
                           ),
                         );
                       }
-                      final comments = snapshot.data ?? const [];
-                      if (comments.isEmpty) {
+                      if (_comments.isEmpty) {
                         return const SliverFillRemaining(
                           hasScrollBody: false,
                           child: _ThreadMessage(
@@ -114,11 +115,11 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
                       return SliverPadding(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
                         sliver: SliverList.separated(
-                          itemCount: comments.length,
+                          itemCount: _comments.length,
                           separatorBuilder: (_, _) =>
                               const SizedBox(height: 10),
                           itemBuilder: (context, index) {
-                            return _CommentBubble(comment: comments[index]);
+                            return _CommentBubble(comment: _comments[index]);
                           },
                         ),
                       );
@@ -146,7 +147,32 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
   }
 
   void _refreshComments() {
-    setState(() => _commentsFuture = widget.fetchComments(widget.post.id));
+    _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingComments = true;
+        _commentsFailed = false;
+      });
+    }
+    try {
+      final comments = await widget.fetchComments(widget.post.id);
+      if (mounted) {
+        setState(() {
+          _comments = comments;
+          _isLoadingComments = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingComments = false;
+          _commentsFailed = true;
+        });
+      }
+    }
   }
 
   void _validateReply(String value) {
@@ -167,19 +193,37 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
       return;
     }
 
-    setState(() => _isSending = true);
+    final optimistic = SecretChatComment(
+      id: 'pending_${DateTime.now().microsecondsSinceEpoch}',
+      postId: widget.post.id,
+      message: message,
+      createdAt: DateTime.now(),
+      isPending: true,
+    );
+    setState(() {
+      _isSending = true;
+      _comments = [..._comments, optimistic];
+      _controller.clear();
+      _validation = null;
+    });
     try {
       await widget.addComment(postId: widget.post.id, message: message);
-      _controller.clear();
       setState(() {
-        _validation = null;
-        _commentsFuture = widget.fetchComments(widget.post.id);
+        _comments = [
+          for (final comment in _comments)
+            if (comment.id == optimistic.id)
+              comment.copyWith(isPending: false)
+            else
+              comment,
+        ];
       });
       _showReplyMessage('Reply posted anonymously.');
     } on SecretChatValidationException catch (error) {
+      _markCommentFailed(optimistic.id);
       setState(() => _validation = error.result);
       _showReplyMessage(error.result.message);
     } on SecretChatActionException catch (error) {
+      _markCommentFailed(optimistic.id);
       setState(
         () => _validation = SecretChatValidationResult(
           code: SecretChatValidationCode.unsafe,
@@ -188,6 +232,7 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
       );
       _showReplyMessage(error.message);
     } catch (_) {
+      _markCommentFailed(optimistic.id);
       const message = 'Unable to send this reply. Please try again.';
       setState(
         () => _validation = const SecretChatValidationResult(
@@ -199,6 +244,19 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+  }
+
+  void _markCommentFailed(String id) {
+    if (!mounted) return;
+    setState(() {
+      _comments = [
+        for (final comment in _comments)
+          if (comment.id == id)
+            comment.copyWith(isPending: false, hasFailed: true)
+          else
+            comment,
+      ];
+    });
   }
 
   void _showReplyMessage(String message) {
@@ -223,7 +281,7 @@ class _ThreadSafetyNotice extends StatelessWidget {
           SizedBox(width: 6),
           Expanded(
             child: Text(
-              'You are replying anonymously. Keep replies supportive and focused on mental health or wellbeing.',
+              'Keep replies respectful and protect personal information.',
               style: TextStyle(
                 color: SecretChatPalette.muted,
                 fontSize: 12,
@@ -256,13 +314,30 @@ class _CommentBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Anonymous',
-              style: TextStyle(
-                color: SecretChatPalette.text,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
+            Row(
+              children: [
+                SecretChatAvatar(
+                  alias: comment.authorAlias,
+                  photoUrl: comment.authorPhotoUrl,
+                  radius: 15,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    comment.authorAlias,
+                    style: const TextStyle(
+                      color: SecretChatPalette.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (comment.isPending)
+                  const SizedBox.square(
+                    dimension: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -274,6 +349,13 @@ class _CommentBubble extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            if (comment.hasFailed) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Not sent. Copy the message and try again.',
+                style: TextStyle(color: Color(0xFFB45309), fontSize: 10),
+              ),
+            ],
           ],
         ),
       ),
