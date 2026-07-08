@@ -902,10 +902,12 @@ class HomeMentalHealthCheckCard extends StatelessWidget {
     super.key,
     required this.data,
     required this.onStart,
+    required this.onViewSummary,
   });
 
   final HomeMentalHealthCheckData data;
   final VoidCallback onStart;
+  final VoidCallback onViewSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -978,7 +980,7 @@ class HomeMentalHealthCheckCard extends StatelessWidget {
                       alignment: Alignment.center,
                       child: HomePillButton(
                         label: data.actionLabel,
-                        onTap: onStart,
+                        onTap: onViewSummary,
                       ),
                     ),
                   ],

@@ -15,6 +15,7 @@ class MindMateApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.light,
       initialRoute: RouteNames.splash,
       onGenerateRoute: RouteGenerator.generateRoute,
     );

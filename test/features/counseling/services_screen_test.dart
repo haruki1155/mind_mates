@@ -5,9 +5,95 @@ import 'package:mind_mates/features/counseling/screens/services_screen.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
+import 'package:mind_mates/routes/route_names.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  testWidgets('services screen matches the mockup structure and actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 5000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_servicesApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+    expect(find.text('PACC Services'), findsOneWidget);
+    expect(find.text('All Services'), findsOneWidget);
+    expect(find.text('Information Services'), findsOneWidget);
+    expect(find.text('Individual Inventory Services'), findsOneWidget);
+    expect(find.text('Counseling Services'), findsOneWidget);
+    expect(find.text('Career Guidance and Placement Services'), findsOneWidget);
+    expect(find.text('Referral Services'), findsOneWidget);
+    expect(find.text('Follow-up Services'), findsOneWidget);
+    expect(find.text('Inquire'), findsNWidgets(3));
+    expect(find.text('Contact counselor'), findsOneWidget);
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Secret chat'), findsNothing);
+  });
+
+  testWidgets('services Back returns to the previous screen', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ServicesScreen())),
+              child: const Text('Open services'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open services'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open services'), findsOneWidget);
+    expect(find.byType(ServicesScreen), findsNothing);
+  });
+
+  testWidgets('services root Back falls back to Home', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: '/services-root',
+        routes: {
+          '/services-root': (_) => const ServicesScreen(),
+          RouteNames.home: (_) => const Scaffold(body: Text('Home target')),
+        },
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home target'), findsOneWidget);
+  });
+
+  testWidgets('services layout has no overflow on a narrow phone', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_servicesApp());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Contact counselor'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('contact counselor opens PACC appointment flow', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 1800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -42,18 +128,6 @@ void main() {
 
     await tester.tap(find.text('Appoint New'));
     await tester.pumpAndSettle();
-    expect(find.text('Appointment Schedule'), findsOneWidget);
-    expect(find.text('April 2026'), findsOneWidget);
-
-    await tester.tap(find.text('30'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose Time'), findsOneWidget);
-    expect(find.text('Thursday, April 30'), findsOneWidget);
-
-    await tester.tap(find.text('11:00 AM'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Submit Intake Form'));
-    await tester.pumpAndSettle();
     expect(find.text('Counseling Intake Form'), findsOneWidget);
 
     await tester.tap(find.text('Next'));
@@ -69,6 +143,35 @@ void main() {
     await tester.ensureVisible(find.text('Next'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Appointment Schedule'), findsOneWidget);
+    expect(find.text('April 2026'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to intake form'));
+    await tester.pumpAndSettle();
+    expect(find.text('Counseling Intake Form'), findsOneWidget);
+    expect(
+      find.text('I feel overwhelmed and would like to talk to someone.'),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(find.text('Next'));
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose Time'), findsOneWidget);
+    expect(find.text('Thursday, April 30'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to calendar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Appointment Schedule'), findsOneWidget);
+
+    await tester.tap(find.text('30'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('11:00 AM'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm Appointment').last);
     await tester.pumpAndSettle();
     expect(find.text('Confirm Appointment'), findsOneWidget);
 
@@ -142,13 +245,6 @@ Widget _paccApp() {
 Future<void> _createAppointment(WidgetTester tester) async {
   await tester.tap(find.text('Appoint New'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('30'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('11:00 AM'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Submit Intake Form'));
-  await tester.pumpAndSettle();
-
   await _fillVisibleForm(tester);
   await _chooseVisibleOption(tester, 'Male');
   await _chooseVisibleOption(tester, 'Fourth Year');
@@ -158,6 +254,12 @@ Future<void> _createAppointment(WidgetTester tester) async {
   await tester.ensureVisible(find.text('Next'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Next'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('30'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('11:00 AM'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Confirm Appointment').last);
   await tester.pumpAndSettle();
   await tester.tap(find.text('Back to My Appointments'));
   await tester.pumpAndSettle();

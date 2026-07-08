@@ -47,6 +47,7 @@ void main() {
           title: 'Mental Health Summary',
           description: 'This week is ready for review',
           generatedAt: DateTime(2026, 6, 30),
+          hasEnoughData: true,
         ),
       ),
     );
@@ -83,7 +84,17 @@ void main() {
     expect(find.text('5'), findsWidgets);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
+    expect(
+      find.text('Your weekly mental health summary is ready to review.'),
+      findsOneWidget,
+    );
+    expect(find.text('This week is ready for review'), findsNothing);
+
+    await tester.tap(find.text('View Summary'));
+    await tester.pumpAndSettle();
+
     expect(find.text('This week is ready for review'), findsOneWidget);
+    expect(find.text("Today's activity"), findsOneWidget);
   });
 
   testWidgets('home Insight destination opens the insights screen', (

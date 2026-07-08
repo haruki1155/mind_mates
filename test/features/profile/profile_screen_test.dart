@@ -49,7 +49,7 @@ void main() {
   testWidgets('mental health summary buttons and routes are ready', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    await tester.binding.setSurfaceSize(const Size(800, 4000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final provider = UserProvider(_FakeUserRepository())
@@ -103,7 +103,7 @@ void main() {
   testWidgets('mental health report shows daily activity summary', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    await tester.binding.setSurfaceSize(const Size(320, 7000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final activityRepository = _FakeActivityRepository(
@@ -121,6 +121,37 @@ void main() {
       ),
     );
     final activityProvider = MentalHealthActivityProvider(activityRepository);
+    final weeklyReport = ReportModel(
+      id: 'weekly_1',
+      userId: 'user_1',
+      title: 'Mental Health Summary',
+      description: 'A complete weekly reflection for review.',
+      generatedAt: DateTime(2026, 7, 7, 12, 30),
+      weekStart: DateTime(2026, 7, 1),
+      weekEnd: DateTime(2026, 7, 7),
+      mentalStatus: 'needs_support',
+      mentalStatusLabel: 'Needs Support',
+      moodCheckInCount: 4,
+      averageMoodLevel: 3.2,
+      assessmentCount: 1,
+      fullAssessmentScore: 18,
+      latestAssessmentStatus: 'Moderate concern',
+      mentalStatusSignal: 'Academic stress needs attention.',
+      breathingSessionCount: 2,
+      mindfulBreathingMinutes: 8,
+      activeDayCount: 4,
+      currentStreak: 4,
+      totalEngagementCount: 15,
+      secretChatEngagementCount: 3,
+      topConcernAreas: const ['Academic Stress', 'Sleep and Rest'],
+      recommendedNextActions: const [
+        'Continue daily mood check-ins',
+        'Try a short mindful breathing session',
+      ],
+      hasEnoughData: true,
+    );
+    final reportRepository = _FakeReportRepository(weeklyReport);
+    final reportProvider = ReportProvider(reportRepository);
     final userProvider = UserProvider(_FakeUserRepository())
       ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
 
@@ -131,22 +162,44 @@ void main() {
           ChangeNotifierProvider<MentalHealthActivityProvider>.value(
             value: activityProvider,
           ),
+          ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
         ],
         child: const MaterialApp(home: MentalHealthReportScreen()),
       ),
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.text('A complete weekly reflection for review.'),
+      findsOneWidget,
+    );
+    expect(find.text('Needs Support'), findsOneWidget);
+    expect(find.text('Jul 1, 2026 - Jul 7, 2026'), findsOneWidget);
+    expect(find.text('Academic Stress'), findsOneWidget);
+    expect(find.text('Sleep and Rest'), findsOneWidget);
+    expect(find.text('Continue daily mood check-ins'), findsOneWidget);
+    expect(find.text('Moderate concern'), findsWidgets);
+    expect(find.text('Recorded score: 18'), findsOneWidget);
     expect(find.text("Today's activity"), findsOneWidget);
     expect(find.text('Live'), findsOneWidget);
     expect(find.text('Avg 3.2/5'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
-    expect(find.text('8 min'), findsOneWidget);
-    expect(find.text('4-day streak'), findsOneWidget);
-    expect(find.text('Secret Chat'), findsOneWidget);
+    expect(find.text('8 min'), findsWidgets);
+    expect(find.text('4-day streak'), findsWidgets);
+    expect(find.text('Secret Chat'), findsWidgets);
     expect(find.text('1 posts, 2 comments'), findsOneWidget);
     expect(find.text('Recent Activity'), findsOneWidget);
     expect(activityRepository.loadCount, 1);
+
+    final refresh = tester
+        .state<RefreshIndicatorState>(find.byType(RefreshIndicator))
+        .show();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await refresh;
+    await tester.pumpAndSettle();
+    expect(activityRepository.loadCount, 2);
+    expect(reportRepository.refreshCount, 1);
   });
 
   testWidgets('mental health report shows empty daily activity state', (

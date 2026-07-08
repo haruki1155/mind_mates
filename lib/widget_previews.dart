@@ -25,6 +25,7 @@ Widget previewAppWrapper(Widget child) {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.light,
       onGenerateRoute: RouteGenerator.generateRoute,
       home: child,
     ),

@@ -147,6 +147,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           data: data.mentalHealthCheck,
                           onStart: () =>
                               _openPlaceholder('Mental Health Check'),
+                          onViewSummary: () => Navigator.of(
+                            context,
+                          ).pushNamed(RouteNames.mentalHealthReport),
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -236,7 +239,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ? base.mentalHealthCheck
           : HomeMentalHealthCheckData(
               title: latestReport.title,
-              description: latestReport.description,
+              description: latestReport.hasEnoughData
+                  ? 'Your weekly mental health summary is ready to review.'
+                  : 'Your summary is ready and will become more detailed as you use MindMate.',
               durationLabel: latestReport.hasEnoughData
                   ? 'Updated this week'
                   : 'Ready for your data',

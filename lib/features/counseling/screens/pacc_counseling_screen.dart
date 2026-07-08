@@ -25,7 +25,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   final _bestTimeController = TextEditingController();
 
   _PaccAppointmentTab _tab = _PaccAppointmentTab.myAppointments;
-  _PaccAppointmentStep _step = _PaccAppointmentStep.calendar;
+  _PaccAppointmentStep _step = _PaccAppointmentStep.intake;
   DateTime _visibleMonth = DateTime(2026, 4);
   DateTime? _selectedDate;
   String? _selectedTime;
@@ -100,7 +100,9 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
                       setState(() {
                         _tab = tab;
                         if (tab == _PaccAppointmentTab.appointNew) {
-                          _step = _PaccAppointmentStep.calendar;
+                          _step = _PaccAppointmentStep.intake;
+                          _selectedDate = null;
+                          _selectedTime = null;
                         }
                       });
                     },
@@ -135,6 +137,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         key: const ValueKey('calendar'),
         visibleMonth: _visibleMonth,
         selectedDate: _selectedDate,
+        onBack: () => setState(() => _step = _PaccAppointmentStep.intake),
         onPreviousMonth: () => setState(() {
           _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month - 1);
         }),
@@ -155,7 +158,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         availableTimes: _availableTimes,
         onBack: () => setState(() => _step = _PaccAppointmentStep.calendar),
         onTimeSelected: (time) => setState(() => _selectedTime = time),
-        onSubmit: _openIntakeForm,
+        onSubmit: _confirmAppointment,
       ),
       _PaccAppointmentStep.intake => _IntakeFormView(
         key: const ValueKey('intake'),
@@ -184,13 +187,13 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         onTherapyBeforeChanged: (value) {
           setState(() => _therapyBefore = value);
         },
-        onNext: _submitIntakeForm,
+        onNext: _validateIntakeForm,
       ),
       _PaccAppointmentStep.confirmation => _ConfirmationView(
         key: const ValueKey('confirmation'),
         onReturn: () => setState(() {
           _tab = _PaccAppointmentTab.myAppointments;
-          _step = _PaccAppointmentStep.calendar;
+          _step = _PaccAppointmentStep.intake;
         }),
       ),
     };
@@ -199,21 +202,13 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   void _startNewAppointment() {
     setState(() {
       _tab = _PaccAppointmentTab.appointNew;
-      _step = _PaccAppointmentStep.calendar;
+      _step = _PaccAppointmentStep.intake;
+      _selectedDate = null;
+      _selectedTime = null;
     });
   }
 
-  void _openIntakeForm() {
-    if (_selectedDate == null || _selectedTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a date and time first.')),
-      );
-      return;
-    }
-    setState(() => _step = _PaccAppointmentStep.intake);
-  }
-
-  void _submitIntakeForm() {
+  void _validateIntakeForm() {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid ||
         _sex == null ||
@@ -225,6 +220,17 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         const SnackBar(content: Text('Please complete all required fields.')),
       );
       setState(() {});
+      return;
+    }
+
+    setState(() => _step = _PaccAppointmentStep.calendar);
+  }
+
+  void _confirmAppointment() {
+    if (_selectedDate == null || _selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a date and time first.')),
+      );
       return;
     }
 
@@ -721,6 +727,7 @@ class _CalendarView extends StatelessWidget {
     super.key,
     required this.visibleMonth,
     required this.selectedDate,
+    required this.onBack,
     required this.onPreviousMonth,
     required this.onNextMonth,
     required this.onDateSelected,
@@ -728,6 +735,7 @@ class _CalendarView extends StatelessWidget {
 
   final DateTime visibleMonth;
   final DateTime? selectedDate;
+  final VoidCallback onBack;
   final VoidCallback onPreviousMonth;
   final VoidCallback onNextMonth;
   final ValueChanged<DateTime> onDateSelected;
@@ -753,7 +761,18 @@ class _CalendarView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Appointment Schedule', style: _PaccText.title),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Back to intake form',
+                onPressed: onBack,
+                icon: const Icon(Icons.chevron_left, color: Colors.black),
+              ),
+              const Expanded(
+                child: Text('Appointment Schedule', style: _PaccText.title),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -894,7 +913,7 @@ class _TimeSelectionView extends StatelessWidget {
           child: SizedBox(
             width: 230,
             child: _YellowButton(
-              label: 'Submit Intake Form',
+              label: 'Confirm Appointment',
               onTap: onSubmit,
               enabled: selectedTime != null,
             ),
@@ -1682,7 +1701,7 @@ class _DetailLine extends StatelessWidget {
 
 enum _PaccAppointmentTab { myAppointments, appointNew }
 
-enum _PaccAppointmentStep { calendar, time, intake, confirmation }
+enum _PaccAppointmentStep { intake, calendar, time, confirmation }
 
 class _PaccAppointmentDraft {
   const _PaccAppointmentDraft({
