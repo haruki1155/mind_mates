@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'firebase_options.dart';
 import 'providers/assessment_provider.dart';
+import 'providers/appointment_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/breathing_provider.dart';
 import 'providers/insights_provider.dart';
@@ -17,6 +18,7 @@ import 'providers/report_provider.dart';
 import 'providers/secret_chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'repositories/assessment_repository.dart';
+import 'repositories/appointment_repository.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/breathing_repository.dart';
 import 'repositories/insights_repository.dart';
@@ -56,6 +58,9 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider(create: (_) => UserProvider(UserRepository())),
         ChangeNotifierProvider(create: (_) => MoodProvider(MoodRepository())),
+        ChangeNotifierProvider(
+          create: (_) => AppointmentProvider(AppointmentRepository()),
+        ),
         ChangeNotifierProvider(
           create: (_) => JournalProvider(JournalRepository()),
         ),

@@ -126,6 +126,7 @@ class _FakeMoodRepository extends MoodRepository {
     required int level,
     String? label,
     String? note,
+    DateTime? now,
   }) async {
     createdUserId = userId;
     return 'mood_1';

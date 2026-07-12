@@ -405,6 +405,7 @@ class _FakeMoodRepository extends MoodRepository {
     required int level,
     String? label,
     String? note,
+    DateTime? now,
   }) async {
     return 'mood_1';
   }

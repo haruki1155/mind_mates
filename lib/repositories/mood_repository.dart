@@ -8,9 +8,12 @@ import 'user_repository.dart';
 class MoodRepository {
   MoodRepository({
     FirestoreService? firestoreService,
-  }) : _firestoreService = firestoreService ?? FirestoreService();
+    DateTime Function()? nowProvider,
+  }) : _firestoreService = firestoreService ?? FirestoreService(),
+       _nowProvider = nowProvider ?? DateTime.now;
 
   final FirestoreService _firestoreService;
+  final DateTime Function() _nowProvider;
 
   static const timezone = 'Asia/Manila';
 
@@ -40,7 +43,7 @@ class MoodRepository {
   }
 
   Future<MoodModel?> fetchTodayMood(String userId, {DateTime? now}) async {
-    final instant = now ?? DateTime.now();
+    final instant = now ?? _nowProvider();
     final dateKey = dateKeyFor(instant);
     final documentId = dailyDocumentId(userId, instant);
     final deterministic = await _firestoreService.getDocument(
@@ -68,7 +71,7 @@ class MoodRepository {
     String? note,
     DateTime? now,
   }) async {
-    final instant = now ?? DateTime.now();
+    final instant = now ?? _nowProvider();
     final existing = await fetchTodayMood(userId, now: instant);
     if (existing != null) {
       return DailyMoodSaveResult(mood: existing, created: false);
@@ -189,12 +192,14 @@ class MoodRepository {
     required int level,
     String? label,
     String? note,
+    DateTime? now,
   }) async {
     final result = await saveDailyMood(
       userId: userId,
       level: level,
       label: label,
       note: note,
+      now: now ?? _nowProvider(),
     );
     return result.mood.id;
   }

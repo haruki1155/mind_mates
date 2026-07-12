@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/counseling/screens/pacc_counseling_screen.dart';
 import 'package:mind_mates/features/counseling/screens/services_screen.dart';
+import 'package:mind_mates/models/appointment_model.dart';
 import 'package:mind_mates/models/user_model.dart';
+import 'package:mind_mates/providers/appointment_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
+import 'package:mind_mates/repositories/appointment_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/routes/route_names.dart';
 import 'package:provider/provider.dart';
@@ -211,6 +214,30 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('past appointment dates are disabled', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 3200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_paccApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appoint New'));
+    await tester.pumpAndSettle();
+    await _fillVisibleForm(tester);
+    await _chooseVisibleOption(tester, 'Male');
+    await _chooseVisibleOption(tester, 'Fourth Year');
+    await _chooseVisibleOption(tester, 'Email');
+    await _chooseVisibleOption(tester, 'No');
+    await tester.ensureVisible(find.text('Next'));
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('1'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Appointment Schedule'), findsOneWidget);
+    expect(find.text('Choose Time'), findsNothing);
+  });
 }
 
 Widget _servicesApp() {
@@ -220,7 +247,9 @@ Widget _servicesApp() {
   );
 }
 
-Widget _paccApp() {
+Widget _paccApp({
+  _FakeAppointmentRepository? appointmentRepository,
+}) {
   final userProvider = UserProvider(_FakeUserRepository())
     ..setUser(
       const UserModel(
@@ -233,11 +262,19 @@ Widget _paccApp() {
       ),
     );
 
-  return ChangeNotifierProvider<UserProvider>.value(
-    value: userProvider,
+  final appointments = appointmentRepository ?? _FakeAppointmentRepository();
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+      ChangeNotifierProvider(
+        create: (_) => AppointmentProvider(appointments),
+      ),
+    ],
     child: MaterialApp(
-      theme: ThemeData(splashFactory: NoSplash.splashFactory),
-      home: const PaccCounselingScreen(),
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        home: PaccCounselingScreen(
+          nowProvider: () => DateTime(2026, 4, 15, 9),
+        ),
     ),
   );
 }
@@ -288,3 +325,29 @@ Future<void> _chooseVisibleOption(WidgetTester tester, String label) async {
 }
 
 class _FakeUserRepository extends UserRepository {}
+
+class _FakeAppointmentRepository extends AppointmentRepository {
+  _FakeAppointmentRepository({List<AppointmentModel> appointments = const []})
+    : appointments = [...appointments];
+
+  final List<AppointmentModel> appointments;
+  bool shouldFail = false;
+
+  @override
+  Future<List<AppointmentModel>> fetchAppointments(String userId) async {
+    if (shouldFail) throw StateError('load failed');
+    return appointments.where((item) => item.userId == userId).toList();
+  }
+
+  @override
+  Future<AppointmentModel> createAppointment(
+    AppointmentModel appointment,
+  ) async {
+    if (shouldFail) throw StateError('save failed');
+    final created = appointment.copyWith(
+      id: 'appointment_${appointments.length + 1}',
+    );
+    appointments.insert(0, created);
+    return created;
+  }
+}

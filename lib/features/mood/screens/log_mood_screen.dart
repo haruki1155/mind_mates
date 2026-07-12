@@ -12,7 +12,10 @@ import '../../../models/mood_model.dart';
 import '../../../repositories/mood_repository.dart';
 
 class LogMoodScreen extends StatefulWidget {
-  const LogMoodScreen({super.key});
+  const LogMoodScreen({super.key, DateTime Function()? nowProvider})
+    : _nowProvider = nowProvider ?? DateTime.now;
+
+  final DateTime Function() _nowProvider;
 
   @override
   State<LogMoodScreen> createState() => _LogMoodScreenState();
@@ -29,6 +32,8 @@ class _LogMoodScreenState extends State<LogMoodScreen>
   MoodModel? _todayMood;
   String? _loadedUserId;
   Timer? _midnightTimer;
+
+  DateTime get _now => widget._nowProvider();
 
   @override
   void initState() {
@@ -160,7 +165,7 @@ class _LogMoodScreenState extends State<LogMoodScreen>
       _isLoadingToday = true;
       _todayError = null;
     });
-    await provider.loadTodayMood(userId);
+    await provider.loadTodayMood(userId, now: _now);
     if (!mounted) return;
     setState(() {
       _isLoadingToday = false;
@@ -186,12 +191,14 @@ class _LogMoodScreenState extends State<LogMoodScreen>
     }
 
     setState(() => _isSaving = true);
+    final referenceNow = _now;
 
     final success = await moodProvider.logDailyMood(
       userId: userId,
       level: mood.level,
       label: mood.label,
       note: _noteController.text,
+      now: referenceNow,
     );
 
     if (!mounted) return;
@@ -205,7 +212,7 @@ class _LogMoodScreenState extends State<LogMoodScreen>
     var reportRefreshed = true;
     try {
       await _readProviderOrNull<UserProvider>()?.loadProfile(userId);
-      await moodProvider.loadRecentMoods(userId);
+      await moodProvider.loadRecentMoods(userId, now: referenceNow);
       await _readProviderOrNull<ReportProvider>()?.refreshWeeklyReport(userId);
     } catch (_) {
       reportRefreshed = false;
@@ -229,7 +236,7 @@ class _LogMoodScreenState extends State<LogMoodScreen>
 
   void _scheduleMidnightRefresh() {
     _midnightTimer?.cancel();
-    final now = DateTime.now();
+    final now = _now;
     final manila = MoodRepository.manilaWallClock(now);
     final nextMidnight = DateTime(manila.year, manila.month, manila.day + 1);
     final delay = nextMidnight.difference(manila) + const Duration(seconds: 1);

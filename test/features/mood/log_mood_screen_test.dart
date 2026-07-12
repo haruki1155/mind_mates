@@ -73,6 +73,7 @@ void main() {
     final moodRepository = _FakeMoodRepository();
     final userRepository = _FakeUserRepository();
     final reportRepository = _FakeReportRepository();
+    final fixedNow = DateTime(2026, 7, 7, 12);
 
     await tester.pumpWidget(
       _logMoodApp(
@@ -80,6 +81,7 @@ void main() {
         userProvider: UserProvider(userRepository)
           ..setUser(_user(id: 'user_1')),
         reportProvider: ReportProvider(reportRepository),
+        nowProvider: () => fixedNow,
       ),
     );
 
@@ -153,6 +155,7 @@ Widget _logMoodApp({
   required MoodProvider moodProvider,
   UserProvider? userProvider,
   ReportProvider? reportProvider,
+  DateTime Function()? nowProvider,
 }) {
   return MultiProvider(
     providers: [
@@ -162,7 +165,7 @@ Widget _logMoodApp({
       if (reportProvider != null)
         ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
     ],
-    child: const MaterialApp(home: LogMoodScreen()),
+    child: MaterialApp(home: LogMoodScreen(nowProvider: nowProvider)),
   );
 }
 
@@ -210,6 +213,7 @@ class _FakeMoodRepository extends MoodRepository {
     required int level,
     String? label,
     String? note,
+    DateTime? now,
   }) async {
     if (throwsOnCreate) throw StateError('save failed');
     createdUserId = userId;

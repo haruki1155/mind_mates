@@ -4,9 +4,11 @@ import '../models/mood_model.dart';
 import '../repositories/mood_repository.dart';
 
 class MoodProvider extends ChangeNotifier {
-  MoodProvider(this._repository);
+  MoodProvider(this._repository, {DateTime Function()? nowProvider})
+    : _nowProvider = nowProvider ?? DateTime.now;
 
   final MoodRepository _repository;
+  final DateTime Function() _nowProvider;
 
   List<MoodModel> _moods = [];
   bool _isLoading = false;
@@ -23,15 +25,16 @@ class MoodProvider extends ChangeNotifier {
   bool get hasCheckedInToday => _todayMood != null;
   DailyMoodSaveResult? get dailySaveResult => _dailySaveResult;
 
-  Future<void> loadRecentMoods(String userId) async {
+  Future<void> loadRecentMoods(String userId, {DateTime? now}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      final referenceNow = now ?? _nowProvider();
       _moods = await _repository.fetchRecentMoods(userId);
-      if (_todayMood == null || !_matchesToday(_todayMood!)) {
-        _todayMood = _moodForToday(_moods);
+      if (_todayMood == null || !_matchesToday(_todayMood!, now: referenceNow)) {
+        _todayMood = _moodForToday(_moods, now: referenceNow);
       }
     } catch (error) {
       _errorMessage = 'Unable to load moods.';
@@ -42,11 +45,23 @@ class MoodProvider extends ChangeNotifier {
   }
 
   Future<void> loadTodayMood(String userId, {DateTime? now}) async {
+    final referenceNow = now ?? _nowProvider();
+    if (_todayMood != null &&
+        !_matchesToday(_todayMood!, now: referenceNow)) {
+      _todayMood = null;
+      _dailySaveResult = null;
+    }
     _isLoadingToday = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      _todayMood = await _repository.fetchTodayMood(userId, now: now);
+      final fetched = await _repository.fetchTodayMood(
+        userId,
+        now: referenceNow,
+      );
+      _todayMood = fetched != null && _matchesToday(fetched, now: referenceNow)
+          ? fetched
+          : null;
       if (_todayMood != null) _insertMood(_todayMood!);
     } catch (_) {
       _errorMessage = 'Unable to load today\'s mood.';
@@ -63,6 +78,7 @@ class MoodProvider extends ChangeNotifier {
     String? note,
     DateTime? now,
   }) async {
+    final referenceNow = now ?? _nowProvider();
     _errorMessage = null;
     try {
       final result = await _repository.saveDailyMood(
@@ -70,7 +86,7 @@ class MoodProvider extends ChangeNotifier {
         level: level,
         label: label,
         note: note,
-        now: now,
+        now: referenceNow,
       );
       _dailySaveResult = result;
       _todayMood = result.mood;
@@ -90,12 +106,14 @@ class MoodProvider extends ChangeNotifier {
     String? label,
     String? note,
   }) async {
+    final referenceNow = _nowProvider();
     try {
       final id = await _repository.createMood(
         userId: userId,
         level: level,
         label: label,
         note: note,
+        now: referenceNow,
       );
       _moods = [
         MoodModel(
@@ -104,11 +122,11 @@ class MoodProvider extends ChangeNotifier {
           level: level,
           label: label,
           note: note,
-          createdAt: DateTime.now(),
+          createdAt: referenceNow,
         ),
         ..._moods,
       ];
-      _todayMood = _moodForToday(_moods);
+      _todayMood = _moodForToday(_moods, now: referenceNow);
       notifyListeners();
       return true;
     } catch (error) {
@@ -123,7 +141,7 @@ class MoodProvider extends ChangeNotifier {
   }
 
   MoodModel? _moodForToday(List<MoodModel> moods, {DateTime? now}) {
-    final today = MoodRepository.dateKeyFor(now ?? DateTime.now());
+    final today = MoodRepository.dateKeyFor(now ?? _nowProvider());
     for (final mood in moods) {
       final key = (mood.dateKey ?? '').trim().isNotEmpty
           ? mood.dateKey
@@ -134,7 +152,7 @@ class MoodProvider extends ChangeNotifier {
   }
 
   bool _matchesToday(MoodModel mood, {DateTime? now}) {
-    final today = MoodRepository.dateKeyFor(now ?? DateTime.now());
+    final today = MoodRepository.dateKeyFor(now ?? _nowProvider());
     final key = (mood.dateKey ?? '').trim().isNotEmpty
         ? mood.dateKey
         : MoodRepository.dateKeyFor(mood.createdAt);
