@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/auth_provider.dart';
@@ -14,9 +15,20 @@ class MindAidNavigation {
 
 class MindAidRouteObserver extends NavigatorObserver {
   final ValueNotifier<String?> currentRoute = ValueNotifier(RouteNames.splash);
+  String? _pendingRoute;
+  bool _updateScheduled = false;
 
   void _set(Route<dynamic>? route) {
-    currentRoute.value = route?.settings.name;
+    _pendingRoute = route?.settings.name;
+    if (_updateScheduled) return;
+    _updateScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _updateScheduled = false;
+      final nextRoute = _pendingRoute;
+      if (currentRoute.value != nextRoute) {
+        currentRoute.value = nextRoute;
+      }
+    });
   }
 
   @override
@@ -71,13 +83,28 @@ class MindAidLauncherOverlay extends StatelessWidget {
                 right: 16,
                 bottom: MediaQuery.paddingOf(context).bottom + 18,
                 child: SafeArea(
-                  child: FloatingActionButton.small(
-                    heroTag: 'global_mind_aid_launcher',
-                    tooltip: 'Talk to MindAid',
-                    backgroundColor: const Color(0xFFFFC107),
-                    foregroundColor: Colors.black,
-                    onPressed: () => _openMindAid(route),
-                    child: const Icon(Icons.psychology_alt_rounded),
+                  child: Semantics(
+                    button: true,
+                    label: 'Talk to MindAid',
+                    child: Material(
+                      key: const ValueKey('globalMindAidLauncher'),
+                      color: const Color(0xFFFFC107),
+                      elevation: 6,
+                      shadowColor: const Color(0x55000000),
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => _openMindAid(route),
+                        child: const SizedBox.square(
+                          dimension: 48,
+                          child: Icon(
+                            Icons.psychology_alt_rounded,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
