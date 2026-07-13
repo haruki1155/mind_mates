@@ -51,11 +51,7 @@ class FirestoreService {
       final reference = firestore
           .collection(operation.collection)
           .doc(operation.documentId);
-      batch.set(
-        reference,
-        operation.data,
-        SetOptions(merge: operation.merge),
-      );
+      batch.set(reference, operation.data, SetOptions(merge: operation.merge));
     }
     await batch.commit();
   }
@@ -143,5 +139,9 @@ class FirestoreService {
     Map<String, dynamic> data,
   ) {
     return firestore.collection(collection).doc(documentId).update(data);
+  }
+
+  Future<void> deleteDocument(String collection, String documentId) {
+    return firestore.collection(collection).doc(documentId).delete();
   }
 }

@@ -139,14 +139,20 @@ class HomeDashboardData {
         HomeToolkitData(
           title: 'Breathing exercise',
           subtitle: '5 min guided session',
-          imageName: 'Breathing exercise 5 min guided session.png',
+          imageName: 'Breath.png',
           colors: [Color(0xFF6483F4), Color(0xFF5570C8)],
         ),
         HomeToolkitData(
           title: 'Facial Recognition',
           subtitle: 'Capturing your emotion',
-          imageName: 'Facial Recognition.png',
+          imageName: 'Emotional Intelligence.png',
           colors: [Color(0xFFFFB2D7), Color(0xFF8A3E82)],
+        ),
+        HomeToolkitData(
+          title: 'My Journal',
+          subtitle: 'Private guided reflection',
+          imageName: 'journal_icon.png',
+          colors: [Color(0xFFFFD86B), Color(0xFFE5AC00)],
         ),
       ],
     );

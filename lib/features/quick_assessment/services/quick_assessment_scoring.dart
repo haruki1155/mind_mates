@@ -1,4 +1,5 @@
 import '../models/quick_assessment_models.dart';
+import '../../student_assessment/models/assessment_interpretation_models.dart';
 
 class QuickAssessmentScoring {
   const QuickAssessmentScoring._();
@@ -14,16 +15,20 @@ class QuickAssessmentScoring {
   static double concernScore({
     required QuickQuestionDirection direction,
     required int value,
+    int minValue = 1,
+    int maxValue = 5,
   }) {
+    final range = maxValue - minValue;
+    if (range <= 0) return 0;
     if (direction == QuickQuestionDirection.protective) {
-      return ((5 - value) / 4) * 100;
+      return ((maxValue - value) / range) * 100;
     }
 
-    return ((value - 1) / 4) * 100;
+    return ((value - minValue) / range) * 100;
   }
 
-  static String progressLabelForStep(int step) {
-    return '${step.clamp(1, 6)}/6';
+  static String progressLabelForStep(int step, {int total = 5}) {
+    return '${step.clamp(1, total)}/$total';
   }
 
   static double averageConcernScore(List<QuickAssessmentResponse> responses) {
@@ -106,5 +111,58 @@ class QuickAssessmentScoring {
       case QuickAssessmentLevel.veryHigh:
         return 'Reach out to PACC counseling support or another trusted support person as soon as possible.';
     }
+  }
+
+  static AssessmentInterpretation interpretationFor(
+    List<QuickAssessmentResponse> responses,
+  ) {
+    final domains = areaScores(responses).entries.map((entry) {
+      final band = _band(entry.value);
+      return AssessmentDomainResult(
+        domain: entry.key,
+        score: entry.value,
+        band: band,
+        answeredCount: 1,
+        skippedCount: 0,
+        interpretation:
+            '${entry.key} is currently in the ${band.label.toLowerCase()} screening range.',
+      );
+    }).toList()..sort((a, b) => b.score.compareTo(a.score));
+    final level = overallLevel(averageConcernScore(responses));
+    final priority = switch (level) {
+      QuickAssessmentLevel.low => AssessmentSupportPriority.routine,
+      QuickAssessmentLevel.moderate => AssessmentSupportPriority.monitor,
+      QuickAssessmentLevel.high => AssessmentSupportPriority.followUpSuggested,
+      QuickAssessmentLevel.veryHigh => AssessmentSupportPriority.promptFollowUp,
+    };
+    final top = domains.where((domain) => domain.score >= 30).take(3).toList();
+    final focus = top.isEmpty
+        ? 'No quick-screen area showed a moderate concern signal.'
+        : 'Higher signals appeared in ${top.map((domain) => domain.domain).join(', ')}.';
+    return AssessmentInterpretation(
+      supportPriority: priority,
+      responseQuality: AssessmentResponseQuality(
+        presented: responses.length,
+        answered: responses.length,
+        skipped: 0,
+        completionPercent: 100,
+        confidence: AssessmentResponseConfidence.high,
+      ),
+      domainResults: domains,
+      rationale: [focus],
+      userSummary: '${summaryForLevel(level)} $focus This is not a diagnosis.',
+      counselorSummary:
+          'Quick wellness screen: ${priority.label}. $focus Complete the full role-based assessment for domain-level interpretation.',
+      suggestedActions: [recommendedNextStepForLevel(level)],
+      questionSetVersion: 'quick_v2',
+    );
+  }
+
+  static AssessmentConcernBand _band(double score) {
+    if (score <= 20) return AssessmentConcernBand.low;
+    if (score <= 40) return AssessmentConcernBand.watchful;
+    if (score <= 60) return AssessmentConcernBand.moderate;
+    if (score <= 80) return AssessmentConcernBand.elevated;
+    return AssessmentConcernBand.high;
   }
 }

@@ -2,22 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../providers/appointment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../repositories/assessment_repository.dart';
+import '../../../repositories/user_repository.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/models/quick_assessment_models.dart';
+import '../../counseling/screens/pacc_counseling_screen.dart';
+import '../../counseling/widgets/appointment_details_sheet.dart';
+import '../../../models/appointment_model.dart';
+import '../../../services/firebase/app_notification_service.dart';
+import '../../notifications/screens/notifications_screen.dart';
 import '../models/home_dashboard_data.dart';
 import '../widgets/home_dashboard_widgets.dart';
+import 'home_appointment_calendar_screen.dart';
 
 enum _HomeNavDestination { today, secretChat, insight, messages, profile }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.data});
+  const HomeScreen({super.key, this.data, DateTime Function()? nowProvider})
+    : _nowProvider = nowProvider ?? DateTime.now;
 
   final HomeDashboardData? data;
+  final DateTime Function() _nowProvider;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -27,11 +37,13 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _navVisibilityThreshold = 24;
 
   final ScrollController _scrollController = ScrollController();
+  final AppNotificationService _notifications = AppNotificationService();
 
   bool _showBottomNav = true;
   bool _isOpeningAssessment = false;
   _HomeNavDestination _activeDestination = _HomeNavDestination.today;
   String? _loadedBackendUserId;
+  String? _loadedAppointmentUserId;
 
   HomeDashboardData get _data => widget.data ?? HomeDashboardData.mock();
 
@@ -43,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _notifications.dispose();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -51,30 +64,50 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = context.read<UserProvider>().user;
-    final userId = user?.id;
-    if (userId == null || userId.isEmpty || _loadedBackendUserId == userId) {
-      return;
+    final userId = _currentUserId();
+    if (userId == null || userId.isEmpty) return;
+
+    if (_loadedBackendUserId != userId) {
+      _loadedBackendUserId = userId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _notifications.initializeForUser(userId).catchError((_) {});
+        _readProviderOrNull<UserProvider>(
+          context,
+        )?.recordActivity(userId, UserActivityType.appOpen);
+        _readProviderOrNull<MoodProvider>(context)?.loadRecentMoods(userId);
+        final reportProvider = _readProviderOrNull<ReportProvider>(context);
+        if (reportProvider == null) return;
+        reportProvider.loadLatestReport(userId).then((_) {
+          if (!mounted) return;
+          reportProvider.ensureWeeklyPlaceholder(userId);
+        });
+      });
     }
 
-    _loadedBackendUserId = userId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _readProviderOrNull<MoodProvider>(context)?.loadRecentMoods(userId);
-      final reportProvider = _readProviderOrNull<ReportProvider>(context);
-      if (reportProvider == null) return;
-      reportProvider.loadLatestReport(userId).then((_) {
-        if (!mounted) return;
-        reportProvider.ensureWeeklyPlaceholder(userId);
+    final appointmentProvider = _readProviderOrNull<AppointmentProvider>(
+      context,
+    );
+    if (appointmentProvider != null && _loadedAppointmentUserId != userId) {
+      _loadedAppointmentUserId = userId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) appointmentProvider.loadAppointments(userId);
       });
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final data = _dashboardDataFromProviders(context);
     final assessmentProvider = context.watch<AssessmentProvider>();
+    _watchProviderOrNull<AuthProvider>(context);
+    final appointmentProvider = _watchProviderOrNull<AppointmentProvider>(
+      context,
+    );
     final user = _userFor(data, assessmentProvider);
+    final nextAppointment = _nextAppointment(
+      appointmentProvider?.appointments ?? const [],
+    );
 
     return Scaffold(
       backgroundColor: HomePalette.background,
@@ -91,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: data.headerTitle,
                     days: data.days,
                     onProfileTap: _openProfile,
-                    onCalendarTap: () => _openPlaceholder('Calendar'),
+                    onCalendarTap: _openAppointmentCalendar,
                   ),
                 ),
                 SliverPadding(
@@ -112,8 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: HomeWelcomeCard(
                           user: user,
                           streak: data.streak,
-                          onNotificationTap: () =>
-                              _openPlaceholder('Notifications'),
+                          onNotificationTap: _openNotifications,
                           onStreakTap: () => _openPlaceholder('Streak Details'),
                           onMoodTap: _openLogMood,
                           actionLabel:
@@ -122,6 +154,32 @@ class _HomeScreenState extends State<HomeScreen> {
                               : 'Log your mood',
                         ),
                       ),
+                      if (appointmentProvider != null) ...[
+                        const SizedBox(height: 16),
+                        HomeAnimatedSection(
+                          delay: 95,
+                          child: _HomeAppointmentPreview(
+                            appointment: nextAppointment,
+                            isLoading:
+                                appointmentProvider.isLoading &&
+                                appointmentProvider.appointments.isEmpty,
+                            errorMessage: appointmentProvider.errorMessage,
+                            onOpen: nextAppointment == null
+                                ? _openAppointmentCalendar
+                                : () => showAppointmentDetailsSheet(
+                                    context,
+                                    nextAppointment,
+                                  ),
+                            onBook: _openAppointmentBooking,
+                            onRetry: () {
+                              final userId = _currentUserId();
+                              if (userId != null) {
+                                appointmentProvider.loadAppointments(userId);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 28),
                       HomeAnimatedSection(
                         delay: 120,
@@ -232,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
       days: activityDates.isEmpty
           ? base.days
           : HomeDashboardData.weekAround(
-              DateTime.now(),
+              widget._nowProvider(),
               activityDates: activityDates,
             ),
       mentalHealthCheck: latestReport == null
@@ -343,6 +401,55 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openServices() {
     Navigator.of(context).pushNamed(RouteNames.services);
+  }
+
+  AppointmentModel? _nextAppointment(List<AppointmentModel> appointments) {
+    final now = widget._nowProvider();
+    final upcoming =
+        appointments
+            .where(
+              (item) =>
+                  {
+                    AppointmentDisplayStatus.pending,
+                    AppointmentDisplayStatus.upcoming,
+                    AppointmentDisplayStatus.confirmed,
+                    AppointmentDisplayStatus.rescheduleProposed,
+                  }.contains(appointmentDisplayStatus(item.status)) &&
+                  !item.scheduledAt.isBefore(now),
+            )
+            .toList()
+          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    return upcoming.isEmpty ? null : upcoming.first;
+  }
+
+  void _openAppointmentCalendar() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            HomeAppointmentCalendarScreen(nowProvider: widget._nowProvider),
+      ),
+    );
+  }
+
+  void _openNotifications() {
+    final userId = _currentUserId();
+    if (userId == null || userId.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => NotificationsScreen(userId: userId),
+      ),
+    );
+  }
+
+  void _openAppointmentBooking() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PaccCounselingScreen(
+          startBooking: true,
+          nowProvider: widget._nowProvider,
+        ),
+      ),
+    );
   }
 
   Future<void> _openStudentAssessment() async {
@@ -457,15 +564,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String? _currentUserId() {
-    final userId = context.read<UserProvider>().user?.id;
-    if (userId != null && userId.isNotEmpty) return userId;
-
     try {
       final authProvider = context.read<AuthProvider>();
-      return authProvider.userId ?? authProvider.hydrateCurrentUser();
+      final authId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      if (authId != null && authId.isNotEmpty) return authId;
     } on ProviderNotFoundException {
-      return null;
+      // Tests and previews may provide only UserProvider.
     }
+    final userId = context.read<UserProvider>().user?.id;
+    return userId == null || userId.isEmpty ? null : userId;
   }
 
   Future<void> _showAssessmentLimitDialog(
@@ -583,10 +690,171 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    if (title == 'Quiet reflection' ||
+        title == 'Journal' ||
+        title == 'My Journal') {
+      Navigator.of(context).pushNamed(RouteNames.journal);
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => BlankHomeFeaturePage(title: title)),
     );
   }
+}
+
+class _HomeAppointmentPreview extends StatelessWidget {
+  const _HomeAppointmentPreview({
+    required this.appointment,
+    required this.isLoading,
+    required this.errorMessage,
+    required this.onOpen,
+    required this.onBook,
+    required this.onRetry,
+  });
+
+  final AppointmentModel? appointment;
+  final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback onOpen;
+  final VoidCallback onBook;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = appointment;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: HomeDecor.card(
+        color: const Color(0xFFFFF9E8),
+        borderColor: const Color(0xFFE8D38A),
+      ),
+      child: isLoading
+          ? const Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                SizedBox(width: 12),
+                Text('Loading your appointments…', style: HomeTextStyles.body),
+              ],
+            )
+          : errorMessage != null && item == null
+          ? Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Unable to load appointments.',
+                    style: HomeTextStyles.body,
+                  ),
+                ),
+                TextButton(onPressed: onRetry, child: const Text('Retry')),
+              ],
+            )
+          : item == null
+          ? Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: HomePalette.softGold,
+                  child: Icon(Icons.event_available_outlined),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No upcoming appointment',
+                        style: HomeTextStyles.cardTitle,
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Schedule confidential support when you need it.',
+                        style: HomeTextStyles.bodyMuted,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(onPressed: onBook, child: const Text('Book')),
+              ],
+            )
+          : InkWell(
+              onTap: onOpen,
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: HomePalette.softGold,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${item.scheduledAt.day}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          _shortMonth(item.scheduledAt.month),
+                          style: HomeTextStyles.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Next appointment',
+                          style: HomeTextStyles.cardTitle,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${item.scheduledTime} • ${item.location}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: HomeTextStyles.body,
+                        ),
+                        if ((item.counselorName ?? '').trim().isNotEmpty)
+                          Text(
+                            item.counselorName!.trim(),
+                            style: HomeTextStyles.bodyMuted,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+    );
+  }
+
+  String _shortMonth(int month) => const [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ][month - 1];
 }
 
 class _HomeBottomNav extends StatelessWidget {

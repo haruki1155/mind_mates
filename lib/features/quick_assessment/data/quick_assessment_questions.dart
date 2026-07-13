@@ -47,7 +47,7 @@ class QuickAssessmentQuestions {
     QuickAssessmentQuestion(
       id: 'overwhelmed',
       prompt:
-          'In the past month, how often have you felt overwhelmed by the number of things you need to do?',
+          'Over the last two weeks, how often have you felt overwhelmed by the number of things you need to do?',
       direction: QuickQuestionDirection.risk,
       options: [
         QuickAssessmentOption(
@@ -85,7 +85,7 @@ class QuickAssessmentQuestions {
     QuickAssessmentQuestion(
       id: 'connected',
       prompt:
-          'How connected do you feel to the people around you at school or at work?',
+          'Over the last two weeks, how connected have you felt to the people around you at school or at work?',
       direction: QuickQuestionDirection.protective,
       options: [
         QuickAssessmentOption(
@@ -155,7 +155,7 @@ class QuickAssessmentQuestions {
     QuickAssessmentQuestion(
       id: 'stress_affecting_life',
       prompt:
-          'How often do you feel that stress from academics or work is affecting your ability to cope with daily life?',
+          'Over the last two weeks, how often has stress from academics or work affected your ability to cope with daily life?',
       direction: QuickQuestionDirection.risk,
       options: [
         QuickAssessmentOption(

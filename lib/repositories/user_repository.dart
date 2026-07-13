@@ -5,6 +5,8 @@ import '../models/user_model.dart';
 import '../services/firebase/firestore_service.dart';
 
 enum UserActivityType {
+  appOpen,
+  appointmentRequested,
   quickAssessment,
   fullAssessment,
   mindAidMessage,
@@ -194,6 +196,10 @@ class UserRepository {
 
   Future<UserModel?> markUserActivity(String uid) {
     return recordActivity(uid, UserActivityType.quickAssessment);
+  }
+
+  Future<UserModel?> recordAppOpen(String uid) {
+    return recordActivity(uid, UserActivityType.appOpen);
   }
 
   static int _intOrZero(Object? value) {

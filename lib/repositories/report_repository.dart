@@ -393,6 +393,7 @@ class ReportRepository {
       'fullAssessmentScore': assessmentSummary.fullScore,
       'fullAssessmentStatus': assessmentSummary.fullStatus ?? '',
       'fullAssessmentTopConcernAreas': assessmentSummary.fullConcernAreas,
+      'assessmentSupportPriority': assessmentSummary.supportPriority ?? '',
       'mindAidMessageCount': mindAidMessageCount,
       'activeDayCount': activeDateKeys.length,
       'currentStreak': currentStreak,
@@ -824,6 +825,32 @@ class ReportRepository {
     required _MoodSummary moodSummary,
     required bool hasEnoughActivity,
   }) {
+    final supportPriority = assessmentSummary.supportPriority;
+    if (supportPriority == 'promptFollowUp') {
+      return const _MentalStatusSummary(
+        status: 'severe',
+        label: 'Prompt follow-up',
+      );
+    }
+    if (supportPriority == 'followUpSuggested' ||
+        supportPriority == 'monitor' ||
+        supportPriority == 'insufficientResponses') {
+      return _MentalStatusSummary(
+        status: 'moderate',
+        label: supportPriority == 'followUpSuggested'
+            ? 'Follow-up suggested'
+            : supportPriority == 'insufficientResponses'
+            ? 'Insufficient responses'
+            : 'Monitor',
+      );
+    }
+    if (supportPriority == 'routine') {
+      return const _MentalStatusSummary(
+        status: 'normal',
+        label: 'Routine monitoring',
+      );
+    }
+
     final fullStatus = (assessmentSummary.fullStatus ?? '').toLowerCase();
     final quickStatus = (assessmentSummary.quickStatus ?? '').toLowerCase();
     final quickSignal = (assessmentSummary.quickSignal ?? '').toLowerCase();
@@ -948,6 +975,7 @@ class _AssessmentSummary {
   String? get fullStatus =>
       _firstText(latestFull?['status'], latestFull?['overallLevel']);
   String? get quickSignal => _firstText(latestQuick?['mentalStatusSignal']);
+  String? get supportPriority => _supportPriority(preferredAssessment);
 
   List<String> get fullConcernAreas => _stringList(
     latestFull?['mainConcernAreas'] ?? latestFull?['topConcernAreas'],
@@ -959,6 +987,15 @@ class _AssessmentSummary {
     if (value is int) return value;
     if (value is num) return value.round();
     return int.tryParse(value?.toString() ?? '');
+  }
+
+  static String? _supportPriority(Map<String, dynamic>? assessment) {
+    if (assessment == null) return null;
+    final interpretation = assessment['interpretation'];
+    return _firstText(
+      interpretation is Map ? interpretation['supportPriority'] : null,
+      assessment['supportPriority'],
+    );
   }
 
   static String? _firstText(Object? first, [Object? second]) {

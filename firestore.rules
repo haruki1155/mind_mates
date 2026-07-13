@@ -76,7 +76,9 @@ service cloud.firestore {
 
     match /journals/{journalId} {
       allow create: if isOwner(request.resource.data.userId);
-      allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
     }
 
     match /reports/{reportId} {
@@ -105,8 +107,52 @@ service cloud.firestore {
     }
 
     match /mind_aid_messages/{messageId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.sender in ['user', 'assistant']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 1
+        && request.resource.data.text.size() <= 1600
+        && request.resource.data.conversationId is string
+        && request.resource.data.conversationId.size() <= 64;
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if false;
+    }
+
+    match /mind_aid_preferences/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.userId == userId
+        && request.resource.data.hasDecision is bool
+        && request.resource.data.cloudConsent is bool
+        && request.resource.data.personalizationEnabled is bool
+        && request.resource.data.conversationId is string
+        && request.resource.data.conversationId.size() >= 8
+        && request.resource.data.conversationId.size() <= 64;
+      allow delete: if isOwner(userId);
+    }
+
+    match /mind_aid_feedback/{feedbackId} {
+      allow create, update: if isOwner(request.resource.data.userId)
+        && request.resource.data.messageId is string
+        && request.resource.data.helpful is bool;
+      allow read, delete: if isOwner(resource.data.userId);
+    }
+
+    match /mind_aid_analytics_daily/{dateKey} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /mind_aid_config/{documentId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /_mind_aid_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /_mind_aid_rate_limits/{userId} {
+      allow read, write: if false;
     }
 
     match /secret_chats/{postId} {
@@ -193,6 +239,19 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/secret_chats/$(request.resource.data.postId)).data.authorId != request.auth.uid));
     }
 
+    match /analytics_daily/{dateKey} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /users/{userId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /_analytics_events/{eventId} {
+      allow read, write: if false;
+    }
+
     match /secret_chat_profiles/{userId} {
       allow get: if signedIn();
       allow list: if signedIn();
@@ -251,7 +310,32 @@ service cloud.firestore {
 
     match /appointments/{appointmentId} {
       allow create: if isOwner(request.resource.data.userId);
-      allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if isAdmin();
+      match /history/{historyId} {
+        allow read: if isOwner(get(/databases/$(database)/documents/appointments/$(appointmentId)).data.userId) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow create, delete: if false;
+    }
+
+    match /user_devices/{userId}/tokens/{tokenId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    match /inquiries/{inquiryId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     match /insight_categories/{categoryId} {

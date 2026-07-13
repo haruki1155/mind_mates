@@ -73,6 +73,8 @@ void main() {
   testWidgets('shows polished empty state when insight sections are absent', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       _insightsApp(
         insightsProvider: InsightsProvider(_EmptyInsightsRepository()),
@@ -81,9 +83,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Insight content is ready to be wired to backend data.'),
+      find.text('No wellness resources are available yet.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('shows retry action when insight loading fails', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _insightsApp(
+        insightsProvider: InsightsProvider(_FailingInsightsRepository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('We couldn’t load wellness resources.'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
   });
 
   testWidgets('tapping a seeded insight opens article detail page', (
@@ -97,6 +114,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('What is stress?'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('What is stress?'));
     await tester.pumpAndSettle();
 
@@ -114,7 +133,33 @@ void main() {
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
-    expect(find.text('Your mental wellness hub'), findsOneWidget);
+    expect(find.byType(MentalHealthInsightsScreen), findsOneWidget);
+  });
+
+  testWidgets('category tile opens complete resource library', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _insightsApp(insightsProvider: InsightsProvider(InsightsRepository())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Stress relief').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(InsightCategoryResourceScreen), findsOneWidget);
+    expect(find.text('Featured resource'), findsOneWidget);
+    expect(find.text('Articles and guides'), findsOneWidget);
+    expect(find.text('What is stress?'), findsAtLeastNWidgets(1));
+    await tester.drag(find.byType(ListView).last, const Offset(0, -900));
+    await tester.pumpAndSettle();
+    expect(find.text('Videos'), findsOneWidget);
+    expect(find.text('Video coming soon'), findsOneWidget);
+
+    await tester.tap(find.text('Video coming soon'));
+    await tester.pumpAndSettle();
+    expect(find.byType(InsightArticleDetailScreen), findsNothing);
   });
 
   testWidgets('article detail falls back when optional fields are missing', (
@@ -149,7 +194,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Log mood ->'));
+    await tester.tap(find.text('Log mood →'));
     await tester.pumpAndSettle();
     expect(find.byType(LogMoodScreen), findsOneWidget);
     expect(find.text('Log your mood'), findsOneWidget);
@@ -207,7 +252,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('See all ->').at(1));
+    await tester.tap(find.text('See all →').at(1));
     await tester.pumpAndSettle();
 
     expect(find.text('Mental Wellbeing 101'), findsOneWidget);
@@ -252,6 +297,13 @@ class _EmptyInsightsRepository extends InsightsRepository {
   @override
   Future<InsightsDashboardData> fetchInsights(String userId) async {
     return const InsightsDashboardData(categories: [], sections: []);
+  }
+}
+
+class _FailingInsightsRepository extends InsightsRepository {
+  @override
+  Future<InsightsDashboardData> fetchInsights(String userId) {
+    throw StateError('offline');
   }
 }
 

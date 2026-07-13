@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
+import '/features/mind_aid/domain/mind_aid_integration_models.dart';
 import '/features/mind_aid/domain/mind_aid_safety.dart';
 import '/models/mind_aid_message_model.dart';
+import '/models/mind_aid_suggestion_model.dart';
 import '/repositories/mind_aid_repository_screen.dart';
 
 class MindAidAnalyticsSnapshot {
@@ -32,6 +34,9 @@ class MindAidProvider extends ChangeNotifier {
   bool isSending = false;
   String? errorMessage;
   String? _conversationSummary;
+  MindAidPreferences? _preferences;
+  MindAidLaunchContext? _launchContext;
+  String? _lastFailedText;
   bool _lastUserMessagePersisted = false;
   int _selectedSuggestionCount = 0;
   int _highRiskTriggerCount = 0;
@@ -45,18 +50,32 @@ class MindAidProvider extends ChangeNotifier {
     commonIntentCounts: Map.unmodifiable(_commonIntentCounts),
   );
   bool get lastUserMessagePersisted => _lastUserMessagePersisted;
+  MindAidPreferences? get preferences => _preferences;
+  bool get needsConsent => _preferences != null && !_preferences!.hasDecision;
+  bool get usesDialogflow => _preferences?.cloudConsent == true;
+  String? get lastFailedText => _lastFailedText;
 
   Future<void> loadChat(
     String userId, {
     MindAidContext context = const MindAidContext(),
+    MindAidLaunchContext? launchContext,
   }) async {
+    _launchContext = launchContext ?? _launchContext;
     final effectiveContext = _contextWithSessionMemory(context);
     isLoading = true;
     notifyListeners();
 
     try {
-      final msgResult = await repository.fetchMessages(userId);
-      final sugResult = await repository.fetchSuggestions();
+      _preferences = await repository.loadPreferences(userId);
+      final results = await Future.wait([
+        repository.fetchMessages(
+          userId,
+          conversationId: _preferences?.conversationId,
+        ),
+        repository.fetchSuggestions(),
+      ]);
+      final msgResult = results[0] as List<MindAidMessageModel>;
+      final sugResult = results[1] as List<MindAidSuggestionModel>;
 
       messages = msgResult
           .map(
@@ -70,6 +89,8 @@ class MindAidProvider extends ChangeNotifier {
               status: e.status,
               categoryLabel: null,
               supportCards: const [],
+              actions: e.actions,
+              source: e.source,
             ),
           )
           .toList();
@@ -86,6 +107,15 @@ class MindAidProvider extends ChangeNotifier {
             .toList(growable: false),
         effectiveContext,
       );
+      final openingPrompt = _launchContext?.openingPrompt?.trim();
+      if (openingPrompt != null &&
+          openingPrompt.isNotEmpty &&
+          !suggestions.any((item) => item.label == openingPrompt)) {
+        suggestions = [
+          MindAidSuggestion(id: 'launch_context', label: openingPrompt),
+          ...suggestions,
+        ].take(5).toList(growable: false);
+      }
     } catch (e) {
       errorMessage = e.toString();
     }
@@ -105,6 +135,7 @@ class MindAidProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      _lastFailedText = null;
       final userMessage = MindAidMessage(
         id: DateTime.now().toString(),
         sender: MindAidSender.user,
@@ -126,6 +157,8 @@ class MindAidProvider extends ChangeNotifier {
         text: text,
         recentMessages: recentMessages,
         context: effectiveContext,
+        preferences: _preferences,
+        launchContext: _launchContext?.source ?? '',
       );
       final bot = result.message;
 
@@ -137,6 +170,8 @@ class MindAidProvider extends ChangeNotifier {
         status: bot.status,
         categoryLabel: _categoryLabelFor(result),
         supportCards: _supportCardsFor(result, context),
+        actions: _actionsFor(result),
+        source: result.chatResponse.source,
       );
 
       messages.add(botMessage);
@@ -161,12 +196,88 @@ class MindAidProvider extends ChangeNotifier {
     } catch (e) {
       errorMessage = e.toString();
       _fallbackCount += 1;
+      _lastFailedText = text;
+      final index = messages.lastIndexWhere(
+        (message) => message.sender == MindAidSender.user,
+      );
+      if (index >= 0) {
+        final failed = messages[index];
+        messages[index] = MindAidMessage(
+          id: failed.id,
+          sender: failed.sender,
+          text: failed.text,
+          createdAt: failed.createdAt,
+          status: 'failed',
+        );
+      }
     }
 
     isSending = false;
     notifyListeners();
     return false;
   }
+
+  Future<bool> retryLastMessage(
+    String userId, {
+    MindAidContext context = const MindAidContext(),
+  }) async {
+    final text = _lastFailedText;
+    if (text == null || text.isEmpty) return false;
+    final index = messages.lastIndexWhere(
+      (message) =>
+          message.sender == MindAidSender.user && message.status == 'failed',
+    );
+    if (index >= 0) messages.removeAt(index);
+    return sendMessage(userId, text, context: context);
+  }
+
+  Future<void> setConsent({
+    required String userId,
+    required bool cloudConsent,
+  }) async {
+    _preferences = await repository.saveConsent(
+      userId: userId,
+      cloudConsent: cloudConsent,
+      personalizationEnabled: cloudConsent,
+      conversationId: _preferences?.conversationId,
+    );
+    notifyListeners();
+  }
+
+  Future<void> clearHistory(String userId) async {
+    await repository.clearHistory(userId);
+    messages = [];
+    _conversationSummary = null;
+    _lastFailedText = null;
+    _preferences = await repository.loadPreferences(userId);
+    notifyListeners();
+  }
+
+  Future<void> startNewConversation(String userId) async {
+    final nextId = await repository.startNewConversation(userId);
+    final current = _preferences;
+    _preferences = MindAidPreferences(
+      hasDecision: current?.hasDecision ?? true,
+      cloudConsent: current?.cloudConsent ?? false,
+      personalizationEnabled: current?.personalizationEnabled ?? false,
+      conversationId: nextId,
+      consentVersion: current?.consentVersion,
+    );
+    messages = [];
+    _conversationSummary = null;
+    _lastFailedText = null;
+    notifyListeners();
+  }
+
+  Future<void> submitFeedback({
+    required String userId,
+    required String messageId,
+    required bool helpful,
+  }) => repository.submitFeedback(
+    userId: userId,
+    messageId: messageId,
+    helpful: helpful,
+  );
 
   Future<bool> selectSuggestion(
     MindAidSuggestion suggestion,
@@ -330,6 +441,50 @@ class MindAidProvider extends ChangeNotifier {
     if (raw.isEmpty) return null;
 
     return raw.replaceAll('_', ' ').toLowerCase();
+  }
+
+  List<MindAidAction> _actionsFor(MindAidSendResult result) {
+    if (result.chatResponse.actions.isNotEmpty) {
+      return result.chatResponse.actions;
+    }
+    if (result.chatResponse.requiresEscalation) {
+      return const [
+        MindAidAction(
+          type: MindAidActionType.openCounselingServices,
+          label: 'View support services',
+        ),
+        MindAidAction(
+          type: MindAidActionType.bookAppointment,
+          label: 'Contact PACC',
+        ),
+      ];
+    }
+    final intent = result.chatResponse.primaryIntent.toLowerCase();
+    if (intent.contains('breath') || intent.contains('panic')) {
+      return const [
+        MindAidAction(
+          type: MindAidActionType.startBreathing,
+          label: 'Start breathing exercise',
+        ),
+      ];
+    }
+    if (intent.contains('assessment')) {
+      return const [
+        MindAidAction(
+          type: MindAidActionType.openInsights,
+          label: 'View my insights',
+        ),
+      ];
+    }
+    if (intent.contains('counsel') || intent.contains('pacc')) {
+      return const [
+        MindAidAction(
+          type: MindAidActionType.bookAppointment,
+          label: 'Book an appointment',
+        ),
+      ];
+    }
+    return const [];
   }
 }
 

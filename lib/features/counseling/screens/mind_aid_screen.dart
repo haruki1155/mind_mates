@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../mind_aid/domain/mind_aid_integration_models.dart';
+
+typedef MindAidFeedbackCallback = void Function(String messageId, bool helpful);
 
 enum MindAidSender { assistant, user }
 
@@ -13,6 +17,8 @@ class MindAidMessage {
     this.status,
     this.categoryLabel,
     this.supportCards = const [],
+    this.actions = const [],
+    this.source = 'local',
   });
 
   final String id;
@@ -22,6 +28,8 @@ class MindAidMessage {
   final String? status;
   final String? categoryLabel;
   final List<MindAidSupportCard> supportCards;
+  final List<MindAidAction> actions;
+  final String source;
 }
 
 class MindAidSupportCard {
@@ -59,6 +67,12 @@ class MindAidScreen extends StatefulWidget {
     this.onSuggestionSelected,
     this.onHomeTap,
     this.onNotificationTap,
+    this.onActionSelected,
+    this.onFeedback,
+    this.onRetry,
+    this.onClearHistory,
+    this.onNewConversation,
+    this.onPrivacyTap,
   });
 
   final List<MindAidMessage> messages;
@@ -69,6 +83,12 @@ class MindAidScreen extends StatefulWidget {
   final ValueChanged<MindAidSuggestion>? onSuggestionSelected;
   final VoidCallback? onHomeTap;
   final VoidCallback? onNotificationTap;
+  final ValueChanged<MindAidAction>? onActionSelected;
+  final MindAidFeedbackCallback? onFeedback;
+  final VoidCallback? onRetry;
+  final VoidCallback? onClearHistory;
+  final VoidCallback? onNewConversation;
+  final VoidCallback? onPrivacyTap;
 
   @override
   State<MindAidScreen> createState() => _MindAidScreenState();
@@ -119,6 +139,9 @@ class _MindAidScreenState extends State<MindAidScreen> {
               child: _MindAidHeader(
                 onHomeTap: widget.onHomeTap,
                 onNotificationTap: widget.onNotificationTap,
+                onClearHistory: widget.onClearHistory,
+                onNewConversation: widget.onNewConversation,
+                onPrivacyTap: widget.onPrivacyTap,
               ),
             ),
             const _AnimatedMindAidSection(
@@ -134,6 +157,9 @@ class _MindAidScreenState extends State<MindAidScreen> {
                   isAssistantTyping: widget.isAssistantTyping,
                   disclaimerText: widget.disclaimerText,
                   onSuggestionSelected: widget.onSuggestionSelected,
+                  onActionSelected: widget.onActionSelected,
+                  onFeedback: widget.onFeedback,
+                  onRetry: widget.onRetry,
                 ),
               ),
             ),
@@ -153,10 +179,19 @@ class _MindAidScreenState extends State<MindAidScreen> {
 }
 
 class _MindAidHeader extends StatelessWidget {
-  const _MindAidHeader({this.onHomeTap, this.onNotificationTap});
+  const _MindAidHeader({
+    this.onHomeTap,
+    this.onNotificationTap,
+    this.onClearHistory,
+    this.onNewConversation,
+    this.onPrivacyTap,
+  });
 
   final VoidCallback? onHomeTap;
   final VoidCallback? onNotificationTap;
+  final VoidCallback? onClearHistory;
+  final VoidCallback? onNewConversation;
+  final VoidCallback? onPrivacyTap;
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +228,31 @@ class _MindAidHeader extends StatelessWidget {
                 size: 24,
               ),
             ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'MindAid options',
+            onSelected: (value) {
+              switch (value) {
+                case 'new':
+                  onNewConversation?.call();
+                  break;
+                case 'clear':
+                  onClearHistory?.call();
+                  break;
+                case 'privacy':
+                  onPrivacyTap?.call();
+                  break;
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'new', child: Text('New conversation')),
+              PopupMenuItem(value: 'clear', child: Text('Clear history')),
+              PopupMenuItem(
+                value: 'privacy',
+                child: Text('AI privacy settings'),
+              ),
+            ],
+            icon: const Icon(Icons.more_vert_rounded),
           ),
           const SizedBox(width: 4),
           const _MindAidAssetImage(
@@ -292,6 +352,9 @@ class _MindAidConversation extends StatelessWidget {
     required this.isAssistantTyping,
     required this.disclaimerText,
     required this.onSuggestionSelected,
+    required this.onActionSelected,
+    required this.onFeedback,
+    required this.onRetry,
   });
 
   final List<MindAidMessage> messages;
@@ -299,6 +362,9 @@ class _MindAidConversation extends StatelessWidget {
   final bool isAssistantTyping;
   final String? disclaimerText;
   final ValueChanged<MindAidSuggestion>? onSuggestionSelected;
+  final ValueChanged<MindAidAction>? onActionSelected;
+  final MindAidFeedbackCallback? onFeedback;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +383,12 @@ class _MindAidConversation extends StatelessWidget {
                     if (index == messages.length) {
                       return const _TypingBubble();
                     }
-                    return _MessageBubble(message: messages[index]);
+                    return _MessageBubble(
+                      message: messages[index],
+                      onActionSelected: onActionSelected,
+                      onFeedback: onFeedback,
+                      onRetry: onRetry,
+                    );
                   },
                 ),
         ),
@@ -384,25 +455,43 @@ class _WelcomeConversation extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    this.onActionSelected,
+    this.onFeedback,
+    this.onRetry,
+  });
 
   final MindAidMessage message;
+  final ValueChanged<MindAidAction>? onActionSelected;
+  final MindAidFeedbackCallback? onFeedback;
+  final VoidCallback? onRetry;
 
   bool get _isUser => message.sender == MindAidSender.user;
 
   @override
   Widget build(BuildContext context) {
     if (_isUser) {
-      return _UserMessageBubble(message: message);
+      return _UserMessageBubble(message: message, onRetry: onRetry);
     }
-    return _AssistantMessageBubble(message: message);
+    return _AssistantMessageBubble(
+      message: message,
+      onActionSelected: onActionSelected,
+      onFeedback: onFeedback,
+    );
   }
 }
 
 class _AssistantMessageBubble extends StatelessWidget {
-  const _AssistantMessageBubble({required this.message});
+  const _AssistantMessageBubble({
+    required this.message,
+    this.onActionSelected,
+    this.onFeedback,
+  });
 
   final MindAidMessage message;
+  final ValueChanged<MindAidAction>? onActionSelected;
+  final MindAidFeedbackCallback? onFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -439,8 +528,60 @@ class _AssistantMessageBubble extends StatelessWidget {
                       const SizedBox(height: 8),
                     ],
                   ],
+                  if (message.actions.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final action in message.actions)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 16,
+                            ),
+                            label: Text(action.label),
+                            onPressed: () => onActionSelected?.call(action),
+                          ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _AssistantBubbleMeta(message: message),
+                  if (message.id != 'welcome') ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Copy response',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => Clipboard.setData(
+                            ClipboardData(text: message.text),
+                          ),
+                          icon: const Icon(Icons.copy_rounded, size: 17),
+                        ),
+                        IconButton(
+                          tooltip: 'Helpful',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => onFeedback?.call(message.id, true),
+                          icon: const Icon(
+                            Icons.thumb_up_alt_outlined,
+                            size: 17,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Not helpful',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => onFeedback?.call(message.id, false),
+                          icon: const Icon(
+                            Icons.thumb_down_alt_outlined,
+                            size: 17,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -474,6 +615,8 @@ class _AssistantBubbleMeta extends StatelessWidget {
           const SizedBox(height: 4),
         ],
         Text(_messageTime(message), style: _MindAidText.status),
+        if (message.source == 'dialogflow')
+          const Text('Dialogflow assisted', style: _MindAidText.status),
       ],
     );
   }
@@ -547,9 +690,10 @@ class _AssistantBubbleTailPainter extends CustomPainter {
 }
 
 class _UserMessageBubble extends StatelessWidget {
-  const _UserMessageBubble({required this.message});
+  const _UserMessageBubble({required this.message, this.onRetry});
 
   final MindAidMessage message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -606,6 +750,12 @@ class _UserMessageBubble extends StatelessWidget {
               padding: const EdgeInsets.only(right: 18),
               child: Text(_messageTime(message), style: _MindAidText.status),
             ),
+            if (message.status == 'failed')
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Retry'),
+              ),
           ],
         ),
       ),

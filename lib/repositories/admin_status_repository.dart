@@ -8,6 +8,15 @@ class AdminStatusRepository {
 
   final FirestoreService _firestoreService;
 
+  Future<List<Map<String, dynamic>>> fetchUserAssessments(String userId) {
+    return _firestoreService.getDocuments(
+      FirestoreCollections.assessments,
+      whereEquals: {'userId': userId},
+      orderBy: 'createdAt',
+      descending: true,
+    );
+  }
+
   Stream<List<AdminStatusSummaryModel>> watchUserStatuses({int limit = 200}) {
     return _firestoreService
         .watchDocuments(

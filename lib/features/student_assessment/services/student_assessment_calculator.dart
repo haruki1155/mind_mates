@@ -1,4 +1,5 @@
 import '../models/student_assessment_models.dart';
+import 'assessment_interpretation_engine.dart';
 
 enum AssessmentUserType { student, faculty, staff }
 
@@ -44,6 +45,7 @@ class StudentAssessmentCalculator {
     final coreScores = <double>[];
 
     for (final answer in answers) {
+      if (answer.isSkipped) continue;
       final question = coreQuestions
           .where((question) => question.id == answer.questionId)
           .firstOrNull;
@@ -139,19 +141,27 @@ class StudentAssessmentCalculator {
       'Sleep and Rest': sleepRiskScore,
       'Emotional Well-Being': emotionalWellBeingRiskScore,
     };
+    final roundedScores = subscaleScores.map(
+      (key, value) => MapEntry(key, _round(value)),
+    );
+    final interpretation = AssessmentInterpretationEngine.build(
+      questions: questions,
+      answers: answers,
+      domainScores: roundedScores,
+      userType: 'Student',
+    );
 
     return StudentAssessmentResult(
       userType: 'Student',
       overallScore: _round(overallScore),
       status: status,
-      subscaleScores: subscaleScores.map(
-        (key, value) => MapEntry(key, _round(value)),
-      ),
+      subscaleScores: roundedScores,
       mainConcernAreas: getMainConcernAreas(subscaleScores),
       message: getMessage(status),
       disclaimer:
           'This assessment is not a diagnosis. It is a university-based wellness screening tool designed to help students reflect on their current well-being. If you are experiencing severe distress, feel unsafe, or need immediate help, please contact your university guidance office, a trusted person, or a qualified mental health professional.',
-      totalResponses: answers.length,
+      totalResponses: answers.where((answer) => !answer.isSkipped).length,
+      interpretation: interpretation,
     );
   }
 
@@ -213,18 +223,26 @@ class StudentAssessmentCalculator {
       'Sleep and Rest': sleepRiskScore,
       'Emotional Well-Being': generalEmotionalRiskScore,
     };
+    final roundedScores = subscaleScores.map(
+      (key, value) => MapEntry(key, _round(value)),
+    );
+    final interpretation = AssessmentInterpretationEngine.build(
+      questions: questions,
+      answers: answers,
+      domainScores: roundedScores,
+      userType: 'Teaching Personnel',
+    );
 
     return StudentAssessmentResult(
       userType: 'Teaching Personnel',
       overallScore: _round(overallScore),
       status: status,
-      subscaleScores: subscaleScores.map(
-        (key, value) => MapEntry(key, _round(value)),
-      ),
+      subscaleScores: roundedScores,
       mainConcernAreas: getMainConcernAreas(subscaleScores),
       message: getMessage(status),
       disclaimer: _workplaceDisclaimer,
-      totalResponses: answers.length,
+      totalResponses: answers.where((answer) => !answer.isSkipped).length,
+      interpretation: interpretation,
     );
   }
 
@@ -287,18 +305,26 @@ class StudentAssessmentCalculator {
       'Sleep and Rest': sleepRiskScore,
       'Emotional Well-Being': generalEmotionalRiskScore,
     };
+    final roundedScores = subscaleScores.map(
+      (key, value) => MapEntry(key, _round(value)),
+    );
+    final interpretation = AssessmentInterpretationEngine.build(
+      questions: questions,
+      answers: answers,
+      domainScores: roundedScores,
+      userType: 'Non-Teaching Personnel',
+    );
 
     return StudentAssessmentResult(
       userType: 'Non-Teaching Personnel',
       overallScore: _round(overallScore),
       status: status,
-      subscaleScores: subscaleScores.map(
-        (key, value) => MapEntry(key, _round(value)),
-      ),
+      subscaleScores: roundedScores,
       mainConcernAreas: getMainConcernAreas(subscaleScores),
       message: getMessage(status),
       disclaimer: _workplaceDisclaimer,
-      totalResponses: answers.length,
+      totalResponses: answers.where((answer) => !answer.isSkipped).length,
+      interpretation: interpretation,
     );
   }
 
@@ -313,7 +339,7 @@ class StudentAssessmentCalculator {
   static String _getStudentStatus(double score) {
     if (score <= 20) return 'Very Good Well-Being';
     if (score <= 40) return 'Generally Stable';
-    if (score <= 60) return 'Moderate Well-Being';
+    if (score <= 60) return 'Moderate Concern';
     if (score <= 80) return 'High Concern';
     return 'Very High Concern';
   }
@@ -362,6 +388,7 @@ class StudentAssessmentCalculator {
           .where((answer) => answer.questionId == question.id)
           .firstOrNull;
       if (answer == null) continue;
+      if (answer.isSkipped) continue;
 
       scores.add(
         riskScore(answer: answer.answer, direction: question.direction),

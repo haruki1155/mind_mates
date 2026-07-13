@@ -6,10 +6,18 @@ class InsightsDashboardData {
   const InsightsDashboardData({
     required this.categories,
     required this.sections,
+    this.resources = const [],
   });
 
   final List<InsightCategory> categories;
   final List<InsightSection> sections;
+  final List<InsightCardItem> resources;
+
+  List<InsightCardItem> resourcesForCategory(String categoryId) {
+    return resources
+        .where((resource) => resource.categoryId == categoryId)
+        .toList(growable: false);
+  }
 }
 
 class InsightCategory {
@@ -60,6 +68,10 @@ class InsightCardItem {
     this.body,
     this.tags = const [],
     this.source,
+    this.categoryId = '',
+    this.videoUrl,
+    this.thumbnailUrl,
+    this.durationLabel,
   });
 
   final String id;
@@ -73,6 +85,12 @@ class InsightCardItem {
   final String? body;
   final List<String> tags;
   final String? source;
+  final String categoryId;
+  final String? videoUrl;
+  final String? thumbnailUrl;
+  final String? durationLabel;
+
+  bool get isVideoPlaceholder => contentType == 'video_placeholder';
 
   factory InsightCardItem.fromJson(Map<String, dynamic> json) {
     return InsightCardItem(
@@ -90,6 +108,10 @@ class InsightCardItem {
           .where((tag) => tag.trim().isNotEmpty)
           .toList(growable: false),
       source: _stringOrNull(json['source']),
+      categoryId: (json['categoryId'] ?? '').toString(),
+      videoUrl: _stringOrNull(json['videoUrl']),
+      thumbnailUrl: _stringOrNull(json['thumbnailUrl']),
+      durationLabel: _stringOrNull(json['durationLabel']),
     );
   }
 }

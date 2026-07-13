@@ -189,9 +189,7 @@ void main() {
     );
   });
 
-  testWidgets('appointment details and calendar phase 2 feedback work', (
-    tester,
-  ) async {
+  testWidgets('appointment details and MindMate calendar work', (tester) async {
     await tester.binding.setSurfaceSize(const Size(430, 3200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -208,11 +206,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add to Calendar'));
-    await tester.pump();
-    expect(
-      find.text('Calendar integration is coming in phase 2.'),
-      findsOneWidget,
-    );
+    await tester.pumpAndSettle();
+    expect(find.text('Appointment Calendar'), findsOneWidget);
+    expect(find.text('April 30, 2026'), findsOneWidget);
   });
 
   testWidgets('past appointment dates are disabled', (tester) async {
@@ -247,9 +243,7 @@ Widget _servicesApp() {
   );
 }
 
-Widget _paccApp({
-  _FakeAppointmentRepository? appointmentRepository,
-}) {
+Widget _paccApp({_FakeAppointmentRepository? appointmentRepository}) {
   final userProvider = UserProvider(_FakeUserRepository())
     ..setUser(
       const UserModel(
@@ -266,15 +260,11 @@ Widget _paccApp({
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<UserProvider>.value(value: userProvider),
-      ChangeNotifierProvider(
-        create: (_) => AppointmentProvider(appointments),
-      ),
+      ChangeNotifierProvider(create: (_) => AppointmentProvider(appointments)),
     ],
     child: MaterialApp(
-        theme: ThemeData(splashFactory: NoSplash.splashFactory),
-        home: PaccCounselingScreen(
-          nowProvider: () => DateTime(2026, 4, 15, 9),
-        ),
+      theme: ThemeData(splashFactory: NoSplash.splashFactory),
+      home: PaccCounselingScreen(nowProvider: () => DateTime(2026, 4, 15, 9)),
     ),
   );
 }

@@ -24,6 +24,11 @@ class AppointmentModel {
     this.bestTime,
     this.counselorName,
     this.updatedAt,
+    this.assignedStaffId,
+    this.staffReply,
+    this.reviewedAt,
+    this.proposedScheduledAt,
+    this.proposedScheduledTime,
   });
 
   final String id;
@@ -48,11 +53,13 @@ class AppointmentModel {
   final String? counselorName;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String? assignedStaffId;
+  final String? staffReply;
+  final DateTime? reviewedAt;
+  final DateTime? proposedScheduledAt;
+  final String? proposedScheduledTime;
 
-  factory AppointmentModel.fromJson(
-    Map<String, dynamic> json, {
-    String? id,
-  }) {
+  factory AppointmentModel.fromJson(Map<String, dynamic> json, {String? id}) {
     return AppointmentModel(
       id: (json['id'] ?? id ?? '').toString(),
       userId: json['userId']?.toString() ?? '',
@@ -77,6 +84,11 @@ class AppointmentModel {
       counselorName: _optionalString(json['counselorName']),
       createdAt: dateTimeFromFirestoreOrNow(json['createdAt']),
       updatedAt: dateTimeFromFirestore(json['updatedAt']),
+      assignedStaffId: _optionalString(json['assignedStaffId']),
+      staffReply: _optionalString(json['staffReply']),
+      reviewedAt: dateTimeFromFirestore(json['reviewedAt']),
+      proposedScheduledAt: dateTimeFromFirestore(json['proposedScheduledAt']),
+      proposedScheduledTime: _optionalString(json['proposedScheduledTime']),
     );
   }
 
@@ -101,6 +113,11 @@ class AppointmentModel {
       'location': location,
       'status': status,
       'counselorName': counselorName ?? '',
+      'assignedStaffId': assignedStaffId ?? '',
+      'staffReply': staffReply ?? '',
+      'reviewedAt': reviewedAt,
+      'proposedScheduledAt': proposedScheduledAt,
+      'proposedScheduledTime': proposedScheduledTime ?? '',
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
@@ -129,6 +146,11 @@ class AppointmentModel {
     String? counselorName,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? assignedStaffId,
+    String? staffReply,
+    DateTime? reviewedAt,
+    DateTime? proposedScheduledAt,
+    String? proposedScheduledTime,
   }) {
     return AppointmentModel(
       id: id ?? this.id,
@@ -154,6 +176,12 @@ class AppointmentModel {
       counselorName: counselorName ?? this.counselorName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      assignedStaffId: assignedStaffId ?? this.assignedStaffId,
+      staffReply: staffReply ?? this.staffReply,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      proposedScheduledAt: proposedScheduledAt ?? this.proposedScheduledAt,
+      proposedScheduledTime:
+          proposedScheduledTime ?? this.proposedScheduledTime,
     );
   }
 

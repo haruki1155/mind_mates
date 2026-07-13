@@ -54,6 +54,18 @@ class JournalRepository {
     return id;
   }
 
+  Future<String> createEntry(JournalModel entry) async {
+    final data = entry.toJson(userId: entry.userId)
+      ..['createdAt'] = FieldValue.serverTimestamp()
+      ..['updatedAt'] = FieldValue.serverTimestamp();
+    final id = await _firestoreService.createDocument(
+      FirestoreCollections.journals,
+      data,
+    );
+    if (entry.userId != null) await _tryRecordActivity(entry.userId!);
+    return id;
+  }
+
   Future<void> updateJournal({
     required String journalId,
     required String content,
@@ -67,6 +79,25 @@ class JournalRepository {
           'tags': tags,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+  }
+
+  Future<void> updateEntry(JournalModel entry) {
+    final data = entry.toJson()
+      ..remove('createdAt')
+      ..remove('userId')
+      ..['updatedAt'] = FieldValue.serverTimestamp();
+    return _firestoreService.updateDocument(
+      FirestoreCollections.journals,
+      entry.id,
+      data,
+    );
+  }
+
+  Future<void> deleteJournal(String journalId) {
+    return _firestoreService.deleteDocument(
+      FirestoreCollections.journals,
+      journalId,
+    );
   }
 
   Future<void> _tryRecordActivity(String userId) async {

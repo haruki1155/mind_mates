@@ -35,7 +35,49 @@ void main() {
       expect(data.categories.single.label, 'Mood tracking');
       expect(_section(data, 'patterns').items.single.id, 'pattern_1');
       expect(_section(data, 'wellbeing_101').items.single.id, 'wellbeing_1');
+      expect(
+        data.resources.firstWhere((item) => item.id == 'pattern_1').categoryId,
+        'mood_tracking',
+      );
     });
+
+    test('category resources retain content beyond dashboard limits', () async {
+      final repository = InsightsRepository(
+        dataSource: _FakeInsightsDataSource(
+          categories: [_category()],
+          content: [
+            for (var index = 0; index < 8; index++)
+              _content(id: 'resource_$index', sectionId: 'latest'),
+          ],
+        ),
+        useFallbackContent: false,
+      );
+
+      final data = await repository.fetchInsights('user_1');
+      final categoryResources = data.resourcesForCategory('mood_tracking');
+
+      expect(_section(data, 'latest').items, hasLength(6));
+      expect(categoryResources, hasLength(9));
+      expect(categoryResources.last.isVideoPlaceholder, isTrue);
+      expect(categoryResources.last.videoUrl, isNull);
+    });
+
+    test(
+      'fallback library provides every category and video placeholder',
+      () async {
+        final data = await InsightsRepository().fetchInsights('preview_user');
+
+        expect(data.categories, hasLength(6));
+        for (final category in data.categories) {
+          final resources = data.resourcesForCategory(category.id);
+          expect(resources, isNotEmpty);
+          expect(
+            resources.where((item) => item.isVideoPlaceholder),
+            hasLength(1),
+          );
+        }
+      },
+    );
 
     test('latest content is sorted by publishedAt', () async {
       final repository = InsightsRepository(

@@ -1,0 +1,221 @@
+enum AssessmentConcernBand { low, watchful, moderate, elevated, high }
+
+extension AssessmentConcernBandLabel on AssessmentConcernBand {
+  String get label => switch (this) {
+    AssessmentConcernBand.low => 'Low',
+    AssessmentConcernBand.watchful => 'Watchful',
+    AssessmentConcernBand.moderate => 'Moderate',
+    AssessmentConcernBand.elevated => 'Elevated',
+    AssessmentConcernBand.high => 'High',
+  };
+}
+
+enum AssessmentSupportPriority {
+  routine,
+  monitor,
+  followUpSuggested,
+  promptFollowUp,
+  insufficientResponses,
+}
+
+extension AssessmentSupportPriorityLabel on AssessmentSupportPriority {
+  String get label => switch (this) {
+    AssessmentSupportPriority.routine => 'Routine monitoring',
+    AssessmentSupportPriority.monitor => 'Monitor',
+    AssessmentSupportPriority.followUpSuggested => 'Follow-up suggested',
+    AssessmentSupportPriority.promptFollowUp => 'Prompt follow-up',
+    AssessmentSupportPriority.insufficientResponses => 'Insufficient responses',
+  };
+}
+
+enum AssessmentResponseConfidence { high, usableWithCaution, limited }
+
+extension AssessmentResponseConfidenceLabel on AssessmentResponseConfidence {
+  String get label => switch (this) {
+    AssessmentResponseConfidence.high => 'High confidence',
+    AssessmentResponseConfidence.usableWithCaution => 'Usable with caution',
+    AssessmentResponseConfidence.limited => 'Limited responses',
+  };
+}
+
+class AssessmentDomainResult {
+  const AssessmentDomainResult({
+    required this.domain,
+    required this.score,
+    required this.band,
+    required this.answeredCount,
+    required this.skippedCount,
+    required this.interpretation,
+    this.elevatedIndicators = const [],
+    this.protectiveIndicators = const [],
+  });
+
+  final String domain;
+  final double score;
+  final AssessmentConcernBand band;
+  final int answeredCount;
+  final int skippedCount;
+  final String interpretation;
+  final List<String> elevatedIndicators;
+  final List<String> protectiveIndicators;
+
+  factory AssessmentDomainResult.fromJson(Map<String, dynamic> json) {
+    return AssessmentDomainResult(
+      domain: json['domain']?.toString() ?? '',
+      score: _double(json['score']),
+      band:
+          _enumValue(AssessmentConcernBand.values, json['band']) ??
+          AssessmentConcernBand.low,
+      answeredCount: _int(json['answeredCount']),
+      skippedCount: _int(json['skippedCount']),
+      interpretation: json['interpretation']?.toString() ?? '',
+      elevatedIndicators: _strings(json['elevatedIndicators']),
+      protectiveIndicators: _strings(json['protectiveIndicators']),
+    );
+  }
+
+  Map<String, Object> toJson() => {
+    'domain': domain,
+    'score': score,
+    'band': band.name,
+    'answeredCount': answeredCount,
+    'skippedCount': skippedCount,
+    'interpretation': interpretation,
+    'elevatedIndicators': elevatedIndicators,
+    'protectiveIndicators': protectiveIndicators,
+  };
+}
+
+class AssessmentResponseQuality {
+  const AssessmentResponseQuality({
+    required this.presented,
+    required this.answered,
+    required this.skipped,
+    required this.completionPercent,
+    required this.confidence,
+  });
+
+  final int presented;
+  final int answered;
+  final int skipped;
+  final double completionPercent;
+  final AssessmentResponseConfidence confidence;
+
+  factory AssessmentResponseQuality.fromJson(Map<String, dynamic> json) {
+    return AssessmentResponseQuality(
+      presented: _int(json['presented']),
+      answered: _int(json['answered']),
+      skipped: _int(json['skipped']),
+      completionPercent: _double(json['completionPercent']),
+      confidence:
+          _enumValue(AssessmentResponseConfidence.values, json['confidence']) ??
+          AssessmentResponseConfidence.limited,
+    );
+  }
+
+  Map<String, Object> toJson() => {
+    'presented': presented,
+    'answered': answered,
+    'skipped': skipped,
+    'completionPercent': completionPercent,
+    'confidence': confidence.name,
+    'confidenceLabel': confidence.label,
+  };
+}
+
+class AssessmentInterpretation {
+  const AssessmentInterpretation({
+    required this.supportPriority,
+    required this.responseQuality,
+    required this.domainResults,
+    required this.rationale,
+    required this.userSummary,
+    required this.counselorSummary,
+    required this.suggestedActions,
+    this.protectiveFactors = const [],
+    this.functionalImpactFlags = const [],
+    this.algorithmVersion = 'wellness_interpretation_v2',
+    this.questionSetVersion = 'role_based_v2',
+    this.recallPeriodDays = 14,
+  });
+
+  final String algorithmVersion;
+  final String questionSetVersion;
+  final int recallPeriodDays;
+  final AssessmentSupportPriority supportPriority;
+  final AssessmentResponseQuality responseQuality;
+  final List<AssessmentDomainResult> domainResults;
+  final List<String> protectiveFactors;
+  final List<String> functionalImpactFlags;
+  final List<String> rationale;
+  final String userSummary;
+  final String counselorSummary;
+  final List<String> suggestedActions;
+
+  factory AssessmentInterpretation.fromJson(Map<String, dynamic> json) {
+    final quality = _map(json['responseQuality']);
+    return AssessmentInterpretation(
+      algorithmVersion:
+          json['algorithmVersion']?.toString() ?? 'wellness_interpretation_v2',
+      questionSetVersion: json['questionSetVersion']?.toString() ?? 'legacy',
+      recallPeriodDays: _int(json['recallPeriodDays'], fallback: 14),
+      supportPriority:
+          _enumValue(
+            AssessmentSupportPriority.values,
+            json['supportPriority'],
+          ) ??
+          AssessmentSupportPriority.insufficientResponses,
+      responseQuality: AssessmentResponseQuality.fromJson(quality ?? const {}),
+      domainResults: json['domainResults'] is List
+          ? (json['domainResults'] as List)
+                .map(_map)
+                .whereType<Map<String, dynamic>>()
+                .map(AssessmentDomainResult.fromJson)
+                .toList()
+          : const [],
+      protectiveFactors: _strings(json['protectiveFactors']),
+      functionalImpactFlags: _strings(json['functionalImpactFlags']),
+      rationale: _strings(json['rationale']),
+      userSummary: json['userSummary']?.toString() ?? '',
+      counselorSummary: json['counselorSummary']?.toString() ?? '',
+      suggestedActions: _strings(json['suggestedActions']),
+    );
+  }
+
+  Map<String, Object> toJson() => {
+    'algorithmVersion': algorithmVersion,
+    'questionSetVersion': questionSetVersion,
+    'recallPeriodDays': recallPeriodDays,
+    'supportPriority': supportPriority.name,
+    'supportPriorityLabel': supportPriority.label,
+    'responseQuality': responseQuality.toJson(),
+    'domainResults': domainResults.map((result) => result.toJson()).toList(),
+    'protectiveFactors': protectiveFactors,
+    'functionalImpactFlags': functionalImpactFlags,
+    'rationale': rationale,
+    'userSummary': userSummary,
+    'counselorSummary': counselorSummary,
+    'suggestedActions': suggestedActions,
+  };
+}
+
+T? _enumValue<T extends Enum>(List<T> values, Object? value) {
+  final name = value?.toString();
+  for (final item in values) {
+    if (item.name == name) return item;
+  }
+  return null;
+}
+
+Map<String, dynamic>? _map(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
+
+List<String> _strings(Object? value) => value is List
+    ? value.map((item) => item.toString()).toList(growable: false)
+    : const [];
+
+int _int(Object? value, {int fallback = 0}) =>
+    value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
+
+double _double(Object? value) =>
+    value is num ? value.toDouble() : double.tryParse('$value') ?? 0;

@@ -7,7 +7,9 @@ import '../features/authentication/screens/signup_screen.dart';
 import '../features/breathing/screens/mindful_breathing_screen.dart';
 import '../features/counseling/screens/services_screen.dart';
 import '../features/home/screens/home_screen.dart';
+import '../features/home/screens/home_appointment_calendar_screen.dart';
 import '../features/mood/screens/log_mood_screen.dart';
+import '../features/journal/screens/journal_screen.dart';
 import '../features/onboarding/screens/onboarding_screen.dart';
 import '../features/profile/screens/mental_health_insights_screen.dart';
 import '../features/profile/screens/mental_health_report_screen.dart';
@@ -43,6 +45,8 @@ class AppPages {
     RouteNames.studentAssessmentComplete: (_) =>
         const StudentAssessmentCompleteScreen(),
     RouteNames.home: (_) => const HomeScreen(),
+    RouteNames.appointmentCalendar: (_) =>
+        const HomeAppointmentCalendarScreen(),
     RouteNames.services: (_) => const ServicesScreen(),
     RouteNames.mindAid: (_) => const MindAidPage(),
     RouteNames.secretChat: (_) => const SecretChatPage(),
@@ -52,6 +56,7 @@ class AppPages {
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),
     RouteNames.logMood: (_) => const LogMoodScreen(),
+    RouteNames.journal: (_) => const JournalScreen(),
     RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
     RouteNames.adminStatus: (_) => const AdminStatusDashboardScreen(),
   };

@@ -72,9 +72,59 @@ void main() {
       );
 
       expect(result.overallScore, 50);
-      expect(result.status, 'Moderate Well-Being');
+      expect(result.status, 'Moderate Concern');
       expect(result.totalResponses, questions.length);
       expect(result.subscaleScores['Sleep and Rest'], 50);
+      expect(
+        result.interpretation.algorithmVersion,
+        'wellness_interpretation_v2',
+      );
+      expect(result.interpretation.responseQuality.completionPercent, 100);
+    });
+
+    test('excludes skipped responses and reports insufficient coverage', () {
+      final questions = StudentAssessmentQuestions.questions
+          .where((question) => !question.isConditional)
+          .take(10)
+          .toList();
+      final answers = [
+        for (var index = 0; index < questions.length; index++)
+          StudentAssessmentAnswer(
+            questionId: questions[index].id,
+            answer: LikertAnswer.sometimes,
+            isSkipped: index >= 5,
+          ),
+      ];
+
+      final result = StudentAssessmentCalculator.calculate(
+        questions: questions,
+        answers: answers,
+      );
+
+      expect(result.totalResponses, 5);
+      expect(result.interpretation.responseQuality.skipped, 5);
+      expect(result.interpretation.responseQuality.completionPercent, 50);
+      expect(
+        result.interpretation.supportPriority.name,
+        'insufficientResponses',
+      );
+    });
+
+    test('protective answers are reversed and retained as strengths', () {
+      final question = StudentAssessmentQuestions.questions.firstWhere(
+        (item) => item.direction == AssessmentDirection.protective,
+      );
+      final result = StudentAssessmentCalculator.calculate(
+        questions: [question],
+        answers: [
+          StudentAssessmentAnswer(
+            questionId: question.id,
+            answer: LikertAnswer.always,
+          ),
+        ],
+      );
+
+      expect(result.interpretation.protectiveFactors, contains(question.text));
     });
 
     test(

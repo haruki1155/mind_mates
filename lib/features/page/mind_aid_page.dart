@@ -8,6 +8,8 @@ import '/providers/report_provider.dart';
 import '/providers/user_provider.dart';
 import '/features/counseling/screens/mind_aid_screen.dart';
 import '/features/mind_aid/domain/mind_aid_context.dart';
+import '/features/mind_aid/domain/mind_aid_integration_models.dart';
+import '/features/counseling/screens/pacc_counseling_screen.dart';
 import '/repositories/mind_aid_context_repository.dart';
 import '/routes/route_names.dart';
 
@@ -25,6 +27,7 @@ class _MindAidPageState extends State<MindAidPage> {
   String? _loadedContextKey;
   String? _loadedSnapshotUserId;
   MindAidWellnessSnapshot? _wellnessSnapshot;
+  bool _consentDialogScheduled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -32,12 +35,17 @@ class _MindAidPageState extends State<MindAidPage> {
     final assessmentProvider = context.watch<AssessmentProvider>();
     final authProvider = context.watch<AuthProvider>();
     final userId = authProvider.userId ?? 'guest';
+    final launchContext =
+        ModalRoute.of(context)?.settings.arguments is MindAidLaunchContext
+        ? ModalRoute.of(context)!.settings.arguments as MindAidLaunchContext
+        : const MindAidLaunchContext(source: 'direct');
     _loadWellnessSnapshot(userId);
     final mindAidContext = _buildMindAidContext(
       assessmentProvider,
       _wellnessSnapshot,
     );
-    _loadChatWhenContextChanges(userId, mindAidContext);
+    _loadChatWhenContextChanges(userId, mindAidContext, launchContext);
+    _scheduleConsentIfNeeded(provider, userId);
 
     return MindAidScreen(
       messages: provider.messages,
@@ -55,7 +63,27 @@ class _MindAidPageState extends State<MindAidPage> {
         ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
       },
       onNotificationTap: () {},
-      disclaimerText: "AI assistant support only",
+      onActionSelected: (action) => _handleAction(action, launchContext),
+      onFeedback: (messageId, helpful) async {
+        if (userId == 'guest') return;
+        await provider.submitFeedback(
+          userId: userId,
+          messageId: messageId,
+          helpful: helpful,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thanks for your feedback.')),
+          );
+        }
+      },
+      onRetry: () => provider.retryLastMessage(userId, context: mindAidContext),
+      onClearHistory: () => _confirmClearHistory(provider, userId),
+      onNewConversation: () => _startNewConversation(provider, userId),
+      onPrivacyTap: () => _showConsentDialog(provider, userId, editing: true),
+      disclaimerText: provider.usesDialogflow
+          ? 'Supportive AI using Dialogflow. MindAid is not a counselor or emergency service.'
+          : 'Local supportive assistant. MindAid is not a counselor or emergency service.',
     );
   }
 
@@ -167,15 +195,142 @@ class _MindAidPageState extends State<MindAidPage> {
     });
   }
 
-  void _loadChatWhenContextChanges(String userId, MindAidContext contextValue) {
+  void _loadChatWhenContextChanges(
+    String userId,
+    MindAidContext contextValue,
+    MindAidLaunchContext launchContext,
+  ) {
     final key = '$userId:${_contextKey(contextValue)}';
     if (_loadedContextKey == key) return;
 
     _loadedContextKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<MindAidProvider>().loadChat(userId, context: contextValue);
+      context.read<MindAidProvider>().loadChat(
+        userId,
+        context: contextValue,
+        launchContext: launchContext,
+      );
     });
+  }
+
+  void _scheduleConsentIfNeeded(MindAidProvider provider, String userId) {
+    if (userId == 'guest' ||
+        !provider.needsConsent ||
+        _consentDialogScheduled) {
+      return;
+    }
+    _consentDialogScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _showConsentDialog(provider, userId);
+    });
+  }
+
+  Future<void> _showConsentDialog(
+    MindAidProvider provider,
+    String userId, {
+    bool editing = false,
+  }) async {
+    final useCloud = await showDialog<bool>(
+      context: context,
+      barrierDismissible: editing,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          editing ? 'AI privacy settings' : 'Choose how MindAid works',
+        ),
+        content: const Text(
+          'Dialogflow can make MindAid more conversational. It receives your chat turns and derived signals such as mood trends and assessment level. Journal text, mood notes, raw answers, and contact details are never sent. You can instead keep using the local assistant.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Use local only'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Use personalized AI'),
+          ),
+        ],
+      ),
+    );
+    if (useCloud == null || !mounted) return;
+    await provider.setConsent(userId: userId, cloudConsent: useCloud);
+  }
+
+  Future<void> _confirmClearHistory(
+    MindAidProvider provider,
+    String userId,
+  ) async {
+    if (userId == 'guest') return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear MindAid history?'),
+        content: const Text(
+          'This permanently removes your saved MindAid messages and starts a new conversation.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await provider.clearHistory(userId);
+  }
+
+  Future<void> _startNewConversation(
+    MindAidProvider provider,
+    String userId,
+  ) async {
+    if (userId == 'guest') return;
+    await provider.startNewConversation(userId);
+  }
+
+  void _handleAction(MindAidAction action, MindAidLaunchContext launchContext) {
+    switch (action.type) {
+      case MindAidActionType.logMood:
+        Navigator.pushNamed(context, RouteNames.logMood);
+        return;
+      case MindAidActionType.startBreathing:
+        Navigator.pushNamed(context, RouteNames.mindfulBreathing);
+        return;
+      case MindAidActionType.openAssessment:
+        Navigator.pushNamed(context, RouteNames.studentAssessment);
+        return;
+      case MindAidActionType.openInsights:
+        Navigator.pushNamed(context, RouteNames.mentalHealthInsights);
+        return;
+      case MindAidActionType.openCounselingServices:
+        Navigator.pushNamed(context, RouteNames.services);
+        return;
+      case MindAidActionType.bookAppointment:
+        final concern =
+            (action.payload['concern'] ??
+                    launchContext.appointmentConcern ??
+                    'I would like support with a concern discussed in MindAid.')
+                .toString();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PaccCounselingScreen(
+              startBooking: true,
+              initialConcern: concern,
+            ),
+          ),
+        );
+        return;
+      case MindAidActionType.viewAppointments:
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PaccCounselingScreen()));
+        return;
+    }
   }
 
   String _contextKey(MindAidContext contextValue) {

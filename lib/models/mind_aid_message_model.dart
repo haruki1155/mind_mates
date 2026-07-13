@@ -1,4 +1,5 @@
 import '../core/utils/firestore_mapper.dart';
+import '../features/mind_aid/domain/mind_aid_integration_models.dart';
 
 class MindAidMessageModel {
   final String id;
@@ -10,6 +11,10 @@ class MindAidMessageModel {
   final String? safetyLevel;
   final String? primaryIntent;
   final bool requiresEscalation;
+  final String source;
+  final double confidence;
+  final String fallbackReason;
+  final List<MindAidAction> actions;
 
   MindAidMessageModel({
     required this.id,
@@ -21,6 +26,10 @@ class MindAidMessageModel {
     this.safetyLevel,
     this.primaryIntent,
     this.requiresEscalation = false,
+    this.source = 'local',
+    this.confidence = 0,
+    this.fallbackReason = '',
+    this.actions = const [],
   });
 
   factory MindAidMessageModel.fromMap(Map<String, dynamic> map) {
@@ -34,6 +43,10 @@ class MindAidMessageModel {
       safetyLevel: map['safetyLevel']?.toString(),
       primaryIntent: map['primaryIntent']?.toString(),
       requiresEscalation: boolFromFirestore(map['requiresEscalation']),
+      source: (map['source'] ?? 'local').toString(),
+      confidence: (map['confidence'] as num?)?.toDouble() ?? 0,
+      fallbackReason: (map['fallbackReason'] ?? '').toString(),
+      actions: _actionsFrom(map['actions']),
     );
   }
 
@@ -48,6 +61,31 @@ class MindAidMessageModel {
       'safetyLevel': safetyLevel,
       'primaryIntent': primaryIntent,
       'requiresEscalation': requiresEscalation,
+      'source': source,
+      'confidence': confidence,
+      'fallbackReason': fallbackReason,
+      'actions': actions
+          .map(
+            (action) => {
+              'type': action.type.name,
+              'label': action.label,
+              'payload': action.payload,
+            },
+          )
+          .toList(growable: false),
     };
+  }
+
+  static List<MindAidAction> _actionsFrom(Object? value) {
+    if (value is! List) return const [];
+    final actions = <MindAidAction>[];
+    for (final item in value.whereType<Map>()) {
+      try {
+        actions.add(MindAidAction.fromMap(item));
+      } on FormatException {
+        // Ignore unrecognized actions from older or newer records.
+      }
+    }
+    return actions;
   }
 }

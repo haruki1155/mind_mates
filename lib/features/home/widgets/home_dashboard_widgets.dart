@@ -1132,9 +1132,9 @@ class HomeToolkitSection extends StatelessWidget {
               itemCount: items.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                mainAxisExtent: 138,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                mainAxisExtent: 88,
               ),
               itemBuilder: (context, index) {
                 final item = items[index];
@@ -1165,7 +1165,7 @@ class _ToolkitTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Ink(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: data.colors,
@@ -1179,8 +1179,8 @@ class _ToolkitTile extends StatelessWidget {
             children: [
               HomeDashboardAssetImage(
                 assetName: data.imageName,
-                width: 44,
-                height: 44,
+                width: 28,
+                height: 28,
                 fit: BoxFit.contain,
               ),
               const Spacer(),
@@ -1190,19 +1190,19 @@ class _ToolkitTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: HomePalette.text,
-                  fontSize: 12,
+                  fontSize: 11,
                   height: 1.12,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 data.subtitle,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: HomePalette.text,
-                  fontSize: 10,
+                  fontSize: 9.5,
                   height: 1.15,
                   fontWeight: FontWeight.w500,
                 ),

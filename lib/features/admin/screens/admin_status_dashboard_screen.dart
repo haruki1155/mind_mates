@@ -3,17 +3,54 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../models/admin_status_summary_model.dart';
 import '../../../repositories/admin_status_repository.dart';
+import 'admin_assessment_detail_screen.dart';
 
 class AdminStatusDashboardScreen extends StatelessWidget {
-  const AdminStatusDashboardScreen({super.key, this.repository});
+  const AdminStatusDashboardScreen({
+    super.key,
+    this.repository,
+    this.embedded = false,
+  });
 
   final AdminStatusRepository? repository;
+  final bool embedded;
 
   AdminStatusRepository get _effectiveRepository =>
       repository ?? AdminStatusRepository();
 
   @override
   Widget build(BuildContext context) {
+    final content = StreamBuilder<List<AdminStatusSummaryModel>>(
+      stream: _effectiveRepository.watchUserStatuses(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _MessagePanel(
+            icon: Icons.error_outline_rounded,
+            title: 'Unable to load statuses',
+            message: 'Check the admin status Firestore rules and try again.',
+          );
+        }
+
+        final statuses = snapshot.data ?? const <AdminStatusSummaryModel>[];
+        if (statuses.isEmpty) {
+          return const _MessagePanel(
+            icon: Icons.monitor_heart_outlined,
+            title: 'No statuses yet',
+            message:
+                'User statuses will appear here after app activity generates mental health summaries.',
+          );
+        }
+
+        return _DashboardContent(
+          statuses: statuses,
+          repository: _effectiveRepository,
+        );
+      },
+    );
+    if (embedded) return content;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -21,41 +58,16 @@ class AdminStatusDashboardScreen extends StatelessWidget {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      body: StreamBuilder<List<AdminStatusSummaryModel>>(
-        stream: _effectiveRepository.watchUserStatuses(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return _MessagePanel(
-              icon: Icons.error_outline_rounded,
-              title: 'Unable to load statuses',
-              message: 'Check the admin status Firestore rules and try again.',
-            );
-          }
-
-          final statuses = snapshot.data ?? const <AdminStatusSummaryModel>[];
-          if (statuses.isEmpty) {
-            return const _MessagePanel(
-              icon: Icons.monitor_heart_outlined,
-              title: 'No statuses yet',
-              message:
-                  'User statuses will appear here after app activity generates mental health summaries.',
-            );
-          }
-
-          return _DashboardContent(statuses: statuses);
-        },
-      ),
+      body: content,
     );
   }
 }
 
 class _DashboardContent extends StatelessWidget {
-  const _DashboardContent({required this.statuses});
+  const _DashboardContent({required this.statuses, required this.repository});
 
   final List<AdminStatusSummaryModel> statuses;
+  final AdminStatusRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -78,24 +90,24 @@ class _DashboardContent extends StatelessWidget {
                     runSpacing: 12,
                     children: [
                       _StatusSummaryTile(
-                        label: 'Severe',
+                        label: 'Prompt follow-up',
                         count: severeCount,
                         color: const Color(0xFFB3261E),
                       ),
                       _StatusSummaryTile(
-                        label: 'Moderate',
+                        label: 'Review suggested',
                         count: moderateCount,
                         color: const Color(0xFFB06A00),
                       ),
                       _StatusSummaryTile(
-                        label: 'Normal',
+                        label: 'Routine monitoring',
                         count: normalCount,
                         color: AppColors.primary,
                       ),
                     ],
                   ),
                   const SizedBox(height: 18),
-                  _StatusTable(statuses: statuses),
+                  _StatusTable(statuses: statuses, repository: repository),
                 ],
               ),
             ),
@@ -124,7 +136,7 @@ class _StatusSummaryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 190,
+      width: 230,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -142,28 +154,30 @@ class _StatusSummaryTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$count',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 28,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 28,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                const SizedBox(height: 5),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -172,9 +186,10 @@ class _StatusSummaryTile extends StatelessWidget {
 }
 
 class _StatusTable extends StatelessWidget {
-  const _StatusTable({required this.statuses});
+  const _StatusTable({required this.statuses, required this.repository});
 
   final List<AdminStatusSummaryModel> statuses;
+  final AdminStatusRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +218,15 @@ class _StatusTable extends StatelessWidget {
             rows: [
               for (final item in statuses)
                 DataRow(
+                  onSelectChanged: (_) => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AdminAssessmentDetailScreen(
+                        userId: item.userId,
+                        userLabel: item.userLabel,
+                        repository: repository,
+                      ),
+                    ),
+                  ),
                   cells: [
                     DataCell(Text(item.userLabel)),
                     DataCell(_StatusBadge(status: item.status)),

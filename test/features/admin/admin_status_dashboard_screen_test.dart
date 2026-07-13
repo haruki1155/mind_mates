@@ -50,8 +50,8 @@ void main() {
     expect(find.text('Admin User Status'), findsOneWidget);
     expect(find.text('Leo Molar'), findsOneWidget);
     expect(find.text('Mia Reyes'), findsOneWidget);
-    expect(find.text('Severe'), findsWidgets);
-    expect(find.text('Normal'), findsWidgets);
+    expect(find.text('Prompt follow-up'), findsWidgets);
+    expect(find.text('Routine monitoring'), findsWidgets);
     expect(find.text('Engagement'), findsOneWidget);
     expect(find.text('Secret Chat'), findsOneWidget);
     expect(find.text('13'), findsOneWidget);

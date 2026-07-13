@@ -13,6 +13,7 @@ class RouteNames {
   static const studentAssessment = '/student-assessment';
   static const studentAssessmentComplete = '/student-assessment/complete';
   static const home = '/home';
+  static const appointmentCalendar = '/home/appointment-calendar';
   static const services = '/services';
   static const mindAid = '/mind-aid';
   static const secretChat = '/secret-chat';
@@ -22,6 +23,7 @@ class RouteNames {
   static const mentalHealthReport = '/profile/mental-health-report';
   static const mentalHealthInsights = '/profile/mental-health-insights';
   static const logMood = '/mood/log';
+  static const journal = '/journal';
   static const mindfulBreathing = '/insights/mindful-breathing';
   static const adminStatus = '/admin/status';
 }

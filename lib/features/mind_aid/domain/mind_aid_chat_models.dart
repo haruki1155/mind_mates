@@ -2,6 +2,7 @@ import '../../../models/mind_aid_message_model.dart';
 import '../../../models/mind_aid_suggestion_model.dart';
 import 'mind_aid_context.dart';
 import 'mind_aid_dataset_models.dart';
+import 'mind_aid_integration_models.dart';
 import 'mind_aid_safety.dart';
 
 class MindAidIntentMatch {
@@ -150,6 +151,11 @@ class MindAidChatResponse {
     required this.conversationState,
     required this.status,
     this.safetyLevel = MindAidSafetyLevel.safeSupport,
+    this.intentOverride,
+    this.source = 'local',
+    this.confidence = 0,
+    this.fallbackReason = '',
+    this.actions = const [],
   });
 
   final String text;
@@ -162,8 +168,15 @@ class MindAidChatResponse {
   final MindAidConversationState conversationState;
   final String status;
   final MindAidSafetyLevel safetyLevel;
+  final String? intentOverride;
+  final String source;
+  final double confidence;
+  final String fallbackReason;
+  final List<MindAidAction> actions;
 
-  String get primaryIntent => intentMatches.isEmpty
+  String get primaryIntent => intentOverride?.trim().isNotEmpty == true
+      ? intentOverride!.trim()
+      : intentMatches.isEmpty
       ? 'general_support'
       : intentMatches.first.record.intent;
 }

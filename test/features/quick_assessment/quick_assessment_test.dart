@@ -20,13 +20,12 @@ import 'package:provider/provider.dart';
 
 void main() {
   group('QuickAssessmentScoring', () {
-    test('returns progress labels from 1/6 through 6/6', () {
-      expect(QuickAssessmentScoring.progressLabelForStep(1), '1/6');
-      expect(QuickAssessmentScoring.progressLabelForStep(2), '2/6');
-      expect(QuickAssessmentScoring.progressLabelForStep(3), '3/6');
-      expect(QuickAssessmentScoring.progressLabelForStep(4), '4/6');
-      expect(QuickAssessmentScoring.progressLabelForStep(5), '5/6');
-      expect(QuickAssessmentScoring.progressLabelForStep(6), '6/6');
+    test('returns progress labels from 1/5 through 5/5', () {
+      expect(QuickAssessmentScoring.progressLabelForStep(1), '1/5');
+      expect(QuickAssessmentScoring.progressLabelForStep(2), '2/5');
+      expect(QuickAssessmentScoring.progressLabelForStep(3), '3/5');
+      expect(QuickAssessmentScoring.progressLabelForStep(4), '4/5');
+      expect(QuickAssessmentScoring.progressLabelForStep(5), '5/5');
     });
 
     test('reverse scores protective questions', () {
@@ -58,6 +57,27 @@ void main() {
         QuickAssessmentScoring.concernScore(
           direction: QuickQuestionDirection.risk,
           value: 5,
+        ),
+        100,
+      );
+    });
+
+    test('normalizes each item using its actual response range', () {
+      expect(
+        QuickAssessmentScoring.concernScore(
+          direction: QuickQuestionDirection.risk,
+          value: 1,
+          minValue: 1,
+          maxValue: 4,
+        ),
+        0,
+      );
+      expect(
+        QuickAssessmentScoring.concernScore(
+          direction: QuickQuestionDirection.risk,
+          value: 4,
+          minValue: 1,
+          maxValue: 4,
         ),
         100,
       );
@@ -155,7 +175,7 @@ void main() {
       expect(result!.role, AssessmentRole.student);
       expect(result.name, 'Leo');
       expect(result.responses.length, 5);
-      expect(result.concernScore, 95);
+      expect(result.concernScore, 100);
       expect(result.overallLevel, QuickAssessmentLevel.veryHigh);
       expect(result.mentalStatusSignal, QuickAssessmentSignal.highSupport);
       expect(result.signalSource, 'quickAssessment');

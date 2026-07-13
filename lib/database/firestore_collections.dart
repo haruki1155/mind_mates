@@ -6,6 +6,12 @@ class FirestoreCollections {
   static const moods = 'moods';
   static const journals = 'journals';
   static const appointments = 'appointments';
+  static const appointmentHistory = 'history';
+  static const notifications = 'notifications';
+  static const userDevices = 'user_devices';
+  static const analyticsDaily = 'analytics_daily';
+  static const analyticsEvents = '_analytics_events';
+  static const inquiries = 'inquiries';
   static const recommendations = 'recommendations';
   static const reports = 'reports';
   static const insightCategories = 'insight_categories';
@@ -22,4 +28,7 @@ class FirestoreCollections {
   static const secretChatProfileStats = 'secret_chat_profile_stats';
   static const secretChatEvents = '_secret_chat_events';
   static const mindAidMessages = 'mind_aid_messages';
+  static const mindAidPreferences = 'mind_aid_preferences';
+  static const mindAidFeedback = 'mind_aid_feedback';
+  static const mindAidAnalyticsDaily = 'mind_aid_analytics_daily';
 }

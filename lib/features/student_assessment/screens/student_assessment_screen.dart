@@ -61,6 +61,17 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                       progress: provider.studentProgress,
                       title: provider.activeAssessmentTitle,
                     ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                      child: Text(
+                        'Answer based on your experiences during the past two weeks.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                     Expanded(
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),

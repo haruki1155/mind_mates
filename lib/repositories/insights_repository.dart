@@ -112,16 +112,38 @@ class InsightsRepository {
         .where((rule) => rule.id.isNotEmpty && rule.contentId.isNotEmpty)
         .toList(growable: false);
 
+    final categoryModels = effectiveCategories
+        .map(InsightCategory.fromJson)
+        .where((category) => category.id.isNotEmpty)
+        .toList(growable: false);
+    final resources = [
+      ...cards.map((item) => item.card),
+      ...categoryModels.map(_videoPlaceholderFor),
+    ];
+
     return InsightsDashboardData(
-      categories: effectiveCategories
-          .map(InsightCategory.fromJson)
-          .where((category) => category.id.isNotEmpty)
-          .toList(growable: false),
+      categories: categoryModels,
+      resources: resources,
       sections: _buildSections(
         cards: cards,
         rules: activeRules,
         report: report,
       ),
+    );
+  }
+
+  InsightCardItem _videoPlaceholderFor(InsightCategory category) {
+    return InsightCardItem(
+      id: 'video_placeholder_${category.id}',
+      title: '${category.label} guided video',
+      subtitle: 'A guided wellness video will be available here soon.',
+      categoryId: category.id,
+      category: category.label,
+      imageAsset: '',
+      contentType: 'video_placeholder',
+      durationLabel: 'Coming soon',
+      tags: ['video', category.label.toLowerCase()],
+      source: 'MindMate',
     );
   }
 

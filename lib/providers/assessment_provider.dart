@@ -41,11 +41,14 @@ class AssessmentProvider extends ChangeNotifier {
   QuickAssessmentQuestion get currentQuestion =>
       questions[_currentQuestionIndex];
 
-  int get currentQuestionStep => _currentQuestionIndex + 2;
+  int get currentQuestionStep => _currentQuestionIndex + 1;
   String get nameProgressLabel =>
-      QuickAssessmentScoring.progressLabelForStep(1);
+      QuickAssessmentScoring.progressLabelForStep(1, total: questions.length);
   String get questionProgressLabel =>
-      QuickAssessmentScoring.progressLabelForStep(currentQuestionStep);
+      QuickAssessmentScoring.progressLabelForStep(
+        currentQuestionStep,
+        total: questions.length,
+      );
 
   bool get isNameValid => _name.trim().isNotEmpty;
   bool get hasSelectedRole => _selectedRole != null;
@@ -157,6 +160,12 @@ class AssessmentProvider extends ChangeNotifier {
           concernScore: QuickAssessmentScoring.concernScore(
             direction: question.direction,
             value: option.value,
+            minValue: question.options
+                .map((item) => item.value)
+                .reduce((a, b) => a < b ? a : b),
+            maxValue: question.options
+                .map((item) => item.value)
+                .reduce((a, b) => a > b ? a : b),
           ),
         ),
       );
@@ -181,6 +190,7 @@ class AssessmentProvider extends ChangeNotifier {
       signalSource: 'quickAssessment',
       signalGeneratedAt: signalGeneratedAt,
       createdAt: signalGeneratedAt,
+      interpretation: QuickAssessmentScoring.interpretationFor(responses),
     );
   }
 
@@ -215,7 +225,10 @@ class AssessmentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void answerCurrentStudentQuestion(LikertAnswer answer) {
+  void answerCurrentStudentQuestion(
+    LikertAnswer answer, {
+    bool isSkipped = false,
+  }) {
     final question = currentStudentQuestion;
     if (question == null) return;
 
@@ -223,7 +236,11 @@ class AssessmentProvider extends ChangeNotifier {
       (existing) => existing.questionId == question.id,
     );
     _studentAnswers.add(
-      StudentAssessmentAnswer(questionId: question.id, answer: answer),
+      StudentAssessmentAnswer(
+        questionId: question.id,
+        answer: answer,
+        isSkipped: isSkipped,
+      ),
     );
 
     if (_isDeeperTriggerPoint(question) && _shouldShowDeeperQuestions()) {
@@ -253,7 +270,7 @@ class AssessmentProvider extends ChangeNotifier {
   }
 
   void skipCurrentStudentQuestion() {
-    answerCurrentStudentQuestion(LikertAnswer.sometimes);
+    answerCurrentStudentQuestion(LikertAnswer.sometimes, isSkipped: true);
   }
 
   Future<Map<String, Object>?> saveStudentAssessmentForUser(String userId) {

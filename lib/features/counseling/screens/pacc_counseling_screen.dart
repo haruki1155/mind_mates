@@ -5,12 +5,20 @@ import '../../../models/appointment_model.dart';
 import '../../../providers/appointment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../home/screens/home_appointment_calendar_screen.dart';
+import '../widgets/appointment_details_sheet.dart';
 
 class PaccCounselingScreen extends StatefulWidget {
-  const PaccCounselingScreen({super.key, DateTime Function()? nowProvider})
-    : _nowProvider = nowProvider ?? DateTime.now;
+  const PaccCounselingScreen({
+    super.key,
+    this.startBooking = false,
+    this.initialConcern,
+    DateTime Function()? nowProvider,
+  }) : _nowProvider = nowProvider ?? DateTime.now;
 
   final DateTime Function() _nowProvider;
+  final bool startBooking;
+  final String? initialConcern;
 
   @override
   State<PaccCounselingScreen> createState() => _PaccCounselingScreenState();
@@ -29,7 +37,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   final _concernController = TextEditingController();
   final _bestTimeController = TextEditingController();
 
-  _PaccAppointmentTab _tab = _PaccAppointmentTab.myAppointments;
+  late _PaccAppointmentTab _tab;
   _PaccAppointmentStep _step = _PaccAppointmentStep.intake;
   late DateTime _visibleMonth;
   DateTime? _selectedDate;
@@ -57,6 +65,9 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   @override
   void initState() {
     super.initState();
+    _tab = widget.startBooking
+        ? _PaccAppointmentTab.appointNew
+        : _PaccAppointmentTab.myAppointments;
     final today = _today;
     _visibleMonth = DateTime(today.year, today.month);
   }
@@ -75,7 +86,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
       _contactNumberController.clear();
       _emailController.text = user.email;
       _facebookController.clear();
-      _concernController.clear();
+      _concernController.text = widget.initialConcern?.trim() ?? '';
       _bestTimeController.clear();
       _sex = null;
       _course = user.course?.trim().isEmpty ?? true ? null : user.course;
@@ -176,7 +187,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         appointments: appointmentProvider?.appointments ?? const [],
         onAppoint: _startNewAppointment,
         onViewDetails: _showAppointmentDetails,
-        onAddToCalendar: _showCalendarPhaseTwoMessage,
+        onAddToCalendar: _openMindMateCalendar,
       );
     }
 
@@ -324,7 +335,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
       scheduledAt: _scheduledAt(_selectedDate!, _selectedTime!),
       scheduledTime: _selectedTime!,
       location: 'PACC Office, 2nd Floor, Main Building',
-      status: 'Upcoming',
+      status: 'pending',
       createdAt: DateTime.now(),
     );
 
@@ -342,99 +353,14 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   }
 
   void _showAppointmentDetails(AppointmentModel appointment) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: _PaccColors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * 0.85,
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 4, 22, 24),
-              child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Appointment Details', style: _PaccText.title),
-                const SizedBox(height: 16),
-                _DetailLine(
-                  icon: Icons.person_outline,
-                  text: appointment.fullName,
-                ),
-                _DetailLine(
-                  icon: Icons.calendar_today_outlined,
-                  text: _formatFullDate(appointment.scheduledAt),
-                ),
-                _DetailLine(
-                  icon: Icons.schedule,
-                  text: appointment.scheduledTime,
-                ),
-                _DetailLine(
-                  icon: Icons.place_outlined,
-                  text: appointment.location,
-                ),
-                _DetailLine(
-                  icon: Icons.contact_phone_outlined,
-                  text: _contactSummary(appointment),
-                ),
-                if (appointment.email.isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.email_outlined,
-                    text: appointment.email,
-                  ),
-                if ((appointment.address ?? '').isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.home_outlined,
-                    text: appointment.address!,
-                  ),
-                if ((appointment.facebook ?? '').isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.public,
-                    text: appointment.facebook!,
-                  ),
-                if ((appointment.sex ?? '').isNotEmpty)
-                  _DetailLine(icon: Icons.person, text: appointment.sex!),
-                if ((appointment.course ?? '').isNotEmpty)
-                  _DetailLine(icon: Icons.school_outlined, text: appointment.course!),
-                if ((appointment.yearLevel ?? '').isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.auto_graph_outlined,
-                    text: appointment.yearLevel!,
-                  ),
-                if ((appointment.therapyBefore ?? '').isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.history,
-                    text: 'Therapy before: ${appointment.therapyBefore}',
-                  ),
-                if ((appointment.bestTime ?? '').isNotEmpty)
-                  _DetailLine(
-                    icon: Icons.access_time,
-                    text: 'Best contact time: ${appointment.bestTime}',
-                  ),
-                const Divider(height: 26),
-                const Text('Concern', style: _PaccText.cardTitle),
-                const SizedBox(height: 8),
-                Text(appointment.concern, style: _PaccText.body),
-              ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    showAppointmentDetailsSheet(context, appointment);
   }
 
-  void _showCalendarPhaseTwoMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Calendar integration is coming in phase 2.'),
+  void _openMindMateCalendar(AppointmentModel appointment) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            HomeAppointmentCalendarScreen(initialDate: appointment.scheduledAt),
       ),
     );
   }
@@ -463,13 +389,6 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
     if (meridiem == 'PM' && hour != 12) hour += 12;
     if (meridiem == 'AM' && hour == 12) hour = 0;
     return DateTime(date.year, date.month, date.day, hour, minute);
-  }
-
-  static String _contactSummary(AppointmentModel appointment) {
-    return [
-      appointment.preferredContactMethod.trim(),
-      appointment.contactNumber.trim(),
-    ].where((value) => value.isNotEmpty).join(' | ');
   }
 
   T? _readProviderOrNull<T>() {
@@ -657,7 +576,6 @@ class _AppointmentLoading extends StatelessWidget {
       child: Center(child: CircularProgressIndicator()),
     );
   }
-
 }
 
 class _AppointmentLoadError extends StatelessWidget {
@@ -697,7 +615,7 @@ class _MyAppointmentsView extends StatelessWidget {
   final List<AppointmentModel> appointments;
   final VoidCallback onAppoint;
   final ValueChanged<AppointmentModel> onViewDetails;
-  final VoidCallback onAddToCalendar;
+  final ValueChanged<AppointmentModel> onAddToCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -719,7 +637,7 @@ class _MyAppointmentsView extends StatelessWidget {
             _AppointmentCard(
               appointment: appointment,
               onViewDetails: () => onViewDetails(appointment),
-              onAddToCalendar: onAddToCalendar,
+              onAddToCalendar: () => onAddToCalendar(appointment),
             ),
             const SizedBox(height: 14),
           ],

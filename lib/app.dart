@@ -4,6 +4,7 @@ import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'routes/route_generator.dart';
 import 'routes/route_names.dart';
+import 'features/mind_aid/widgets/mind_aid_launcher_overlay.dart';
 
 class MindMateApp extends StatelessWidget {
   const MindMateApp({super.key});
@@ -11,6 +12,8 @@ class MindMateApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: MindAidNavigation.navigatorKey,
+      navigatorObservers: [MindAidNavigation.observer],
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
@@ -18,6 +21,8 @@ class MindMateApp extends StatelessWidget {
       themeMode: ThemeMode.light,
       initialRoute: RouteNames.splash,
       onGenerateRoute: RouteGenerator.generateRoute,
+      builder: (context, child) =>
+          MindAidLauncherOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

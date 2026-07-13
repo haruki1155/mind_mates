@@ -12,7 +12,10 @@ import file_selector_macos
 import firebase_app_check
 import firebase_auth
 import firebase_core
+import firebase_messaging
+import firebase_remote_config
 import firebase_storage
+import flutter_secure_storage_macos
 import just_audio
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
@@ -23,6 +26,9 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FirebaseAppCheckPlugin.register(with: registry.registrar(forPlugin: "FirebaseAppCheckPlugin"))
   FLTFirebaseAuthPlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseAuthPlugin"))
   FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
+  FLTFirebaseMessagingPlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseMessagingPlugin"))
+  FirebaseRemoteConfigPlugin.register(with: registry.registrar(forPlugin: "FirebaseRemoteConfigPlugin"))
   FLTFirebaseStoragePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseStoragePlugin"))
+  FlutterSecureStoragePlugin.register(with: registry.registrar(forPlugin: "FlutterSecureStoragePlugin"))
   JustAudioPlugin.register(with: registry.registrar(forPlugin: "JustAudioPlugin"))
 }

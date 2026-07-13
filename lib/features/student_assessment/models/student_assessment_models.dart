@@ -1,3 +1,5 @@
+import 'assessment_interpretation_models.dart';
+
 enum LikertAnswer {
   never,
   rarely,
@@ -92,16 +94,19 @@ class StudentAssessmentAnswer {
   const StudentAssessmentAnswer({
     required this.questionId,
     required this.answer,
+    this.isSkipped = false,
   });
 
   final String questionId;
   final LikertAnswer answer;
+  final bool isSkipped;
 
   Map<String, Object> toJson() {
     return {
       'questionId': questionId,
       'answer': answer.name,
       'value': answer.value,
+      'isSkipped': isSkipped,
     };
   }
 }
@@ -116,6 +121,7 @@ class StudentAssessmentResult {
     required this.message,
     required this.disclaimer,
     required this.totalResponses,
+    required this.interpretation,
   });
 
   final String userType;
@@ -126,6 +132,7 @@ class StudentAssessmentResult {
   final String message;
   final String disclaimer;
   final int totalResponses;
+  final AssessmentInterpretation interpretation;
 
   Map<String, Object> toJson() {
     return {
@@ -137,6 +144,10 @@ class StudentAssessmentResult {
       'message': message,
       'disclaimer': disclaimer,
       'totalResponses': totalResponses,
+      'algorithmVersion': interpretation.algorithmVersion,
+      'questionSetVersion': interpretation.questionSetVersion,
+      'supportPriority': interpretation.supportPriority.name,
+      'interpretation': interpretation.toJson(),
     };
   }
 }

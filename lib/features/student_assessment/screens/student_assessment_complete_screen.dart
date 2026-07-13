@@ -8,6 +8,7 @@ import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/widgets/quick_assessment_widgets.dart';
 import '../models/student_assessment_models.dart';
+import '../models/assessment_interpretation_models.dart';
 
 class StudentAssessmentCompleteScreen extends StatefulWidget {
   const StudentAssessmentCompleteScreen({super.key});
@@ -236,7 +237,10 @@ class _Hero extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _ScoreGauge(score: result.overallScore, status: result.status),
+                _ScoreGauge(
+                  score: result.overallScore,
+                  status: result.interpretation.supportPriority.label,
+                ),
               ],
             ),
           ),
@@ -575,12 +579,17 @@ class _SummaryCards extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _InfoCard(title: 'Assessment Result', body: result.message),
+        _InfoCard(
+          title: result.interpretation.supportPriority.label,
+          body: result.interpretation.userSummary,
+        ),
         const SizedBox(height: 10),
-        const _InfoCard(
-          title: 'Interpretation',
+        _InfoCard(
+          title: 'Response confidence',
           body:
-              'Scores in this range indicate moderate levels of stress or difficulty. Without intervention, these may escalate and affect your overall functioning.',
+              '${result.interpretation.responseQuality.confidence.label} '
+              '(${result.interpretation.responseQuality.completionPercent.round()}% answered). '
+              'Skipped responses were excluded from scoring.',
         ),
         const SizedBox(height: 10),
         _InsightsCard(result: result),
@@ -617,22 +626,29 @@ class _InsightsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final concerns = result.mainConcernAreas.isEmpty
-        ? ['Sleep and Rest', 'Academic Stress', 'Emotional Well-Being']
-        : result.mainConcernAreas;
-    final insights = [
-      '${concerns.first} is your most disrupted area - establish a consistent routine and consult a physician if symptoms persist.',
-      'Sleep quality and emotional balance may need intentional attention.',
-      'Building a stronger support network would be beneficial.',
-      'Speaking with a PACC counselor is recommended for personalized support.',
+    final interpretation = result.interpretation;
+    final insights = <String>[
+      ...interpretation.rationale,
+      ...interpretation.protectiveFactors.map(
+        (factor) => 'Protective strength: $factor',
+      ),
+      ...interpretation.functionalImpactFlags.map(
+        (flag) => 'Functional-impact observation: $flag',
+      ),
+      ...interpretation.suggestedActions,
     ];
 
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Personalized Insights', style: _ResultText.title),
+          Text('What your responses suggest', style: _ResultText.title),
           const SizedBox(height: 12),
+          if (insights.isEmpty)
+            const Text(
+              'No specific concern pattern was identified from the responses provided.',
+              style: _ResultText.body,
+            ),
           for (var index = 0; index < insights.length; index += 1)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -665,7 +681,7 @@ class _CategoryBars extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Score by Category', style: _ResultText.title),
+          Text('Wellness Domains', style: _ResultText.title),
           const SizedBox(height: 16),
           for (final entry in result.subscaleScores.entries.indexed)
             Padding(
@@ -679,7 +695,7 @@ class _CategoryBars extends StatelessWidget {
           const SizedBox(height: 8),
           const Center(
             child: Text(
-              '* Higher bar = higher concern in that area',
+              '* Higher scores indicate greater reported concern',
               style: TextStyle(
                 color: _ResultPalette.mutedText,
                 fontSize: 11,
@@ -770,12 +786,9 @@ class _CategoryScoreDots extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Score by Category', style: _ResultText.title),
+          Text('Domain interpretation', style: _ResultText.title),
           const SizedBox(height: 8),
-          const Text(
-            'Multiple dimensions show moderate concern. Taking proactive steps now - including counseling, self-care routines, and support-seeking - can significantly improve your well-being.',
-            style: _ResultText.body,
-          ),
+          Text(result.interpretation.counselorSummary, style: _ResultText.body),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,

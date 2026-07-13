@@ -1,3 +1,5 @@
+import '../../student_assessment/models/assessment_interpretation_models.dart';
+
 enum AssessmentRole {
   student,
   faculty,
@@ -153,6 +155,7 @@ class QuickAssessmentResult {
     required this.signalSource,
     required this.signalGeneratedAt,
     required this.createdAt,
+    required this.interpretation,
   });
 
   final AssessmentRole role;
@@ -167,6 +170,7 @@ class QuickAssessmentResult {
   final String signalSource;
   final DateTime signalGeneratedAt;
   final DateTime createdAt;
+  final AssessmentInterpretation interpretation;
 
   Map<String, Object> toJson() {
     return {
@@ -182,6 +186,10 @@ class QuickAssessmentResult {
       'signalSource': signalSource,
       'signalGeneratedAt': signalGeneratedAt.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
+      'algorithmVersion': interpretation.algorithmVersion,
+      'questionSetVersion': interpretation.questionSetVersion,
+      'supportPriority': interpretation.supportPriority.name,
+      'interpretation': interpretation.toJson(),
     };
   }
 }

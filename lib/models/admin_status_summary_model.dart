@@ -8,11 +8,11 @@ enum AdminUserStatus {
   String get label {
     switch (this) {
       case AdminUserStatus.severe:
-        return 'Severe';
+        return 'Prompt follow-up';
       case AdminUserStatus.moderate:
-        return 'Moderate';
+        return 'Review suggested';
       case AdminUserStatus.normal:
-        return 'Normal';
+        return 'Routine monitoring';
     }
   }
 
