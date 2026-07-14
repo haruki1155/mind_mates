@@ -15,6 +15,20 @@ void main() {
     );
   });
 
+  testWidgets('header uses a home icon for the return action', (tester) async {
+    var returnedHome = false;
+    await tester.pumpWidget(
+      _app(posts: const [], onBack: () => returnedHome = true),
+    );
+
+    expect(find.byIcon(Icons.home_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.bubble_chart_outlined), findsNothing);
+
+    await tester.tap(find.byTooltip('Home'));
+
+    expect(returnedHome, isTrue);
+  });
+
   testWidgets('compose shows validation message for blocked content', (
     tester,
   ) async {
@@ -105,12 +119,46 @@ void main() {
 
     expect(find.text('Reply posted anonymously.'), findsWidgets);
   });
+
+  testWidgets('only the post owner sees and confirms delete', (tester) async {
+    String? deletedPostId;
+    await tester.pumpWidget(
+      _app(
+        posts: [_post(isMine: true)],
+        onDeletePost: (postId) async => deletedPostId = postId,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Post options'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Delete post'), findsOneWidget);
+    await tester.tap(find.text('Delete post'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Delete this post?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(deletedPostId, 'post_1');
+    expect(find.text('Secret Chat post deleted.'), findsOneWidget);
+  });
+
+  testWidgets('non-owner does not see post delete options', (tester) async {
+    await tester.pumpWidget(_app(posts: [_post()]));
+
+    expect(find.byTooltip('Post options'), findsNothing);
+    expect(find.text('Delete post'), findsNothing);
+  });
 }
 
 Widget _app({
   required List<SecretChatModel> posts,
   AddSecretComment? onAddComment,
+  VoidCallback? onBack,
   VoidCallback? onProfile,
+  Future<void> Function(String postId)? onDeletePost,
 }) {
   return MaterialApp(
     home: SecretChatScreen(
@@ -142,13 +190,14 @@ Widget _app({
       onAddComment:
           onAddComment ?? ({required postId, required message}) async {},
       onRetry: () {},
-      onBack: () {},
+      onBack: onBack ?? () {},
       onProfile: onProfile,
+      onDeletePost: onDeletePost,
     ),
   );
 }
 
-SecretChatModel _post() {
+SecretChatModel _post({bool isMine = false}) {
   return SecretChatModel(
     id: 'post_1',
     message: 'I feel anxious about school pressure.',
@@ -156,5 +205,7 @@ SecretChatModel _post() {
     category: 'Anxiety',
     likeCount: 1,
     commentCount: 1,
+    authorId: isMine ? 'user_1' : 'user_2',
+    isMine: isMine,
   );
 }

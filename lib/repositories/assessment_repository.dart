@@ -32,6 +32,7 @@ class AssessmentRepository {
     final payload = <String, Object>{
       'userId': userId,
       'type': 'quick',
+      'populationRole': result.role.populationRole.storedValue,
       ...result.toJson(),
       'createdAt': FieldValue.serverTimestamp(),
     };
@@ -87,16 +88,11 @@ class AssessmentRepository {
   }
 
   Future<void> _markQuickAssessmentCompleted(String userId) {
-    return _firestoreService.setDocument(
-      FirestoreCollections.users,
-      userId,
-      {
-        'quickAssessmentCompleted': true,
-        'quickAssessmentCompletedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      merge: true,
-    );
+    return _firestoreService.setDocument(FirestoreCollections.users, userId, {
+      'quickAssessmentCompleted': true,
+      'quickAssessmentCompletedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, merge: true);
   }
 
   Future<Map<String, Object>> saveStudentAssessment({
@@ -104,10 +100,17 @@ class AssessmentRepository {
     required StudentAssessmentResult result,
     List<StudentAssessmentAnswer> answers = const [],
   }) async {
+    final populationRole = switch (result.userType.toLowerCase()) {
+      'student' => 'student',
+      'teaching personnel' || 'teaching' || 'faculty' => 'teaching',
+      'non-teaching personnel' || 'non-teaching' || 'staff' => 'nonTeaching',
+      _ => '',
+    };
     final payload = <String, Object>{
       'userId': userId,
       'type': result.userType.toLowerCase(),
       'role': result.userType.toLowerCase(),
+      'populationRole': populationRole,
       ...result.toJson(),
       'responses': answers.map((answer) => answer.toJson()).toList(),
       'createdAt': FieldValue.serverTimestamp(),

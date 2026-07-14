@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../data/daily_affirmation_quotes.dart';
 import '../models/home_dashboard_data.dart';
 
 class HomePalette {
   const HomePalette._();
 
   static const background = Color(0xFFF7F1DF);
+  static const surface = Color(0xFFFFFEFA);
+  static const surfaceWarm = Color(0xFFFFFAEE);
   static const sun = Color(0xFFFFC414);
   static const softGold = Color(0xFFFFD75C);
   static const gold = Color(0xFFE9B000);
@@ -15,6 +18,30 @@ class HomePalette {
   static const text = Color(0xFF17120A);
   static const muted = Color(0xFF6C665B);
   static const blueText = Color(0xFF66736F);
+  static const outline = Color(0x1F5F5035);
+  static const outlineStrong = Color(0x385F5035);
+  static const shadow = Color(0x140F0B05);
+  static const shadowStrong = Color(0x210F0B05);
+}
+
+class HomeMetrics {
+  const HomeMetrics._();
+
+  static const radiusSmall = 12.0;
+  static const radius = 16.0;
+  static const radiusLarge = 20.0;
+  static const sectionGap = 22.0;
+  static const cardPadding = 16.0;
+}
+
+class HomeMotion {
+  const HomeMotion._();
+
+  static Duration duration(BuildContext context, int milliseconds) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return reduceMotion ? Duration.zero : Duration(milliseconds: milliseconds);
+  }
 }
 
 class HomeTextStyles {
@@ -22,29 +49,31 @@ class HomeTextStyles {
 
   static const sectionTitle = TextStyle(
     color: Color(0xFF3B312B),
-    fontSize: 17,
-    fontWeight: FontWeight.w900,
+    fontSize: 18,
+    height: 1.15,
+    letterSpacing: -.2,
+    fontWeight: FontWeight.w800,
   );
 
   static const cardTitle = TextStyle(
     color: HomePalette.text,
     fontSize: 13,
     height: 1.18,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w800,
   );
 
   static const body = TextStyle(
     color: HomePalette.text,
     fontSize: 12,
     height: 1.35,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w600,
   );
 
   static const bodyMuted = TextStyle(
     color: HomePalette.blueText,
     fontSize: 11,
     height: 1.25,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w600,
   );
 
   static const caption = TextStyle(
@@ -57,7 +86,7 @@ class HomeTextStyles {
   static const button = TextStyle(
     color: HomePalette.text,
     fontSize: 13,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w800,
   );
 }
 
@@ -65,19 +94,20 @@ class HomeDecor {
   const HomeDecor._();
 
   static BoxDecoration card({
-    Color color = Colors.white,
-    Color shadowColor = const Color(0x14000000),
+    Color color = HomePalette.surface,
+    Color shadowColor = HomePalette.shadow,
     Color? borderColor,
+    double radius = HomeMetrics.radius,
   }) {
     return BoxDecoration(
       color: color,
-      border: borderColor == null ? null : Border.all(color: borderColor),
-      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: borderColor ?? HomePalette.outline),
+      borderRadius: BorderRadius.circular(radius),
       boxShadow: [
         BoxShadow(
           color: shadowColor,
-          blurRadius: 14,
-          offset: const Offset(0, 7),
+          blurRadius: 12,
+          offset: const Offset(0, 5),
         ),
       ],
     );
@@ -101,15 +131,20 @@ class HomeCalendarHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
       decoration: const BoxDecoration(
-        color: HomePalette.sun,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(22)),
+        gradient: LinearGradient(
+          colors: [Color(0xFFFFD24E), HomePalette.sun],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border(bottom: BorderSide(color: Color(0x33A87900))),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 16,
-            offset: Offset(0, 8),
+            color: HomePalette.shadowStrong,
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -119,6 +154,8 @@ class HomeCalendarHeader extends StatelessWidget {
             children: [
               HomeCircleIconButton(
                 icon: Icons.person_outline,
+                assetName: 'Customer.png',
+                assetColor: HomePalette.text,
                 tooltip: 'Profile',
                 onTap: onProfileTap,
               ),
@@ -130,19 +167,21 @@ class HomeCalendarHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: HomePalette.text,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 24,
+                    letterSpacing: -.5,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
               HomeCircleIconButton(
                 icon: Icons.calendar_today_outlined,
+                assetName: 'Calendar.png',
                 tooltip: 'Calendar',
                 onTap: onCalendarTap,
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Row(
             children: List.generate(days.length, (index) {
               return Expanded(
@@ -174,21 +213,26 @@ class _DayChip extends StatelessWidget {
     final textColor = isFuture ? HomePalette.muted : HomePalette.text;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: HomeMotion.duration(context, 180),
       curve: Curves.easeOut,
-      width: 42,
-      height: 42,
+      width: 40,
+      height: 44,
       decoration: BoxDecoration(
         color: backgroundColor,
-        shape: BoxShape.circle,
-        border: day.hasActivity && day.isPast
-            ? Border.all(color: HomePalette.gold, width: 1.5)
-            : null,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: day.isToday
+              ? const Color(0xFF9A7000)
+              : day.hasActivity && day.isPast
+              ? HomePalette.gold
+              : const Color(0x22FFFFFF),
+          width: day.isToday ? 1.5 : 1,
+        ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
+            color: HomePalette.shadow,
+            blurRadius: 6,
+            offset: Offset(0, 3),
           ),
         ],
       ),
@@ -243,19 +287,20 @@ class HomeAssessmentBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
       decoration: HomeDecor.card(
-        color: const Color(0xFFE4EAFF),
-        borderColor: const Color(0xFF5C7CFF),
-        shadowColor: const Color(0x245C7CFF),
+        color: const Color(0xFFF1F3FF),
+        borderColor: const Color(0x665C7CFF),
+        shadowColor: const Color(0x185C7CFF),
+        radius: HomeMetrics.radiusLarge,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
             padding: EdgeInsets.only(top: 3),
-            child: Icon(
-              Icons.error_outline,
-              color: Color(0xFF6D7484),
-              size: 24,
+            child: HomeDashboardAssetImage(
+              assetName: 'High Importance.png',
+              width: 24,
+              height: 24,
             ),
           ),
           const SizedBox(width: 12),
@@ -280,6 +325,7 @@ class HomeAssessmentBanner extends StatelessWidget {
                 HomePillButton(
                   label: data.actionLabel,
                   icon: Icons.arrow_forward,
+                  assetName: 'Forward.png',
                   onTap: onStart,
                 ),
               ],
@@ -287,6 +333,7 @@ class HomeAssessmentBanner extends StatelessWidget {
           ),
           HomePlainIconButton(
             icon: Icons.close,
+            assetName: 'x.png',
             tooltip: 'Dismiss',
             onTap: onClose,
           ),
@@ -322,8 +369,8 @@ class HomeWelcomeCard extends StatelessWidget {
         : 'Welcome back, $displayName!';
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: HomeDecor.card(),
+      padding: const EdgeInsets.all(HomeMetrics.cardPadding),
+      decoration: HomeDecor.card(radius: HomeMetrics.radiusLarge),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -339,9 +386,10 @@ class HomeWelcomeCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: HomePalette.orange,
-                        fontSize: 22,
+                        fontSize: 21,
+                        letterSpacing: -.35,
                         height: 1.15,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -357,6 +405,7 @@ class HomeWelcomeCard extends StatelessWidget {
               const SizedBox(width: 12),
               HomeCircleIconButton(
                 icon: Icons.notifications_none,
+                assetName: 'Notification.png',
                 tooltip: 'Notifications',
                 onTap: onNotificationTap,
                 size: 36,
@@ -376,7 +425,12 @@ class HomeWelcomeCard extends StatelessWidget {
           const SizedBox(height: 14),
           _StreakCard(data: streak, onTap: onStreakTap),
           const SizedBox(height: 14),
-          HomeWideButton(label: actionLabel, icon: Icons.add, onTap: onMoodTap),
+          HomeWideButton(
+            label: actionLabel,
+            icon: Icons.add,
+            assetName: '+.png',
+            onTap: onMoodTap,
+          ),
         ],
       ),
     );
@@ -396,17 +450,18 @@ class _StreakCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [HomePalette.softGold, HomePalette.sun],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0x269A7000)),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
           ),
           child: Row(
             children: [
@@ -495,10 +550,10 @@ class _StreakCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Icon(
-                Icons.workspace_premium_outlined,
-                size: 46,
-                color: Colors.white,
+              const HomeDashboardAssetImage(
+                assetName: '🔥.png',
+                width: 46,
+                height: 46,
               ),
             ],
           ),
@@ -547,9 +602,9 @@ class HomePaccServicesSection extends StatelessWidget {
               itemCount: services.length > 2 ? 2 : services.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                mainAxisExtent: 122,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                mainAxisExtent: columns == 1 ? 134 : 112,
               ),
               itemBuilder: (context, index) {
                 final service = services[index];
@@ -561,7 +616,7 @@ class HomePaccServicesSection extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         HomeOutlinedButton(
           label: 'View all ${services.length} PACC services',
           onTap: onViewAll,
@@ -582,22 +637,39 @@ class _ServiceTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: Ink(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: data.colors,
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
-            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HomePalette.outline),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
+            boxShadow: const [
+              BoxShadow(
+                color: HomePalette.shadow,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(data.icon, color: Colors.white, size: 28),
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .38),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(data.icon, color: HomePalette.text, size: 21),
+              ),
               const Spacer(),
               Text(
                 data.title,
@@ -636,49 +708,78 @@ class HomeDailyInsightsSection extends StatelessWidget {
     required this.insights,
     required this.affirmation,
     required this.onOpen,
+    required this.nowProvider,
   });
 
   final List<HomeInsightData> insights;
   final HomeAffirmationData? affirmation;
   final ValueChanged<String> onOpen;
+  final DateTime Function() nowProvider;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'My daily insights - Today',
-          style: HomeTextStyles.sectionTitle,
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'My daily insights - Today',
+                style: HomeTextStyles.sectionTitle,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE8A3),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Small steps',
+                style: TextStyle(
+                  color: HomePalette.mutedGold,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 154,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: insights.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final insight = insights[index];
-              if (insight.isAction) {
-                return _InsightActionCard(
+        const SizedBox(height: 10),
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 10, end: 0),
+          duration: HomeMotion.duration(context, 360),
+          curve: Curves.easeOutCubic,
+          builder: (context, offset, child) => Transform.translate(
+            offset: Offset(0, offset),
+            child: Opacity(opacity: 1 - offset / 30, child: child),
+          ),
+          child: SizedBox(
+            height: 126,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: insights.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final insight = insights[index];
+                if (insight.isAction) {
+                  return _InsightActionCard(
+                    data: insight,
+                    onTap: () => onOpen(insight.title),
+                  );
+                }
+                return _PhotoInsightCard(
                   data: insight,
                   onTap: () => onOpen(insight.title),
                 );
-              }
-              return _PhotoInsightCard(
-                data: insight,
-                onTap: () => onOpen(insight.title),
-              );
-            },
+              },
+            ),
           ),
         ),
-        const SizedBox(height: 18),
-        _AffirmationCard(
-          data: affirmation,
-          onTap: () => onOpen(affirmation?.title ?? "Today's affirmation"),
-        ),
+        const SizedBox(height: 16),
+        _AffirmationCard(data: affirmation, nowProvider: nowProvider),
       ],
     );
   }
@@ -694,36 +795,61 @@ class _InsightActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(HomeMetrics.radius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: Container(
-          width: 132,
-          padding: const EdgeInsets.all(14),
+          width: 116,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             border: Border.all(color: HomePalette.sun, width: 1.5),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
+            boxShadow: const [
+              BoxShadow(
+                color: HomePalette.shadow,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
                 decoration: const BoxDecoration(
                   color: HomePalette.sun,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(data.icon, color: HomePalette.text, size: 32),
+                child: data.iconAssetName == null
+                    ? Icon(data.icon, color: HomePalette.text, size: 24)
+                    : HomeDashboardAssetImage(
+                        assetName: data.iconAssetName!,
+                        width: 22,
+                        height: 22,
+                      ),
               ),
-              const SizedBox(height: 14),
+              const Spacer(),
               Text(
                 data.title,
-                textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: HomeTextStyles.cardTitle,
+                style: const TextStyle(
+                  color: HomePalette.text,
+                  fontSize: 11,
+                  height: 1.15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Quick check-in',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: HomeTextStyles.caption,
               ),
             ],
           ),
@@ -743,14 +869,14 @@ class _PhotoInsightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(HomeMetrics.radius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(HomeMetrics.radius),
           child: SizedBox(
-            width: 184,
+            width: 148,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -761,16 +887,35 @@ class _PhotoInsightCard extends StatelessWidget {
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.transparent, Color(0xB3000000)],
+                      colors: [Color(0x26000000), Color(0xCC000000)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
                   ),
                 ),
+                if (data.iconAssetName != null)
+                  Positioned(
+                    top: 9,
+                    left: 9,
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: HomeDashboardAssetImage(
+                        assetName: data.iconAssetName!,
+                        width: 22,
+                        height: 22,
+                      ),
+                    ),
+                  ),
                 Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -780,22 +925,24 @@ class _PhotoInsightCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: 11,
                           height: 1.12,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      if (data.subtitle != null)
+                      if (data.subtitle != null) ...[
+                        const SizedBox(height: 2),
                         Text(
                           data.subtitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
+                            color: Color(0xFFF8F3E8),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -808,37 +955,80 @@ class _PhotoInsightCard extends StatelessWidget {
   }
 }
 
-class _AffirmationCard extends StatelessWidget {
-  const _AffirmationCard({required this.data, required this.onTap});
+class _AffirmationCard extends StatefulWidget {
+  const _AffirmationCard({required this.data, required this.nowProvider});
 
   final HomeAffirmationData? data;
-  final VoidCallback onTap;
+  final DateTime Function() nowProvider;
+
+  @override
+  State<_AffirmationCard> createState() => _AffirmationCardState();
+}
+
+class _AffirmationCardState extends State<_AffirmationCard> {
+  late int _quoteIndex;
+  bool _hasAdvanced = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _quoteIndex = _indexForDate(widget.nowProvider());
+  }
+
+  int _indexForDate(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    return (day.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay) %
+        dailyAffirmationQuotes.length;
+  }
+
+  void _showNextQuote() {
+    setState(() {
+      _hasAdvanced = true;
+      _quoteIndex = (_quoteIndex + 1) % dailyAffirmationQuotes.length;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final affirmation = data;
+    final supplied = widget.data;
+    final catalogQuote = dailyAffirmationQuotes[_quoteIndex];
+    final quote = supplied != null && !_hasAdvanced
+        ? supplied.quote
+        : catalogQuote.text;
+    final category = supplied != null && !_hasAdvanced
+        ? supplied.title
+        : catalogQuote.category;
+    final author = supplied != null && !_hasAdvanced ? supplied.author : null;
 
     return Material(
-      color: const Color(0xFFE6E7EC),
-      borderRadius: BorderRadius.circular(14),
+      color: const Color(0xFFF4F1F6),
+      borderRadius: BorderRadius.circular(HomeMetrics.radiusLarge),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(HomeMetrics.radiusLarge),
+        onTap: _showNextQuote,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFB9BED2)),
-            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0x80B9BED2)),
+            borderRadius: BorderRadius.circular(HomeMetrics.radiusLarge),
+            boxShadow: const [
+              BoxShadow(
+                color: HomePalette.shadow,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.thumb_up_alt_outlined,
-                    color: Color(0xFF1CA3C7),
+                  const HomeDashboardAssetImage(
+                    assetName: 'Thumbs up.png',
+                    width: 22,
+                    height: 26,
                   ),
                   const SizedBox(width: 8),
                   const Expanded(
@@ -849,40 +1039,97 @@ class _AffirmationCard extends StatelessWidget {
                       style: HomeTextStyles.cardTitle,
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFFFF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: HomePalette.mutedGold,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
+                duration: HomeMotion.duration(context, 300),
                 switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: Center(
-                  key: ValueKey(affirmation?.quote ?? 'pending-affirmation'),
-                  child: Text(
-                    affirmation?.quote ?? 'Daily affirmation will appear here.',
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: affirmation == null
-                          ? HomePalette.muted
-                          : HomePalette.text,
-                      fontSize: 15,
-                      height: 1.3,
-                      fontStyle: affirmation == null
-                          ? FontStyle.normal
-                          : FontStyle.italic,
-                      fontWeight: FontWeight.w900,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final slide = Tween<Offset>(
+                    begin: const Offset(0, .08),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  final scale = Tween<double>(
+                    begin: .97,
+                    end: 1,
+                  ).animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: slide,
+                      child: ScaleTransition(scale: scale, child: child),
                     ),
+                  );
+                },
+                child: Center(
+                  key: ValueKey(quote),
+                  child: Column(
+                    children: [
+                      const Text(
+                        '“',
+                        style: TextStyle(
+                          color: HomePalette.mutedGold,
+                          fontSize: 30,
+                          height: .55,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        quote,
+                        textAlign: TextAlign.center,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: HomePalette.text,
+                          fontSize: 15,
+                          height: 1.3,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              if (affirmation?.author != null) ...[
-                const SizedBox(height: 10),
+              const SizedBox(height: 10),
+              const Center(
+                child: Text(
+                  'Tap for another thought',
+                  style: TextStyle(
+                    color: HomePalette.muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (author != null) ...[
+                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    '- ${affirmation!.author}',
+                    '- $author',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: HomeTextStyles.caption,
@@ -916,21 +1163,23 @@ class HomeMentalHealthCheckCard extends StatelessWidget {
       children: [
         HomeSectionHeader(
           title: 'Mental Health Check',
-          actionLabel: 'Start ->',
+          actionLabel: 'Start',
+          actionAssetName: 'Forward.png',
           onAction: onStart,
         ),
         const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(HomeMetrics.cardPadding),
           decoration: HomeDecor.card(
             borderColor: HomePalette.sun,
-            shadowColor: const Color(0x33FFC107),
+            shadowColor: const Color(0x1FFFC107),
+            radius: HomeMetrics.radiusLarge,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const HomeDashboardAssetImage(
-                assetName: 'How are you today.png',
+                assetName: 'Good Quality.png',
                 width: 42,
                 height: 42,
               ),
@@ -980,6 +1229,7 @@ class HomeMentalHealthCheckCard extends StatelessWidget {
                       alignment: Alignment.center,
                       child: HomePillButton(
                         label: data.actionLabel,
+                        assetName: 'Forward.png',
                         onTap: onViewSummary,
                       ),
                     ),
@@ -1013,7 +1263,8 @@ class HomeResourcesSection extends StatelessWidget {
       children: [
         HomeSectionHeader(
           title: 'Mental Health Resources',
-          actionLabel: 'See All ->',
+          actionLabel: 'See All',
+          actionAssetName: 'Forward.png',
           onAction: onSeeAll,
         ),
         const SizedBox(height: 12),
@@ -1036,29 +1287,42 @@ class _ResourceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: data.color,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(HomeMetrics.radius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 86),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          constraints: const BoxConstraints(minHeight: 82),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             border: Border.all(
               color: data.borderColor ?? const Color(0x33000000),
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
+            boxShadow: const [
+              BoxShadow(
+                color: HomePalette.shadow,
+                blurRadius: 9,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 44,
+                height: 44,
                 decoration: const BoxDecoration(
-                  color: Color(0x24FFFFFF),
-                  shape: BoxShape.circle,
+                  color: Color(0x52FFFFFF),
+                  borderRadius: BorderRadius.all(Radius.circular(14)),
                 ),
-                child: Icon(data.icon, color: Colors.white, size: 28),
+                child: data.iconAssetName == null
+                    ? Icon(data.icon, color: Colors.white, size: 28)
+                    : HomeDashboardAssetImage(
+                        assetName: data.iconAssetName!,
+                        width: 34,
+                        height: 34,
+                      ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1074,7 +1338,7 @@ class _ResourceTile extends StatelessWidget {
                         color: HomePalette.text,
                         fontSize: 14,
                         height: 1.15,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1093,10 +1357,10 @@ class _ResourceTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right,
-                color: HomePalette.text,
-                size: 26,
+              const HomeDashboardAssetImage(
+                assetName: 'Forward.png',
+                width: 18,
+                height: 24,
               ),
             ],
           ),
@@ -1134,7 +1398,7 @@ class HomeToolkitSection extends StatelessWidget {
                 crossAxisCount: columns,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
-                mainAxisExtent: 88,
+                mainAxisExtent: columns == 1 ? 108 : 88,
               ),
               itemBuilder: (context, index) {
                 final item = items[index];
@@ -1162,23 +1426,32 @@ class _ToolkitTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(HomeMetrics.radius),
         onTap: onTap,
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: data.colors,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HomePalette.outline),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
+            boxShadow: const [
+              BoxShadow(
+                color: HomePalette.shadow,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               HomeDashboardAssetImage(
                 assetName: data.imageName,
+                fullAssetPath: data.fullAssetPath,
                 width: 28,
                 height: 28,
                 fit: BoxFit.contain,
@@ -1221,11 +1494,13 @@ class HomeSectionHeader extends StatelessWidget {
     required this.title,
     this.actionLabel,
     this.onAction,
+    this.actionAssetName,
   });
 
   final String title;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? actionAssetName;
 
   @override
   Widget build(BuildContext context) {
@@ -1242,17 +1517,36 @@ class HomeSectionHeader extends StatelessWidget {
         if (actionLabel != null)
           TextButton(
             style: TextButton.styleFrom(
-              foregroundColor: HomePalette.orange,
-              minimumSize: Size.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              foregroundColor: const Color(0xFF9A6700),
+              minimumSize: const Size(44, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onPressed: onAction,
-            child: Text(
-              actionLabel!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  actionLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (actionAssetName != null) ...[
+                  const SizedBox(width: 4),
+                  HomeDashboardAssetImage(
+                    assetName: actionAssetName!,
+                    width: 10,
+                    height: 14,
+                  ),
+                ],
+              ],
             ),
           ),
       ],
@@ -1266,24 +1560,26 @@ class HomePillButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.icon,
+    this.assetName,
   });
 
   final String label;
   final VoidCallback onTap;
   final IconData? icon;
+  final String? assetName;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: HomePalette.sun,
       borderRadius: BorderRadius.circular(22),
-      elevation: 3,
-      shadowColor: const Color(0x33000000),
+      elevation: 1,
+      shadowColor: HomePalette.shadowStrong,
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1299,7 +1595,14 @@ class HomePillButton extends StatelessWidget {
                   ),
                 ),
               ),
-              if (icon != null) ...[
+              if (assetName != null) ...[
+                const SizedBox(width: 4),
+                HomeDashboardAssetImage(
+                  assetName: assetName!,
+                  width: 14,
+                  height: 18,
+                ),
+              ] else if (icon != null) ...[
                 const SizedBox(width: 4),
                 Icon(icon, color: Colors.white, size: 14),
               ],
@@ -1317,11 +1620,13 @@ class HomeWideButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.assetName,
   });
 
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final String? assetName;
 
   @override
   Widget build(BuildContext context) {
@@ -1330,16 +1635,23 @@ class HomeWideButton extends StatelessWidget {
       child: Material(
         color: HomePalette.sun,
         borderRadius: BorderRadius.circular(24),
-        elevation: 3,
+        elevation: 1,
+        shadowColor: HomePalette.shadowStrong,
         child: InkWell(
           borderRadius: BorderRadius.circular(24),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: HomePalette.text, size: 26),
+                assetName == null
+                    ? Icon(icon, color: HomePalette.text, size: 26)
+                    : HomeDashboardAssetImage(
+                        assetName: assetName!,
+                        width: 20,
+                        height: 20,
+                      ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -1375,11 +1687,12 @@ class HomeOutlinedButton extends StatelessWidget {
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           foregroundColor: HomePalette.text,
-          side: const BorderSide(color: HomePalette.sun, width: 1.5),
+          backgroundColor: HomePalette.surface,
+          side: const BorderSide(color: Color(0xB3D79F00), width: 1.25),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(HomeMetrics.radius),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
         onPressed: onTap,
         child: Row(
@@ -1409,6 +1722,8 @@ class HomeCircleIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.assetName,
+    this.assetColor,
     this.size = 44,
     this.iconSize = 22,
   });
@@ -1416,6 +1731,8 @@ class HomeCircleIconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final String? assetName;
+  final Color? assetColor;
   final double size;
   final double iconSize;
 
@@ -1424,17 +1741,26 @@ class HomeCircleIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white,
+        color: HomePalette.surface,
         shape: const CircleBorder(),
-        elevation: 4,
-        shadowColor: const Color(0x33000000),
+        elevation: 1,
+        shadowColor: HomePalette.shadowStrong,
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(icon, size: iconSize, color: HomePalette.text),
+            child: assetName == null
+                ? Icon(icon, size: iconSize, color: HomePalette.text)
+                : Center(
+                    child: HomeDashboardAssetImage(
+                      assetName: assetName!,
+                      width: iconSize,
+                      height: iconSize,
+                      color: assetColor,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -1448,11 +1774,13 @@ class HomePlainIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.assetName,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final String? assetName;
 
   @override
   Widget build(BuildContext context) {
@@ -1463,7 +1791,13 @@ class HomePlainIconButton extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: HomePalette.text),
+          child: assetName == null
+              ? Icon(icon, size: 16, color: HomePalette.text)
+              : HomeDashboardAssetImage(
+                  assetName: assetName!,
+                  width: 12,
+                  height: 12,
+                ),
         ),
       ),
     );
@@ -1477,20 +1811,26 @@ class HomeDashboardAssetImage extends StatelessWidget {
     this.width,
     this.height,
     this.fit = BoxFit.contain,
+    this.color,
+    this.fullAssetPath,
   });
 
   final String assetName;
   final double? width;
   final double? height;
   final BoxFit fit;
+  final Color? color;
+  final String? fullAssetPath;
 
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      '${AppAssets.dashboardImages}/$assetName',
+      fullAssetPath ?? '${AppAssets.dashboardImages}/$assetName',
       width: width,
       height: height,
       fit: fit,
+      color: color,
+      colorBlendMode: color == null ? null : BlendMode.srcIn,
       errorBuilder: (_, _, _) {
         return SizedBox(
           width: width,
@@ -1516,7 +1856,7 @@ class HomeAnimatedSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 360 + delay),
+      duration: HomeMotion.duration(context, 360 + delay),
       curve: Curves.easeOutCubic,
       builder: (context, value, animatedChild) {
         return Opacity(
@@ -1547,7 +1887,20 @@ class BlankHomeFeaturePage extends StatelessWidget {
         foregroundColor: HomePalette.text,
         elevation: 0,
       ),
-      body: const SizedBox.expand(),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Coming soon',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: HomePalette.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

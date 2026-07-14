@@ -50,6 +50,7 @@ class _SecretChatPageState extends State<SecretChatPage> {
           Navigator.pushNamed(context, RouteNames.secretChatProfile),
       onPostOpened: provider.recordUniqueRead,
       onRetryPost: provider.retryPost,
+      onDeletePost: provider.deletePost,
     );
   }
 

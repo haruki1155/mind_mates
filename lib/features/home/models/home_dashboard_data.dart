@@ -82,16 +82,22 @@ class HomeDashboardData {
         ),
       ],
       insights: const [
-        HomeInsightData.action(title: 'Log your mood', icon: Icons.add),
+        HomeInsightData.action(
+          title: 'Log your mood',
+          icon: Icons.add,
+          iconAssetName: '+.png',
+        ),
         HomeInsightData.photo(
           title: 'Time for a wellness check?',
           subtitle: 'Check your mood',
           imageName: 'Rectangle 254.png',
+          iconAssetName: 'Good Quality.png',
         ),
         HomeInsightData.photo(
           title: 'Mindful breathing',
           subtitle: '5 min session',
           imageName: 'Rectangle 255.png',
+          iconAssetName: 'Breath.png',
         ),
       ],
       mentalHealthCheck: const HomeMentalHealthCheckData(
@@ -106,12 +112,14 @@ class HomeDashboardData {
           title: 'Talk to AI companion',
           subtitle: 'Get instant support anytime',
           icon: Icons.support_agent_outlined,
+          iconAssetName: '🐶.png',
           color: Color(0xFFD9AF6A),
         ),
         HomeResourceData(
           title: 'View your insights',
           subtitle: 'Understand your emotional patterns',
           icon: Icons.insights_outlined,
+          iconAssetName: 'Creativity.png',
           color: Color(0xFFD7AFC1),
           borderColor: Color(0xFFFF2FA2),
         ),
@@ -119,6 +127,7 @@ class HomeDashboardData {
           title: 'Mental Wellbeing 101',
           subtitle: 'Essential mental health knowledge',
           icon: Icons.school_outlined,
+          iconAssetName: 'Good Quality.png',
           color: Color(0xFFFF9C97),
           borderColor: Color(0xFFFF4C4C),
         ),
@@ -126,12 +135,14 @@ class HomeDashboardData {
           title: 'Latest News & Research',
           subtitle: 'Updates and mental health insights',
           icon: Icons.science_outlined,
+          iconAssetName: 'Rolled Up Newspaper.png',
           color: Color(0xFFD0C6C8),
         ),
         HomeResourceData(
           title: 'Recommended for You',
           subtitle: 'Personalized mental health resources',
           icon: Icons.thumb_up_alt_outlined,
+          iconAssetName: 'Warranty.png',
           color: Color(0xFFB4C6FF),
         ),
       ],
@@ -153,6 +164,13 @@ class HomeDashboardData {
           subtitle: 'Private guided reflection',
           imageName: 'journal_icon.png',
           colors: [Color(0xFFFFD86B), Color(0xFFE5AC00)],
+        ),
+        HomeToolkitData(
+          title: 'Sleep Quality',
+          subtitle: 'Track rest and patterns',
+          imageName: '😴 Better sleep.png',
+          fullAssetPath: 'assets/images/INSIGHTS/😴 Better sleep.png',
+          colors: [Color(0xFFB9C9FF), Color(0xFF7E91D8)],
         ),
       ],
     );
@@ -334,21 +352,32 @@ class HomeInsightData {
     this.subtitle,
     this.imageName,
     this.icon,
+    this.iconAssetName,
   });
 
-  const HomeInsightData.action({required String title, required IconData icon})
-    : this._(title: title, icon: icon);
+  const HomeInsightData.action({
+    required String title,
+    required IconData icon,
+    String? iconAssetName,
+  }) : this._(title: title, icon: icon, iconAssetName: iconAssetName);
 
   const HomeInsightData.photo({
     required String title,
     required String subtitle,
     required String imageName,
-  }) : this._(title: title, subtitle: subtitle, imageName: imageName);
+    String? iconAssetName,
+  }) : this._(
+         title: title,
+         subtitle: subtitle,
+         imageName: imageName,
+         iconAssetName: iconAssetName,
+       );
 
   final String title;
   final String? subtitle;
   final String? imageName;
   final IconData? icon;
+  final String? iconAssetName;
 
   bool get isAction => icon != null;
 }
@@ -388,6 +417,7 @@ class HomeResourceData {
     required this.icon,
     required this.color,
     this.borderColor,
+    this.iconAssetName,
   });
 
   final String title;
@@ -395,6 +425,7 @@ class HomeResourceData {
   final IconData icon;
   final Color color;
   final Color? borderColor;
+  final String? iconAssetName;
 }
 
 class HomeToolkitData {
@@ -403,10 +434,12 @@ class HomeToolkitData {
     required this.subtitle,
     required this.imageName,
     required this.colors,
+    this.fullAssetPath,
   });
 
   final String title;
   final String subtitle;
   final String imageName;
   final List<Color> colors;
+  final String? fullAssetPath;
 }

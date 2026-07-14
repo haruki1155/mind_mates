@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
+import 'app_bootstrap.dart';
 import 'firebase_options.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/appointment_provider.dart';
@@ -16,6 +18,7 @@ import 'providers/journal_provider.dart';
 import 'providers/mood_provider.dart';
 import 'providers/report_provider.dart';
 import 'providers/secret_chat_provider.dart';
+import 'providers/sleep_provider.dart';
 import 'providers/user_provider.dart';
 import 'repositories/assessment_repository.dart';
 import 'repositories/appointment_repository.dart';
@@ -28,6 +31,7 @@ import 'repositories/mind_aid_repository_screen.dart';
 import 'repositories/mood_repository.dart';
 import 'repositories/report_repository.dart';
 import 'repositories/secret_chat_repository.dart';
+import 'repositories/sleep_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/auth/auth_service.dart';
 import 'services/firebase/firebase_app_check_service.dart';
@@ -50,44 +54,43 @@ Future<void> main() async {
     ),
   );
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => AuthProvider(AuthRepository(AuthService())),
-        ),
-        ChangeNotifierProvider(create: (_) => UserProvider(UserRepository())),
-        ChangeNotifierProvider(create: (_) => MoodProvider(MoodRepository())),
-        ChangeNotifierProvider(
-          create: (_) => AppointmentProvider(AppointmentRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => JournalProvider(JournalRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ReportProvider(ReportRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) =>
-              MentalHealthActivityProvider(MentalHealthActivityRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => InsightsProvider(InsightsRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => MindAidProvider(MindAidRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SecretChatProvider(SecretChatRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => AssessmentProvider(AssessmentRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => BreathingProvider(BreathingRepository()),
-        ),
-      ],
-      child: const MindMateApp(),
-    ),
+  final mobileApp = MultiProvider(
+    providers: [
+      ChangeNotifierProvider(
+        create: (_) => AuthProvider(AuthRepository(AuthService())),
+      ),
+      ChangeNotifierProvider(create: (_) => UserProvider(UserRepository())),
+      ChangeNotifierProvider(create: (_) => MoodProvider(MoodRepository())),
+      ChangeNotifierProvider(
+        create: (_) => AppointmentProvider(AppointmentRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => JournalProvider(JournalRepository()),
+      ),
+      ChangeNotifierProvider(create: (_) => ReportProvider(ReportRepository())),
+      ChangeNotifierProvider(
+        create: (_) =>
+            MentalHealthActivityProvider(MentalHealthActivityRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => InsightsProvider(InsightsRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => MindAidProvider(MindAidRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => SecretChatProvider(SecretChatRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => AssessmentProvider(AssessmentRepository()),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => BreathingProvider(BreathingRepository()),
+      ),
+      ChangeNotifierProvider(create: (_) => SleepProvider(SleepRepository())),
+    ],
+    child: const MindMateApp(),
   );
+
+  runApp(selectMindMateRoot(isWeb: kIsWeb, mobileApp: mobileApp));
 }

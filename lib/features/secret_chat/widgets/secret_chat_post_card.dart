@@ -14,6 +14,7 @@ class SecretChatPostCard extends StatelessWidget {
     required this.onSave,
     required this.onComments,
     this.onRetry,
+    this.onDelete,
   });
 
   final SecretChatModel post;
@@ -23,6 +24,7 @@ class SecretChatPostCard extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onComments;
   final VoidCallback? onRetry;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -91,14 +93,30 @@ class SecretChatPostCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.more_horiz_rounded, size: 22),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'hide', child: Text('Hide post')),
-                    PopupMenuItem(value: 'report', child: Text('Report')),
-                  ],
-                ),
+                if (post.isMine && onDelete != null && !post.isPending)
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Post options',
+                    icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                    onSelected: (value) {
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              color: Colors.redAccent,
+                            ),
+                            SizedBox(width: 10),
+                            Text('Delete post'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 if (post.isPending)
                   const Padding(
                     padding: EdgeInsets.only(left: 4, top: 10),

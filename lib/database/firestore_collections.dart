@@ -2,6 +2,8 @@ class FirestoreCollections {
   const FirestoreCollections._();
 
   static const users = 'users';
+  static const roleCorrectionRequests = 'role_correction_requests';
+  static const roleAuditLogs = 'role_audit_logs';
   static const assessments = 'assessments';
   static const moods = 'moods';
   static const journals = 'journals';
@@ -20,6 +22,8 @@ class FirestoreCollections {
   static const adminStatusSummaries = 'admin_status_summaries';
   static const userActivities = 'user_activities';
   static const breathingSessions = 'breathing_sessions';
+  static const sleepEntries = 'sleep_entries';
+  static const sleepPreferences = 'sleep_preferences';
   static const secretChats = 'secret_chats';
   static const secretChatComments = 'secret_chat_comments';
   static const secretChatInteractions = 'secret_chat_interactions';

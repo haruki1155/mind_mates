@@ -10,16 +10,61 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function currentAccessRole() {
+      return !signedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? 'appUser'
+        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accessRole != null
+          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accessRole
+          : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function hasPortalAccess() {
+      return currentAccessRole() in ['portalStaff', 'counselor', 'admin'];
+    }
+
+    function hasClinicalAccess() {
+      return currentAccessRole() in ['counselor', 'admin'];
+    }
+
     function isAdmin() {
+      return hasClinicalAccess();
+    }
+
+    function isSystemAdmin() {
+      return currentAccessRole() == 'admin';
+    }
+
+    function validSelfProfileCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.id == userId
+        && request.resource.data.accessRole == 'appUser'
+        && request.resource.data.verificationStatus == 'pending'
+        && request.resource.data.role in ['student', 'faculty', 'staff']
+        && request.resource.data.populationRole in ['student', 'teaching', 'nonTeaching']
+        && request.resource.data.declaredRole == request.resource.data.populationRole;
+    }
+
+    function validSelfProfileUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'name', 'firstName', 'middleName', 'lastName', 'avatarAssetName',
+        'updatedAt', 'lastActiveAt', 'lastActivityDateKey', 'activeDateKeys',
+        'streakUpdatedAt', 'dayStreak', 'longestStreak',
+        'quickAssessmentCompleted', 'quickAssessmentCompletedAt',
+        'lastMoodDateKey'
+      ]);
+    }
+
+    function isLegacyPrivileged() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'counselor'];
     }
 
     match /users/{userId} {
-      allow create: if isOwner(userId);
-      allow read, update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow create: if validSelfProfileCreate(userId);
+      allow read: if isOwner(userId) || hasPortalAccess() || isLegacyPrivileged();
+      allow update: if (isOwner(userId) && validSelfProfileUpdate());
+      allow delete: if isSystemAdmin();
     }
 
     match /assessments/{assessmentId} {
@@ -118,6 +163,88 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    function validSleepTags(data) {
+      return data.contributorTags is list
+        && data.contributorTags.size() <= 12
+        && data.contributorTags.toSet().size() == data.contributorTags.size()
+        && data.contributorTags.toSet().hasOnly([
+          'late_caffeine', 'alcohol', 'nicotine', 'naps', 'exercise',
+          'late_screens', 'stress', 'environment', 'late_meal',
+          'schedule_change', 'illness_pain', 'medication'
+        ])
+        && data.concernTags is list
+        && data.concernTags.size() <= 5
+        && data.concernTags.toSet().size() == data.concernTags.size()
+        && data.concernTags.toSet().hasOnly([
+          'breathing_pauses_gasping', 'loud_snoring_tiredness',
+          'dangerous_sleepiness', 'persistent_problems', 'worsening_symptoms'
+        ]);
+    }
+
+    function validSleepEntry(data) {
+      return data.keys().hasOnly([
+          'userId', 'wakeDateKey', 'timezone', 'attemptedSleepAt',
+          'sleepOnsetAt', 'finalWakeAt', 'outOfBedAt', 'awakeningCount',
+          'awakeMinutes', 'napCount', 'napMinutes', 'restfulness',
+          'daytimeSleepiness', 'perceivedQuality', 'contributorTags',
+          'concernTags', 'createdAt', 'clientUpdatedAt', 'updatedAt'
+        ])
+        && data.wakeDateKey is string
+        && data.wakeDateKey.matches('^[0-9]{8}$')
+        && data.timezone == 'Asia/Manila'
+        && data.attemptedSleepAt is timestamp
+        && data.sleepOnsetAt is timestamp
+        && data.finalWakeAt is timestamp
+        && data.outOfBedAt is timestamp
+        && data.attemptedSleepAt <= data.sleepOnsetAt
+        && data.sleepOnsetAt <= data.finalWakeAt
+        && data.finalWakeAt <= data.outOfBedAt
+        && data.awakeningCount is int
+        && data.awakeningCount >= 0 && data.awakeningCount <= 50
+        && data.awakeMinutes is int
+        && data.awakeMinutes >= 0 && data.awakeMinutes <= 1440
+        && ((data.awakeningCount == 0 && data.awakeMinutes == 0)
+          || (data.awakeningCount > 0 && data.awakeMinutes > 0))
+        && data.napCount is int && data.napCount >= 0 && data.napCount <= 10
+        && data.napMinutes is int && data.napMinutes >= 0 && data.napMinutes <= 720
+        && data.restfulness is int && data.restfulness >= 1 && data.restfulness <= 5
+        && data.daytimeSleepiness is int
+        && data.daytimeSleepiness >= 1 && data.daytimeSleepiness <= 5
+        && data.perceivedQuality is int
+        && data.perceivedQuality >= 1 && data.perceivedQuality <= 5
+        && data.createdAt is timestamp
+        && data.clientUpdatedAt is timestamp
+        && data.updatedAt == request.time
+        && validSleepTags(data);
+    }
+
+    match /sleep_entries/{sleepId} {
+      allow create: if isOwner(request.resource.data.userId)
+        && sleepId == 'sleep_' + request.auth.uid + '_' + request.resource.data.wakeDateKey
+        && validSleepEntry(request.resource.data);
+      allow get, list: if isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.wakeDateKey == resource.data.wakeDateKey
+        && request.resource.data.createdAt == resource.data.createdAt
+        && sleepId == 'sleep_' + request.auth.uid + '_' + request.resource.data.wakeDateKey
+        && validSleepEntry(request.resource.data);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /sleep_preferences/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'userId', 'consentVersion', 'cloudConsent', 'grantedAt', 'updatedAt'
+        ])
+        && request.resource.data.userId == userId
+        && request.resource.data.consentVersion == 'sleep-v1'
+        && request.resource.data.cloudConsent == true
+        && request.resource.data.grantedAt is timestamp
+        && request.resource.data.updatedAt == request.time;
+    }
+
     match /mind_aid_preferences/{userId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId)
@@ -139,7 +266,7 @@ service cloud.firestore {
     }
 
     match /mind_aid_analytics_daily/{dateKey} {
-      allow read: if isAdmin();
+      allow read: if hasPortalAccess();
       allow write: if false;
     }
 
@@ -178,8 +305,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isAdmin();
-      allow delete: if isAdmin()
-        || (signedIn() && resource.data.authorId == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     match /secret_chat_comments/{commentId} {
@@ -240,10 +366,10 @@ service cloud.firestore {
     }
 
     match /analytics_daily/{dateKey} {
-      allow read: if isAdmin();
+      allow read: if hasPortalAccess();
       allow write: if false;
       match /users/{userId} {
-        allow read: if isAdmin();
+        allow read: if hasPortalAccess();
         allow write: if false;
       }
     }
@@ -255,52 +381,17 @@ service cloud.firestore {
     match /secret_chat_profiles/{userId} {
       allow get: if signedIn();
       allow list: if signedIn();
-      allow create, update: if isOwner(userId)
-        && request.resource.data.userId == userId
-        && request.resource.data.keys().hasOnly([
-          'userId', 'alias', 'aliasKey', 'photoUrl', 'photoPath',
-          'createdAt', 'updatedAt'
-        ])
-        && request.resource.data.alias is string
-        && request.resource.data.alias.size() >= 1
-        && request.resource.data.alias.size() <= 30
-        && request.resource.data.alias.matches('^[A-Za-z0-9]+( [A-Za-z0-9]+)*$')
-        && request.resource.data.aliasKey is string
-        && request.resource.data.updatedAt == request.time
-        && ((!exists(/databases/$(database)/documents/secret_chat_profiles/$(userId))
-              && request.resource.data.createdAt == request.time)
-          || (exists(/databases/$(database)/documents/secret_chat_profiles/$(userId))
-              && request.resource.data.createdAt == resource.data.createdAt))
-        && (!('photoUrl' in request.resource.data) || request.resource.data.photoUrl is string)
-        && (!('photoPath' in request.resource.data)
-          || (request.resource.data.photoPath is string
-            && request.resource.data.photoPath.matches('^secret_chat_profiles/' + userId + '/avatar_[0-9]+\\.(jpg|png)$')))
-        && getAfter(/databases/$(database)/documents/secret_chat_aliases/$(request.resource.data.aliasKey)).data.userId == userId;
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /secret_chat_aliases/{aliasKey} {
       allow get: if signedIn();
       allow list: if false;
-      allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasOnly(['userId', 'alias', 'updatedAt'])
-        && request.resource.data.alias is string
-        && request.resource.data.updatedAt == request.time
-        && !exists(/databases/$(database)/documents/secret_chat_aliases/$(aliasKey))
-        && getAfter(/databases/$(database)/documents/secret_chat_profiles/$(request.auth.uid)).data.aliasKey == aliasKey;
-      allow update: if signedIn()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasOnly(['userId', 'alias', 'updatedAt'])
-        && request.resource.data.alias is string
-        && request.resource.data.updatedAt == request.time
-        && getAfter(/databases/$(database)/documents/secret_chat_profiles/$(request.auth.uid)).data.aliasKey == aliasKey;
-      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
     match /secret_chat_profile_stats/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId);
       allow write: if false;
     }
 
@@ -310,10 +401,10 @@ service cloud.firestore {
 
     match /appointments/{appointmentId} {
       allow create: if isOwner(request.resource.data.userId);
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow update, delete: if isAdmin();
+      allow read: if isOwner(resource.data.userId) || hasPortalAccess();
+      allow update, delete: if hasPortalAccess();
       match /history/{historyId} {
-        allow read: if isOwner(get(/databases/$(database)/documents/appointments/$(appointmentId)).data.userId) || isAdmin();
+        allow read: if isOwner(get(/databases/$(database)/documents/appointments/$(appointmentId)).data.userId) || hasPortalAccess();
         allow write: if false;
       }
     }
@@ -333,8 +424,8 @@ service cloud.firestore {
     match /inquiries/{inquiryId} {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow update: if isAdmin();
+      allow read: if isOwner(resource.data.userId) || hasPortalAccess();
+      allow update: if hasPortalAccess();
       allow delete: if false;
     }
 
@@ -355,7 +446,18 @@ service cloud.firestore {
 
     match /recommendations/{recommendationId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isSystemAdmin();
+    }
+
+
+    match /role_correction_requests/{requestId} {
+      allow read: if isOwner(resource.data.userId) || hasPortalAccess();
+      allow create, update, delete: if false;
+    }
+
+    match /role_audit_logs/{auditId} {
+      allow read: if isSystemAdmin();
+      allow write: if false;
     }
   }
 }

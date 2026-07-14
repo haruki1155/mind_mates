@@ -36,7 +36,9 @@ class AppointmentRepository {
   Future<AppointmentModel> createAppointment(
     AppointmentModel appointment,
   ) async {
+    final profile = await _userRepository.fetchUserProfile(appointment.userId);
     final data = appointment.toJson()
+      ..['populationRole'] = profile?.effectivePopulationRole?.storedValue ?? ''
       ..['createdAt'] = FieldValue.serverTimestamp()
       ..['updatedAt'] = FieldValue.serverTimestamp();
     final id = await _firestoreService.createDocument(

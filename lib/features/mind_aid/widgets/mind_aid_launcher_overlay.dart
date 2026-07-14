@@ -50,10 +50,21 @@ class MindAidRouteObserver extends NavigatorObserver {
   }
 }
 
-class MindAidLauncherOverlay extends StatelessWidget {
+class MindAidLauncherOverlay extends StatefulWidget {
   const MindAidLauncherOverlay({required this.child, super.key});
 
   final Widget child;
+
+  @override
+  State<MindAidLauncherOverlay> createState() => _MindAidLauncherOverlayState();
+}
+
+class _MindAidLauncherOverlayState extends State<MindAidLauncherOverlay> {
+  static const double _launcherSize = 48;
+  static const double _edgeMargin = 12;
+
+  Offset? _position;
+  Offset _displayedPosition = Offset.zero;
 
   static const _excludedRoutes = {
     RouteNames.splash,
@@ -75,42 +86,90 @@ class MindAidLauncherOverlay extends StatelessWidget {
             route != null &&
             userId?.trim().isNotEmpty == true &&
             !_excludedRoutes.contains(route);
-        return Stack(
-          children: [
-            child,
-            if (show)
-              Positioned(
-                right: 16,
-                bottom: MediaQuery.paddingOf(context).bottom + 18,
-                child: SafeArea(
-                  child: Semantics(
-                    button: true,
-                    label: 'Talk to MindAid',
-                    child: Material(
-                      key: const ValueKey('globalMindAidLauncher'),
-                      color: const Color(0xFFFFC107),
-                      elevation: 6,
-                      shadowColor: const Color(0x55000000),
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () => _openMindAid(route),
-                        child: const SizedBox.square(
-                          dimension: 48,
-                          child: Icon(
-                            Icons.psychology_alt_rounded,
-                            color: Colors.black,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final bounds = _movementBounds(context, constraints);
+            final position = _boundedPosition(bounds);
+            _displayedPosition = position;
+
+            return Stack(
+              children: [
+                widget.child,
+                if (show)
+                  Positioned(
+                    left: position.dx,
+                    top: position.dy,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onPanUpdate: (details) {
+                        setState(() {
+                          _position = _clampOffset(
+                            (_position ?? _displayedPosition) + details.delta,
+                            bounds,
+                          );
+                        });
+                      },
+                      child: Semantics(
+                        button: true,
+                        label: 'Talk to MindAid',
+                        hint: 'Double tap to open or drag to move',
+                        child: Material(
+                          key: const ValueKey('globalMindAidLauncher'),
+                          color: const Color(0xFFFFC107),
+                          elevation: 6,
+                          shadowColor: const Color(0x55000000),
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => _openMindAid(route),
+                            child: const SizedBox.square(
+                              dimension: _launcherSize,
+                              child: Icon(
+                                Icons.psychology_alt_rounded,
+                                color: Colors.black,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  Rect _movementBounds(BuildContext context, BoxConstraints constraints) {
+    final padding = MediaQuery.paddingOf(context);
+    final left = padding.left + _edgeMargin;
+    final top = padding.top + _edgeMargin;
+    final right =
+        constraints.maxWidth - padding.right - _edgeMargin - _launcherSize;
+    final bottom =
+        constraints.maxHeight - padding.bottom - _edgeMargin - _launcherSize;
+    return Rect.fromLTRB(
+      left,
+      top,
+      right < left ? left : right,
+      bottom < top ? top : bottom,
+    );
+  }
+
+  Offset _boundedPosition(Rect bounds) {
+    return _clampOffset(
+      _position ?? Offset(bounds.right, bounds.bottom),
+      bounds,
+    );
+  }
+
+  Offset _clampOffset(Offset position, Rect bounds) {
+    return Offset(
+      position.dx.clamp(bounds.left, bounds.right),
+      position.dy.clamp(bounds.top, bounds.bottom),
     );
   }
 

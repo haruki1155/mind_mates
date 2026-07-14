@@ -8,6 +8,7 @@ import '../models/admin_activity_analytics_model.dart';
 import '../models/admin_mind_aid_analytics_model.dart';
 import '../models/appointment_model.dart';
 import '../models/user_model.dart';
+import '../models/profile_roles.dart';
 import '../services/firebase/firestore_service.dart';
 
 class AdminAssessmentRecord {
@@ -39,7 +40,7 @@ class AdminAssessmentRecord {
             ? data['score'] as num
             : num.tryParse('${data['score']}'),
         status: _text(data['status'] ?? data['overallLevel']),
-        role: _text(data['role']),
+        role: _text(data['populationRole'] ?? data['role']),
       );
 
   static DateTime _date(Object? value) {
@@ -54,11 +55,44 @@ class AdminAssessmentRecord {
   }
 }
 
+class AdminRoleCorrectionRequest {
+  const AdminRoleCorrectionRequest({
+    required this.id,
+    required this.userId,
+    required this.currentRole,
+    required this.requestedRole,
+    required this.reason,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String userId;
+  final String currentRole;
+  final String requestedRole;
+  final String reason;
+  final String status;
+  final DateTime createdAt;
+
+  factory AdminRoleCorrectionRequest.fromJson(Map<String, dynamic> data) =>
+      AdminRoleCorrectionRequest(
+        id: data['id']?.toString() ?? '',
+        userId: data['userId']?.toString() ?? '',
+        currentRole: data['currentRole']?.toString() ?? '',
+        requestedRole: data['requestedRole']?.toString() ?? '',
+        reason: data['reason']?.toString() ?? '',
+        status: data['status']?.toString() ?? 'pending',
+        createdAt: AdminAssessmentRecord._date(data['createdAt']),
+      );
+}
+
 class AdminPortalRepository {
   AdminPortalRepository({FirestoreService? firestoreService})
     : _firestoreService = firestoreService ?? FirestoreService();
 
   final FirestoreService _firestoreService;
+  AccessRole _currentAccessRole = AccessRole.appUser;
+  AccessRole get currentAccessRole => _currentAccessRole;
 
   Future<void> signInStaff({
     required String schoolId,
@@ -80,11 +114,15 @@ class AdminPortalRepository {
       FirestoreCollections.users,
       user.uid,
     );
-    final role = profile?['role']?.toString().toLowerCase();
-    if (role != 'admin' && role != 'counselor') {
+    final role = AccessRole.parse(
+      profile?['accessRole'],
+      legacyRole: profile?['role'],
+    );
+    if (!role.canUsePortal) {
       await FirebaseAuth.instance.signOut();
       throw StateError('This account does not have staff access.');
     }
+    _currentAccessRole = role;
   }
 
   Stream<List<UserModel>> watchUsers() => _firestoreService
@@ -99,6 +137,18 @@ class AdminPortalRepository {
                 .toList()
               ..sort((a, b) => a.displayName.compareTo(b.displayName)),
       );
+
+  Stream<List<AdminRoleCorrectionRequest>> watchRoleCorrectionRequests() =>
+      _firestoreService
+          .watchDocuments(FirestoreCollections.roleCorrectionRequests)
+          .map(
+            (items) =>
+                items
+                    .map(AdminRoleCorrectionRequest.fromJson)
+                    .where((item) => item.status == 'pending')
+                    .toList()
+                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+          );
 
   Stream<List<AppointmentModel>> watchAppointments() => _firestoreService
       .watchDocuments(FirestoreCollections.appointments)
@@ -176,6 +226,42 @@ class AdminPortalRepository {
     await FirebaseFunctions.instance
         .httpsCallable('reviewAppointment')
         .call(data);
+  }
+
+  Future<void> reviewProfileVerification({
+    required String userId,
+    required VerificationStatus decision,
+    required String reason,
+  }) async {
+    await FirebaseFunctions.instance
+        .httpsCallable('reviewProfileVerification')
+        .call({
+          'userId': userId,
+          'decision': decision.storedValue,
+          'reason': reason.trim(),
+        });
+  }
+
+  Future<void> assignAccessRole({
+    required String userId,
+    required AccessRole accessRole,
+    required String reason,
+  }) async {
+    await FirebaseFunctions.instance.httpsCallable('assignAccessRole').call({
+      'userId': userId,
+      'accessRole': accessRole.storedValue,
+      'reason': reason.trim(),
+    });
+  }
+
+  Future<void> reviewRoleCorrection({
+    required String requestId,
+    required bool approve,
+    required String reason,
+  }) async {
+    await FirebaseFunctions.instance.httpsCallable('reviewRoleCorrection').call(
+      {'requestId': requestId, 'approve': approve, 'reason': reason.trim()},
+    );
   }
 
   Future<void> updateInquiryStatus(String id, InquiryStatus status) =>

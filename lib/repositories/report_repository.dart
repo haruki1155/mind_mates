@@ -800,6 +800,11 @@ class ReportRepository {
       'userId': userId,
       'userLabel': _userLabel(userId, userDoc),
       'role': userDoc?['role']?.toString().trim() ?? '',
+      'populationRole':
+          userDoc?['populationRole']?.toString().trim() ??
+          userDoc?['declaredRole']?.toString().trim() ??
+          userDoc?['role']?.toString().trim() ??
+          '',
       'status': mentalStatus.status,
       'statusRank': _statusRank(mentalStatus.status),
       'mentalStatusLabel': mentalStatus.label,

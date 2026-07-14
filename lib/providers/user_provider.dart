@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/user_model.dart';
+import '../models/profile_roles.dart';
 import '../repositories/user_repository.dart';
 
 class UserProvider extends ChangeNotifier {
@@ -54,6 +55,28 @@ class UserProvider extends ChangeNotifier {
     } catch (error) {
       _user = previous;
       _errorMessage = 'Unable to update profile.';
+      return false;
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> requestRoleCorrection({
+    required PopulationRole requestedRole,
+    required String reason,
+  }) async {
+    _isSaving = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _repository.requestRoleCorrection(
+        requestedRole: requestedRole,
+        reason: reason,
+      );
+      return true;
+    } catch (_) {
+      _errorMessage = 'Unable to submit role correction request.';
       return false;
     } finally {
       _isSaving = false;

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../database/firestore_collections.dart';
 import '../features/quick_assessment/models/quick_assessment_models.dart';
+import '../models/profile_roles.dart';
 import '../services/auth/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
 
@@ -49,10 +50,14 @@ class AuthRepository {
     required String department,
     required String course,
     String? sector,
+    String? employeeId,
+    String? yearLevel,
+    String? position,
     String? middleName,
     AssessmentRole? role,
   }) async {
     final authEmail = authEmailForSchoolId(schoolId);
+    final populationRole = role?.populationRole;
     final credential = await _authService.signUp(
       email: authEmail,
       password: password,
@@ -76,10 +81,22 @@ class AuthRepository {
               lastName.trim(),
             ].join(' '),
             'schoolId': schoolId.trim(),
+            'employeeId': employeeId?.trim() ?? '',
             'department': department.trim(),
             'course': course.trim(),
+            'yearLevel': yearLevel?.trim() ?? '',
             'sector': sector?.trim() ?? '',
+            'position': position?.trim() ?? '',
             if (role != null) 'role': role.name,
+            if (populationRole != null) ...{
+              'populationRole': populationRole.storedValue,
+              'declaredRole': populationRole.storedValue,
+            },
+            'accessRole': AccessRole.appUser.storedValue,
+            'verificationStatus': VerificationStatus.pending.storedValue,
+            'profileVersion': 2,
+            'verifiedAt': null,
+            'verifiedBy': '',
             'dayStreak': 0,
             'longestStreak': 0,
             'lastActivityDateKey': '',

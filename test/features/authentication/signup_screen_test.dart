@@ -128,7 +128,9 @@ void main() {
     expect(find.text('onboarding target'), findsOneWidget);
   });
 
-  testWidgets('teaching signup uses college and course fields', (tester) async {
+  testWidgets('teaching signup uses department and position fields', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -138,7 +140,8 @@ void main() {
     );
 
     expect(find.text('College or Department'), findsWidgets);
-    expect(find.text('Course or Program'), findsWidgets);
+    expect(find.text('Course or Program'), findsNothing);
+    expect(find.text('Position or Designation'), findsWidgets);
     expect(find.text('Sector'), findsNothing);
   });
 
@@ -191,9 +194,25 @@ Future<void> _fillRequiredTextFields(WidgetTester tester) async {
     'Molar',
   );
   await tester.enterText(
-    find.widgetWithText(TextFormField, 'School ID'),
+    find.widgetWithText(
+      TextFormField,
+      find.text('School ID').evaluate().isNotEmpty
+          ? 'School ID'
+          : 'Employee ID',
+    ),
     '2026-1',
   );
+  final yearLevel = find.widgetWithText(TextFormField, 'Year Level');
+  if (yearLevel.evaluate().isNotEmpty) {
+    await tester.enterText(yearLevel, '2nd Year');
+  }
+  final position = find.widgetWithText(
+    TextFormField,
+    'Position or Designation',
+  );
+  if (position.evaluate().isNotEmpty) {
+    await tester.enterText(position, 'Coordinator');
+  }
   await tester.enterText(
     find.widgetWithText(TextFormField, 'Password'),
     'password123',
@@ -265,6 +284,9 @@ class _FakeAuthProvider extends AuthProvider {
   String? department;
   String? course;
   String? sector;
+  String? employeeId;
+  String? yearLevel;
+  String? position;
   String? schoolId;
   String? generatedEmail;
   AssessmentRole? role;
@@ -278,6 +300,9 @@ class _FakeAuthProvider extends AuthProvider {
     required String department,
     required String course,
     String? sector,
+    String? employeeId,
+    String? yearLevel,
+    String? position,
     String? middleName,
     AssessmentRole? role,
   }) async {
@@ -285,6 +310,9 @@ class _FakeAuthProvider extends AuthProvider {
     this.department = department;
     this.course = course;
     this.sector = sector;
+    this.employeeId = employeeId;
+    this.yearLevel = yearLevel;
+    this.position = position;
     this.schoolId = schoolId;
     generatedEmail = AuthRepository.authEmailForSchoolId(schoolId);
     this.role = role;

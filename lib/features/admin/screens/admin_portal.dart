@@ -6,6 +6,7 @@ import '../../../models/admin_activity_analytics_model.dart';
 import '../../../models/admin_mind_aid_analytics_model.dart';
 import '../../../models/appointment_model.dart';
 import '../../../models/user_model.dart';
+import '../../../models/profile_roles.dart';
 import '../../../repositories/admin_portal_repository.dart';
 import 'admin_status_dashboard_screen.dart';
 
@@ -74,13 +75,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
     setState(() => _submitting = true);
     try {
-      await AdminPortalRepository().signInStaff(
+      final repository = AdminPortalRepository();
+      await repository.signInStaff(
         schoolId: _schoolId.text,
         password: _password.text,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AdminPortalHome()),
+        MaterialPageRoute(
+          builder: (_) => AdminPortalHome(repository: repository),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -220,7 +224,12 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
         backgroundColor: _cream,
         drawer: compact
             ? Drawer(
-                child: _Nav(page: _page, onChanged: _setPage, compact: true),
+                child: _Nav(
+                  page: _page,
+                  onChanged: _setPage,
+                  compact: true,
+                  accessRole: _repository.currentAccessRole,
+                ),
               )
             : null,
         body: Row(
@@ -228,7 +237,11 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
             if (!compact)
               SizedBox(
                 width: 220,
-                child: _Nav(page: _page, onChanged: _setPage),
+                child: _Nav(
+                  page: _page,
+                  onChanged: _setPage,
+                  accessRole: _repository.currentAccessRole,
+                ),
               ),
             Expanded(
               child: Column(
@@ -266,10 +279,18 @@ class _Nav extends StatelessWidget {
     required this.page,
     required this.onChanged,
     this.compact = false,
+    this.accessRole = AccessRole.admin,
   });
   final AdminPortalPage page;
   final ValueChanged<AdminPortalPage> onChanged;
   final bool compact;
+  final AccessRole accessRole;
+
+  bool _allowed(AdminPortalPage page) => switch (page) {
+    AdminPortalPage.assessments ||
+    AdminPortalPage.status => accessRole.canAccessClinicalData,
+    _ => accessRole.canUsePortal || accessRole == AccessRole.admin,
+  };
   @override
   Widget build(BuildContext context) => Material(
     color: _yellow,
@@ -285,7 +306,7 @@ class _Nav extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 36),
-          for (final item in AdminPortalPage.values)
+          for (final item in AdminPortalPage.values.where(_allowed))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               child: ListTile(
@@ -894,6 +915,7 @@ class _UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<_UsersPage> {
   String query = '';
+  VerificationStatus? verificationFilter;
   @override
   Widget build(BuildContext context) => _Page(
     title: 'User Management',
@@ -905,23 +927,49 @@ class _UsersPageState extends State<_UsersPage> {
         final users = (snapshot.data ?? const <UserModel>[])
             .where(
               (u) =>
-                  u.displayName.toLowerCase().contains(query.toLowerCase()) ||
-                  u.email.toLowerCase().contains(query.toLowerCase()),
+                  (u.displayName.toLowerCase().contains(query.toLowerCase()) ||
+                      u.email.toLowerCase().contains(query.toLowerCase())) &&
+                  (verificationFilter == null ||
+                      u.verificationStatus == verificationFilter),
             )
             .toList();
         return Container(
           decoration: _box,
           child: Column(
             children: [
+              if (widget.repository.currentAccessRole.canManageAccess)
+                _RoleCorrectionQueue(repository: widget.repository),
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: TextField(
-                  onChanged: (v) => setState(() => query = v),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search users...',
-                    border: OutlineInputBorder(),
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        onChanged: (v) => setState(() => query = v),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Search users...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    DropdownButton<VerificationStatus?>(
+                      value: verificationFilter,
+                      hint: const Text('All verification states'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('All')),
+                        ...VerificationStatus.values.map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(status.label),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => verificationFilter = value),
+                    ),
+                  ],
                 ),
               ),
               _ResponsiveTable(
@@ -941,19 +989,37 @@ class _UsersPageState extends State<_UsersPage> {
                         u.email,
                         _Tag(label: u.roleLabel, color: _purple),
                         _Tag(
-                          label: u.lastActiveAt == null ? 'Inactive' : 'Active',
-                          color: u.lastActiveAt == null
-                              ? Colors.grey.shade300
-                              : const Color(0xFF8DD78B),
+                          label: u.verificationStatus.label,
+                          color:
+                              u.verificationStatus ==
+                                  VerificationStatus.verified
+                              ? const Color(0xFF8DD78B)
+                              : Colors.orange.shade200,
                         ),
                         _date(u.lastActiveAt),
                         _date(u.createdAt),
-                        const Row(
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.edit_outlined, color: _yellow),
-                            SizedBox(width: 12),
-                            Icon(Icons.delete_outline, color: Colors.red),
+                            IconButton(
+                              tooltip: 'Review verification',
+                              onPressed: () => _reviewVerification(u),
+                              icon: const Icon(
+                                Icons.verified_user_outlined,
+                                color: _yellow,
+                              ),
+                            ),
+                            if (widget
+                                .repository
+                                .currentAccessRole
+                                .canManageAccess)
+                              IconButton(
+                                tooltip: 'Manage portal access',
+                                onPressed: () => _manageAccess(u),
+                                icon: const Icon(
+                                  Icons.admin_panel_settings_outlined,
+                                ),
+                              ),
                           ],
                         ),
                       ],
@@ -966,6 +1032,200 @@ class _UsersPageState extends State<_UsersPage> {
       },
     ),
   );
+
+  Future<void> _reviewVerification(UserModel user) async {
+    var decision = VerificationStatus.verified;
+    final reason = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Review ${user.displayName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<VerificationStatus>(
+                initialValue: decision,
+                items: const [
+                  DropdownMenuItem(
+                    value: VerificationStatus.verified,
+                    child: Text('Verify'),
+                  ),
+                  DropdownMenuItem(
+                    value: VerificationStatus.rejected,
+                    child: Text('Reject'),
+                  ),
+                  DropdownMenuItem(
+                    value: VerificationStatus.needsReview,
+                    child: Text('Needs review'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => decision = value);
+                },
+              ),
+              TextField(
+                controller: reason,
+                decoration: const InputDecoration(labelText: 'Decision reason'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true && reason.text.trim().length >= 3) {
+      await widget.repository.reviewProfileVerification(
+        userId: user.id,
+        decision: decision,
+        reason: reason.text,
+      );
+    }
+    reason.dispose();
+  }
+
+  Future<void> _manageAccess(UserModel user) async {
+    var access = user.accessRole;
+    final reason = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Access for ${user.displayName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<AccessRole>(
+                initialValue: access,
+                items: AccessRole.values
+                    .map(
+                      (role) => DropdownMenuItem(
+                        value: role,
+                        child: Text(role.storedValue),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => access = value);
+                },
+              ),
+              TextField(
+                controller: reason,
+                decoration: const InputDecoration(labelText: 'Change reason'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true && reason.text.trim().length >= 3) {
+      await widget.repository.assignAccessRole(
+        userId: user.id,
+        accessRole: access,
+        reason: reason.text,
+      );
+    }
+    reason.dispose();
+  }
+}
+
+class _RoleCorrectionQueue extends StatelessWidget {
+  const _RoleCorrectionQueue({required this.repository});
+  final AdminPortalRepository repository;
+
+  @override
+  Widget build(BuildContext context) =>
+      StreamBuilder<List<AdminRoleCorrectionRequest>>(
+        stream: repository.watchRoleCorrectionRequests(),
+        builder: (context, snapshot) {
+          final requests =
+              snapshot.data ?? const <AdminRoleCorrectionRequest>[];
+          if (requests.isEmpty) return const SizedBox.shrink();
+          return ExpansionTile(
+            initiallyExpanded: true,
+            title: Text('Role correction requests (${requests.length})'),
+            children: requests
+                .map(
+                  (request) => ListTile(
+                    title: Text(
+                      '${request.currentRole} → ${request.requestedRole}',
+                    ),
+                    subtitle: Text(request.reason),
+                    trailing: Wrap(
+                      children: [
+                        TextButton(
+                          onPressed: () => _review(context, request, false),
+                          child: const Text('Reject'),
+                        ),
+                        FilledButton(
+                          onPressed: () => _review(context, request, true),
+                          child: const Text('Approve'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          );
+        },
+      );
+
+  Future<void> _review(
+    BuildContext context,
+    AdminRoleCorrectionRequest request,
+    bool approve,
+  ) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          approve ? 'Approve role correction' : 'Reject role correction',
+        ),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Decision reason'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && controller.text.trim().length >= 3) {
+      await repository.reviewRoleCorrection(
+        requestId: request.id,
+        approve: approve,
+        reason: controller.text,
+      );
+    }
+    controller.dispose();
+  }
 }
 
 class _AppointmentsPage extends StatefulWidget {

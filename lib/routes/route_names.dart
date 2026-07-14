@@ -25,5 +25,6 @@ class RouteNames {
   static const logMood = '/mood/log';
   static const journal = '/journal';
   static const mindfulBreathing = '/insights/mindful-breathing';
+  static const sleepQuality = '/sleep-quality';
   static const adminStatus = '/admin/status';
 }

@@ -34,9 +34,15 @@ class SecretChatProvider extends ChangeNotifier {
   SecretChatProfile? _profile;
   SecretChatProfileStats _profileStats = SecretChatProfileStats.empty;
   bool _isProfileLoading = false;
+  bool _isProfileStatsLoading = false;
+  bool _isRecentPostsLoading = false;
   bool _isProfileSaving = false;
   String? _profileError;
+  String? _profileStatsError;
+  String? _recentPostsError;
+  String? _profileSaveError;
   List<SecretChatModel> _recentPosts = [];
+  String? _profileUserId;
   final Set<String> _pendingLikes = {};
   final Set<String> _pendingSaves = {};
 
@@ -50,8 +56,16 @@ class SecretChatProvider extends ChangeNotifier {
   SecretChatProfile? get profile => _profile;
   SecretChatProfileStats get profileStats => _profileStats;
   bool get isProfileLoading => _isProfileLoading;
+  bool get isProfileStatsLoading => _isProfileStatsLoading;
+  bool get isRecentPostsLoading => _isRecentPostsLoading;
+  bool get isProfileActivityLoading =>
+      _isProfileStatsLoading || _isRecentPostsLoading;
   bool get isProfileSaving => _isProfileSaving;
   String? get profileError => _profileError;
+  String? get profileStatsError => _profileStatsError;
+  String? get recentPostsError => _recentPostsError;
+  String? get profileActivityError => _profileStatsError ?? _recentPostsError;
+  String? get profileSaveError => _profileSaveError;
   List<SecretChatModel> get recentPosts => List.unmodifiable(_recentPosts);
 
   List<SecretChatModel> get visiblePosts {
@@ -195,6 +209,40 @@ class SecretChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> deletePost(String postId) async {
+    final post = _findPost(postId);
+    if (post == null) return;
+    if (!post.isMine) {
+      throw const SecretChatActionException(
+        'Only the post owner can delete it.',
+      );
+    }
+    if (post.isPending) {
+      throw const SecretChatActionException(
+        'Wait for this post to finish syncing before deleting it.',
+      );
+    }
+
+    final index = _posts.indexWhere((item) => item.id == postId);
+    _posts = _posts.where((item) => item.id != postId).toList();
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await repository.deletePost(post);
+      _recentPosts = _recentPosts
+          .where((item) => item.id != postId)
+          .toList(growable: false);
+      notifyListeners();
+    } catch (error) {
+      final restored = [..._posts];
+      restored.insert(index.clamp(0, restored.length), post);
+      _posts = restored;
+      _errorMessage = _friendlyError(error);
+      notifyListeners();
+      throw SecretChatActionException(_errorMessage!);
+    }
+  }
+
   Future<void> recordUniqueRead(String postId) async {
     final post = _findPost(postId);
     if (post == null) return;
@@ -203,22 +251,50 @@ class SecretChatProvider extends ChangeNotifier {
   }
 
   Future<void> loadProfile() async {
+    _resetProfileForChangedUser();
     _isProfileLoading = true;
     _profileError = null;
     notifyListeners();
     try {
-      final values = await Future.wait([
-        repository.fetchCurrentProfile(),
-        repository.fetchProfileStats(),
-        repository.fetchRecentPosts(),
-      ]);
-      _profile = values[0] as SecretChatProfile?;
-      _profileStats = values[1] as SecretChatProfileStats;
-      _recentPosts = values[2] as List<SecretChatModel>;
+      _profile = await repository.fetchCurrentProfile(forceServer: true);
     } catch (error) {
       _profileError = _friendlyError(error);
     }
     _isProfileLoading = false;
+    notifyListeners();
+    await loadProfileActivity();
+  }
+
+  Future<void> loadProfileActivity() async {
+    _resetProfileForChangedUser();
+    await Future.wait([loadProfileStats(), loadRecentPosts()]);
+  }
+
+  Future<void> loadProfileStats() async {
+    _resetProfileForChangedUser();
+    _isProfileStatsLoading = true;
+    _profileStatsError = null;
+    notifyListeners();
+    try {
+      _profileStats = await repository.fetchProfileStats();
+    } catch (error) {
+      _profileStatsError = _friendlyError(error);
+    }
+    _isProfileStatsLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadRecentPosts() async {
+    _resetProfileForChangedUser();
+    _isRecentPostsLoading = true;
+    _recentPostsError = null;
+    notifyListeners();
+    try {
+      _recentPosts = await repository.fetchRecentPosts();
+    } catch (error) {
+      _recentPostsError = _friendlyError(error);
+    }
+    _isRecentPostsLoading = false;
     notifyListeners();
   }
 
@@ -239,21 +315,16 @@ class SecretChatProvider extends ChangeNotifier {
   Future<void> _runProfileSave(
     Future<SecretChatProfile?> Function() action,
   ) async {
+    _resetProfileForChangedUser();
     _isProfileSaving = true;
-    _profileError = null;
+    _profileSaveError = null;
     notifyListeners();
     try {
       _profile = await action();
       final cleanupWarning = repository.takePhotoCleanupWarning();
-      final values = await Future.wait([
-        repository.fetchProfileStats(),
-        repository.fetchRecentPosts(),
-      ]);
-      _profileStats = values[0] as SecretChatProfileStats;
-      _recentPosts = values[1] as List<SecretChatModel>;
-      if (cleanupWarning != null) _profileError = cleanupWarning;
+      if (cleanupWarning != null) _profileSaveError = cleanupWarning;
     } catch (error) {
-      _profileError = error.toString().replaceFirst(
+      _profileSaveError = error.toString().replaceFirst(
         'Invalid argument(s): ',
         '',
       );
@@ -262,6 +333,19 @@ class SecretChatProvider extends ChangeNotifier {
       _isProfileSaving = false;
       notifyListeners();
     }
+  }
+
+  void _resetProfileForChangedUser() {
+    final userId = repository.currentUserId;
+    if (_profileUserId == userId) return;
+    _profileUserId = userId;
+    _profile = null;
+    _profileStats = SecretChatProfileStats.empty;
+    _recentPosts = [];
+    _profileError = null;
+    _profileStatsError = null;
+    _recentPostsError = null;
+    _profileSaveError = null;
   }
 
   Future<void> toggleSave(String postId) async {

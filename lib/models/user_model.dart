@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../features/quick_assessment/models/quick_assessment_models.dart';
+import 'profile_roles.dart';
 
 class UserModel {
   const UserModel({
@@ -11,10 +12,20 @@ class UserModel {
     this.middleName,
     this.lastName,
     this.schoolId,
+    this.employeeId,
     this.department,
     this.course,
+    this.yearLevel,
     this.sector,
+    this.position,
     this.role,
+    this.populationRole,
+    this.declaredRole,
+    this.accessRole = AccessRole.appUser,
+    this.verificationStatus = VerificationStatus.pending,
+    this.verifiedAt,
+    this.verifiedBy,
+    this.profileVersion = 2,
     this.createdAt,
     this.dayStreak = 0,
     this.longestStreak = 0,
@@ -33,10 +44,22 @@ class UserModel {
   final String? middleName;
   final String? lastName;
   final String? schoolId;
+  final String? employeeId;
   final String? department;
   final String? course;
+  final String? yearLevel;
   final String? sector;
+  final String? position;
+
+  /// Legacy compatibility field. New authorization must never use this value.
   final String? role;
+  final PopulationRole? populationRole;
+  final PopulationRole? declaredRole;
+  final AccessRole accessRole;
+  final VerificationStatus verificationStatus;
+  final DateTime? verifiedAt;
+  final String? verifiedBy;
+  final int profileVersion;
   final DateTime? createdAt;
   final int dayStreak;
   final int longestStreak;
@@ -66,7 +89,38 @@ class UserModel {
   }
 
   String get roleLabel {
-    return AssessmentRole.fromStoredValue(role)?.label ?? 'User';
+    return effectivePopulationRole?.label ??
+        switch (accessRole) {
+          AccessRole.appUser => 'User',
+          AccessRole.portalStaff => 'Portal Staff',
+          AccessRole.counselor => 'Counselor',
+          AccessRole.admin => 'Admin',
+        };
+  }
+
+  PopulationRole? get effectivePopulationRole =>
+      populationRole ?? declaredRole ?? PopulationRole.parse(role);
+  AssessmentRole? get assessmentRole =>
+      AssessmentRole.fromPopulationRole(effectivePopulationRole);
+  bool get isProfileComplete {
+    final base =
+        displayName.trim().isNotEmpty && effectivePopulationRole != null;
+    return switch (effectivePopulationRole) {
+      PopulationRole.student =>
+        base &&
+            _present(schoolId) &&
+            _present(department) &&
+            _present(course) &&
+            _present(yearLevel),
+      PopulationRole.teaching =>
+        base &&
+            _present(employeeId) &&
+            _present(department) &&
+            _present(position),
+      PopulationRole.nonTeaching =>
+        base && _present(employeeId) && _present(sector) && _present(position),
+      null => false,
+    };
   }
 
   UserModel copyWith({
@@ -77,10 +131,20 @@ class UserModel {
     String? middleName,
     String? lastName,
     String? schoolId,
+    String? employeeId,
     String? department,
     String? course,
+    String? yearLevel,
     String? sector,
+    String? position,
     String? role,
+    PopulationRole? populationRole,
+    PopulationRole? declaredRole,
+    AccessRole? accessRole,
+    VerificationStatus? verificationStatus,
+    DateTime? verifiedAt,
+    String? verifiedBy,
+    int? profileVersion,
     DateTime? createdAt,
     int? dayStreak,
     int? longestStreak,
@@ -99,10 +163,20 @@ class UserModel {
       middleName: middleName ?? this.middleName,
       lastName: lastName ?? this.lastName,
       schoolId: schoolId ?? this.schoolId,
+      employeeId: employeeId ?? this.employeeId,
       department: department ?? this.department,
       course: course ?? this.course,
+      yearLevel: yearLevel ?? this.yearLevel,
       sector: sector ?? this.sector,
+      position: position ?? this.position,
       role: role ?? this.role,
+      populationRole: populationRole ?? this.populationRole,
+      declaredRole: declaredRole ?? this.declaredRole,
+      accessRole: accessRole ?? this.accessRole,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
+      verifiedBy: verifiedBy ?? this.verifiedBy,
+      profileVersion: profileVersion ?? this.profileVersion,
       createdAt: createdAt ?? this.createdAt,
       dayStreak: dayStreak ?? this.dayStreak,
       longestStreak: longestStreak ?? this.longestStreak,
@@ -118,6 +192,10 @@ class UserModel {
   }
 
   factory UserModel.fromJson(Map<String, dynamic> json, {String? id}) {
+    final legacyRole = _stringOrNull(json['role']);
+    final canonicalRole = PopulationRole.parse(json['populationRole']);
+    final declaredRole = PopulationRole.parse(json['declaredRole']);
+    final legacyPopulation = PopulationRole.parse(legacyRole);
     return UserModel(
       id: (json['id'] ?? id ?? '').toString(),
       email: (json['email'] ?? '').toString(),
@@ -126,10 +204,23 @@ class UserModel {
       middleName: _stringOrNull(json['middleName']),
       lastName: _stringOrNull(json['lastName']),
       schoolId: _stringOrNull(json['schoolId']),
+      employeeId: _stringOrNull(json['employeeId']),
       department: _stringOrNull(json['department']),
       course: _stringOrNull(json['course']),
+      yearLevel: _stringOrNull(json['yearLevel']),
       sector: _stringOrNull(json['sector']),
-      role: _stringOrNull(json['role']),
+      position: _stringOrNull(json['position']),
+      role: legacyRole,
+      populationRole: canonicalRole ?? legacyPopulation,
+      declaredRole: declaredRole ?? canonicalRole ?? legacyPopulation,
+      accessRole: AccessRole.parse(json['accessRole'], legacyRole: legacyRole),
+      verificationStatus: VerificationStatus.parse(
+        json['verificationStatus'],
+        legacy: !json.containsKey('profileVersion'),
+      ),
+      verifiedAt: _dateOrNull(json['verifiedAt']),
+      verifiedBy: _stringOrNull(json['verifiedBy']),
+      profileVersion: _intOrDefault(json['profileVersion'], 1),
       createdAt: _dateOrNull(json['createdAt']),
       dayStreak: _intOrZero(json['dayStreak']),
       longestStreak: _intOrZero(json['longestStreak']),
@@ -153,10 +244,20 @@ class UserModel {
       'middleName': middleName ?? '',
       'lastName': lastName ?? '',
       'schoolId': schoolId ?? '',
+      'employeeId': employeeId ?? '',
       'department': department ?? '',
       'course': course ?? '',
+      'yearLevel': yearLevel ?? '',
       'sector': sector ?? '',
+      'position': position ?? '',
       'role': role ?? '',
+      'populationRole': populationRole?.storedValue ?? '',
+      'declaredRole': declaredRole?.storedValue ?? '',
+      'accessRole': accessRole.storedValue,
+      'verificationStatus': verificationStatus.storedValue,
+      'verifiedAt': verifiedAt?.toIso8601String(),
+      'verifiedBy': verifiedBy ?? '',
+      'profileVersion': profileVersion,
       'createdAt': createdAt?.toIso8601String(),
       'dayStreak': dayStreak,
       'longestStreak': longestStreak,
@@ -176,13 +277,8 @@ class UserModel {
       'firstName': firstName?.trim() ?? '',
       'middleName': middleName?.trim() ?? '',
       'lastName': lastName?.trim() ?? '',
-      'schoolId': schoolId?.trim() ?? '',
-      'department': department?.trim() ?? '',
-      'course': course?.trim() ?? '',
-      'sector': sector?.trim() ?? '',
-      'role': role?.trim() ?? '',
       'avatarAssetName': avatarAssetName?.trim() ?? '',
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 
@@ -205,6 +301,14 @@ class UserModel {
     if (value == null) return 0;
     return int.tryParse(value.toString()) ?? 0;
   }
+
+  static int _intOrDefault(Object? value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static bool _present(String? value) => value?.trim().isNotEmpty == true;
 
   static List<String> _stringList(Object? value) {
     if (value is! List) return const [];

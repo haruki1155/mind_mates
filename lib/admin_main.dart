@@ -4,10 +4,16 @@ import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'features/admin/screens/admin_portal.dart';
 import 'firebase_options.dart';
+import 'services/firebase/firebase_app_check_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await FirebaseAppCheckService.activate();
+  } catch (error) {
+    debugPrint('Firebase App Check activation failed: $error');
+  }
 
   runApp(const MindMateAdminApp());
 }

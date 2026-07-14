@@ -16,6 +16,7 @@ class SecretChatThreadScreen extends StatefulWidget {
     required this.addComment,
     required this.onToggleLike,
     required this.onToggleSave,
+    this.onDeletePost,
   });
 
   final SecretChatModel post;
@@ -25,6 +26,7 @@ class SecretChatThreadScreen extends StatefulWidget {
   addComment;
   final ValueChanged<String> onToggleLike;
   final ValueChanged<String> onToggleSave;
+  final Future<void> Function(String postId)? onDeletePost;
 
   @override
   State<SecretChatThreadScreen> createState() => _SecretChatThreadScreenState();
@@ -79,6 +81,10 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
                         onLike: () => widget.onToggleLike(widget.post.id),
                         onSave: () => widget.onToggleSave(widget.post.id),
                         onComments: () {},
+                        onDelete:
+                            widget.post.isMine && widget.onDeletePost != null
+                            ? _confirmDeletePost
+                            : null,
                       ),
                     ),
                   ),
@@ -144,6 +150,39 @@ class _SecretChatThreadScreenState extends State<SecretChatThreadScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeletePost() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this post?'),
+        content: const Text(
+          'This permanently removes the post and its replies from Secret Chat.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.onDeletePost?.call(widget.post.id);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   void _refreshComments() {

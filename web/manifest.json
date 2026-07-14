@@ -1,12 +1,11 @@
 {
-    "name": "mind_mates",
-    "short_name": "mind_mates",
+    "name": "MindMate Admin",
+    "short_name": "MindMate Admin",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#FFF9E8",
+    "theme_color": "#F6B900",
+    "description": "MindMate administration and counseling management portal.",
     "prefer_related_applications": false,
     "icons": [
         {

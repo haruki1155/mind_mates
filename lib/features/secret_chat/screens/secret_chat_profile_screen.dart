@@ -22,7 +22,8 @@ class SecretChatProfileScreen extends StatefulWidget {
 class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _aliasController = TextEditingController();
-  bool _initializedAlias = false;
+  String? _confirmedAlias;
+  bool _aliasDirty = false;
 
   @override
   void initState() {
@@ -42,9 +43,8 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<SecretChatProvider>();
     final profile = provider.profile;
-    if (!_initializedAlias && profile != null) {
-      _initializedAlias = true;
-      _aliasController.text = profile.alias;
+    if (profile != null && (!_aliasDirty || _confirmedAlias == null)) {
+      _syncConfirmedAlias(profile.alias);
     }
     return Scaffold(
       backgroundColor: SecretChatPalette.background,
@@ -67,13 +67,29 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                 children: [
                   _ProfileHero(profile: profile, onPhoto: _choosePhoto),
+                  if (provider.profileError != null) ...[
+                    const SizedBox(height: 14),
+                    _ErrorMessage(
+                      message: provider.profileError!,
+                      onRetry: provider.loadProfile,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   _AliasCard(
                     formKey: _formKey,
                     controller: _aliasController,
                     saving: provider.isProfileSaving,
+                    onChanged: _onAliasChanged,
                     onSave: _saveAlias,
                   ),
+                  if (provider.profileSaveError != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      provider.profileSaveError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  ],
                   if (profile?.photoUrl != null) ...[
                     const SizedBox(height: 10),
                     TextButton.icon(
@@ -88,32 +104,47 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _StatCard(
-                        label: 'Unique reads',
-                        value: provider.profileStats.reads,
-                        icon: Icons.visibility_outlined,
-                      ),
-                      const SizedBox(width: 10),
-                      _StatCard(
-                        label: 'Reactions',
-                        value: provider.profileStats.reactions,
-                        icon: Icons.favorite_border_rounded,
-                      ),
-                      const SizedBox(width: 10),
-                      _StatCard(
-                        label: 'Comments',
-                        value: provider.profileStats.comments,
-                        icon: Icons.chat_bubble_outline_rounded,
-                      ),
-                    ],
-                  ),
-                  if (provider.profileStats.reads == 0 &&
+                  if (provider.isProfileStatsLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    Row(
+                      children: [
+                        _StatCard(
+                          label: 'Unique reads',
+                          value: provider.profileStats.reads,
+                          icon: Icons.visibility_outlined,
+                        ),
+                        const SizedBox(width: 10),
+                        _StatCard(
+                          label: 'Reactions',
+                          value: provider.profileStats.reactions,
+                          icon: Icons.favorite_border_rounded,
+                        ),
+                        const SizedBox(width: 10),
+                        _StatCard(
+                          label: 'Comments',
+                          value: provider.profileStats.comments,
+                          icon: Icons.chat_bubble_outline_rounded,
+                        ),
+                      ],
+                    ),
+                  if (provider.profileStatsError != null) ...[
+                    const SizedBox(height: 12),
+                    _ErrorMessage(
+                      message: 'Post statistics could not be refreshed.',
+                      onRetry: provider.loadProfileStats,
+                    ),
+                  ],
+                  if (!provider.isProfileStatsLoading &&
+                      provider.profileStatsError == null &&
+                      !provider.isRecentPostsLoading &&
+                      provider.recentPostsError == null &&
+                      provider.recentPosts.isNotEmpty &&
+                      provider.profileStats.reads == 0 &&
                       provider.profileStats.reactions == 0 &&
                       provider.profileStats.comments == 0) ...[
                     const SizedBox(height: 18),
-                    const _EmptyActivity(),
+                    const _EmptyEngagement(),
                   ],
                   const SizedBox(height: 22),
                   const Text(
@@ -121,21 +152,20 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 10),
-                  if (provider.recentPosts.isEmpty)
-                    const _EmptyActivity()
+                  if (provider.isRecentPostsLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (provider.recentPostsError != null)
+                    _ErrorMessage(
+                      message: 'Recent posts could not be refreshed.',
+                      onRetry: provider.loadRecentPosts,
+                    )
+                  else if (provider.recentPosts.isEmpty)
+                    const _EmptyRecentPosts()
                   else
                     for (final post in provider.recentPosts) ...[
                       _RecentPostCard(post: post),
                       const SizedBox(height: 10),
                     ],
-                  if (provider.profileError != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      provider.profileError!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  ],
                   const SizedBox(height: 24),
                   const _PrivacyNote(),
                 ],
@@ -151,11 +181,21 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
         _aliasController.text,
       );
       if (mounted) {
+        final profile = context.read<SecretChatProvider>().profile;
+        if (profile != null) {
+          _aliasDirty = false;
+          _syncConfirmedAlias(profile.alias);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Secret Chat profile updated.')),
         );
       }
-    } catch (_) {}
+    } catch (error) {
+      if (mounted) {
+        final provider = context.read<SecretChatProvider>();
+        _showError(provider.profileSaveError ?? error.toString());
+      }
+    }
   }
 
   Future<void> _choosePhoto() async {
@@ -221,7 +261,7 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
       }
     } catch (error) {
       if (mounted) {
-        _showError(provider.profileError ?? error.toString());
+        _showError(provider.profileSaveError ?? error.toString());
       }
     }
   }
@@ -230,8 +270,26 @@ class _SecretChatProfileScreenState extends State<SecretChatProfileScreen> {
     try {
       await context.read<SecretChatProvider>().removeProfilePhoto();
     } catch (error) {
-      if (mounted) _showError(error.toString());
+      if (mounted) {
+        final provider = context.read<SecretChatProvider>();
+        _showError(provider.profileSaveError ?? error.toString());
+      }
     }
+  }
+
+  void _onAliasChanged(String value) {
+    final normalized = SecretChatProfile.normalizeAlias(value);
+    final dirty = normalized != (_confirmedAlias ?? '');
+    if (_aliasDirty != dirty) setState(() => _aliasDirty = dirty);
+  }
+
+  void _syncConfirmedAlias(String alias) {
+    if (_confirmedAlias == alias && _aliasController.text == alias) return;
+    _confirmedAlias = alias;
+    _aliasController.value = TextEditingValue(
+      text: alias,
+      selection: TextSelection.collapsed(offset: alias.length),
+    );
   }
 
   void _showError(String message) {
@@ -288,11 +346,13 @@ class _AliasCard extends StatelessWidget {
     required this.formKey,
     required this.controller,
     required this.saving,
+    required this.onChanged,
     required this.onSave,
   });
   final GlobalKey<FormState> formKey;
   final TextEditingController controller;
   final bool saving;
+  final ValueChanged<String> onChanged;
   final VoidCallback onSave;
   @override
   Widget build(BuildContext context) => Card(
@@ -320,6 +380,7 @@ class _AliasCard extends StatelessWidget {
             const SizedBox(height: 12),
             TextFormField(
               controller: controller,
+              onChanged: onChanged,
               maxLength: 30,
               validator: SecretChatProfile.validateAlias,
               decoration: const InputDecoration(
@@ -347,6 +408,30 @@ class _AliasCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  );
+}
+
+class _ErrorMessage extends StatelessWidget {
+  const _ErrorMessage({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFEBEE),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message)),
+        TextButton(onPressed: onRetry, child: const Text('Retry')),
+      ],
     ),
   );
 }
@@ -390,8 +475,32 @@ class _StatCard extends StatelessWidget {
   );
 }
 
-class _EmptyActivity extends StatelessWidget {
-  const _EmptyActivity();
+class _EmptyEngagement extends StatelessWidget {
+  const _EmptyEngagement();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(14),
+    child: Column(
+      children: [
+        Icon(Icons.insights_outlined, size: 34, color: SecretChatPalette.muted),
+        SizedBox(height: 8),
+        Text(
+          'No engagement yet',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        Text(
+          'Reads, reactions, and comments will appear here when other people engage with your posts.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: SecretChatPalette.muted),
+        ),
+      ],
+    ),
+  );
+}
+
+class _EmptyRecentPosts extends StatelessWidget {
+  const _EmptyRecentPosts();
+
   @override
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.all(14),
@@ -400,11 +509,11 @@ class _EmptyActivity extends StatelessWidget {
         Icon(Icons.forum_outlined, size: 34, color: SecretChatPalette.muted),
         SizedBox(height: 8),
         Text(
-          'No post activity yet',
+          'No recent posts yet',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
         Text(
-          'Share your first thought to begin seeing community engagement.',
+          'Your active Secret Chat posts will appear here after you share one.',
           textAlign: TextAlign.center,
           style: TextStyle(color: SecretChatPalette.muted),
         ),

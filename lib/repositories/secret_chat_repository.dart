@@ -11,7 +11,6 @@ import '../features/secret_chat/domain/secret_chat_safety_validator.dart';
 import '../models/secret_chat_model.dart';
 import '../models/secret_chat_profile.dart';
 import '../models/secret_chat_profile_upload_exception.dart';
-import '../services/firebase/firebase_app_check_service.dart';
 import '../services/firebase/firestore_service.dart';
 import 'user_repository.dart';
 
@@ -153,6 +152,21 @@ class SecretChatRepository {
     );
   }
 
+  Future<void> deletePost(SecretChatModel post) async {
+    final uid = _requireUserId();
+    if (!post.isMine || (post.authorId != null && post.authorId != uid)) {
+      throw StateError('Only the post owner can delete it.');
+    }
+    if (post.isPending) {
+      throw StateError(
+        'Wait for this post to finish syncing before deleting it.',
+      );
+    }
+    await functions.httpsCallable('deleteSecretChatPost').call({
+      'postId': post.id,
+    });
+  }
+
   Future<SecretChatModel> toggleLike(SecretChatModel post) async {
     final uid = _requireUserId();
     final nextLiked = !post.isLiked;
@@ -253,13 +267,22 @@ class SecretChatRepository {
     );
   }
 
-  Future<SecretChatProfile?> fetchCurrentProfile() async {
+  Future<SecretChatProfile?> fetchCurrentProfile({
+    bool forceServer = false,
+  }) async {
     final uid = _requireUserId();
-    if (_profileCache.containsKey(uid)) return _profileCache[uid];
-    final data = await _firestoreService.getDocument(
-      FirestoreCollections.secretChatProfiles,
-      uid,
-    );
+    if (!forceServer && _profileCache.containsKey(uid)) {
+      return _profileCache[uid];
+    }
+    final snapshot = await _firestoreService.firestore
+        .collection(FirestoreCollections.secretChatProfiles)
+        .doc(uid)
+        .get(
+          forceServer
+              ? const GetOptions(source: Source.server)
+              : const GetOptions(source: Source.serverAndCache),
+        );
+    final data = snapshot.data();
     final profile = data == null ? null : SecretChatProfile.fromJson(data);
     _profileCache[uid] = profile;
     return profile;
@@ -270,47 +293,17 @@ class SecretChatRepository {
     final normalized = SecretChatProfile.normalizeAlias(alias);
     final validation = SecretChatProfile.validateAlias(normalized);
     if (validation != null) throw ArgumentError(validation);
-    final aliasKey = SecretChatProfile.aliasKeyFor(normalized);
-    final firestore = _firestoreService.firestore;
-    final profileRef = firestore
-        .collection(FirestoreCollections.secretChatProfiles)
-        .doc(uid);
-    final aliasRef = firestore
-        .collection(FirestoreCollections.secretChatAliases)
-        .doc(aliasKey);
-
-    await firestore.runTransaction((transaction) async {
-      final profileSnapshot = await transaction.get(profileRef);
-      final previousKey = profileSnapshot.data()?['aliasKey']?.toString();
-      final reservation = await transaction.get(aliasRef);
-      final reservedBy = reservation.data()?['userId']?.toString();
-      if (reservation.exists && reservedBy != uid) {
+    try {
+      final result = await functions
+          .httpsCallable('saveSecretChatProfile')
+          .call({'alias': normalized});
+      return _cacheCallableProfile(uid, result.data);
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'already-exists') {
         throw const SecretChatAliasTakenException();
       }
-      if (previousKey != null &&
-          previousKey.isNotEmpty &&
-          previousKey != aliasKey) {
-        transaction.delete(
-          firestore
-              .collection(FirestoreCollections.secretChatAliases)
-              .doc(previousKey),
-        );
-      }
-      transaction.set(aliasRef, {
-        'userId': uid,
-        'alias': normalized,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(profileRef, {
-        'userId': uid,
-        'alias': normalized,
-        'aliasKey': aliasKey,
-        'updatedAt': FieldValue.serverTimestamp(),
-        if (!profileSnapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
-    _profileCache.remove(uid);
-    return (await fetchCurrentProfile())!;
+      rethrow;
+    }
   }
 
   Future<SecretChatProfile> uploadProfilePhoto(
@@ -322,7 +315,6 @@ class SecretChatRepository {
     if (bytes.length > 5 * 1024 * 1024) {
       throw ArgumentError('Choose a JPEG or PNG image smaller than 5 MB.');
     }
-    final existing = await fetchCurrentProfile();
     final currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.uid != uid) {
       throw const SecretChatProfileUploadException(
@@ -336,18 +328,6 @@ class SecretChatRepository {
       throw SecretChatProfileUploadException(
         SecretChatProfileUploadError.authenticationRequired,
         'MindMate could not refresh your sign-in. Check your connection and sign in again.',
-        error,
-      );
-    }
-    try {
-      final appCheckToken = await FirebaseAppCheckService.refreshToken();
-      if (appCheckToken == null || appCheckToken.isEmpty) {
-        throw StateError('Firebase App Check returned no token.');
-      }
-    } catch (error) {
-      throw SecretChatProfileUploadException(
-        SecretChatProfileUploadError.appCheckRejected,
-        'Device verification failed. Debug builds require a registered Firebase App Check debug token.',
         error,
       );
     }
@@ -368,112 +348,94 @@ class SecretChatRepository {
       throw SecretChatProfileUploadException(
         denied
             ? SecretChatProfileUploadError.storageDenied
-            : SecretChatProfileUploadError.uploadFailed,
-        denied
-            ? 'Firebase Storage rejected this upload. Confirm the App Check debug token is registered and try again.'
-            : 'The photo could not be uploaded. Please check your connection and retry.',
+            : _uploadError(error),
+        _uploadMessage(error, denied: denied),
         error,
       );
     }
-    late final String url;
     try {
-      url = await reference.getDownloadURL();
-    } catch (error) {
+      final result = await functions
+          .httpsCallable('finalizeSecretChatProfilePhoto')
+          .call({'photoPath': path});
+      return _cacheCallableProfile(uid, result.data);
+    } on FirebaseFunctionsException catch (error) {
       await reference.delete().catchError((_) {});
       throw SecretChatProfileUploadException(
-        SecretChatProfileUploadError.downloadUrlFailed,
-        'The photo uploaded, but MindMate could not prepare it for your profile. Please retry.',
+        error.code == 'unauthenticated'
+            ? SecretChatProfileUploadError.authenticationRequired
+            : SecretChatProfileUploadError.profileUpdateDenied,
+        error.message ??
+            'The image uploaded, but your Secret Chat profile could not be updated. Your previous photo was kept.',
         error,
       );
-    }
-    try {
-      await _firestoreService
-          .setDocument(FirestoreCollections.secretChatProfiles, uid, {
-            'userId': uid,
-            'photoUrl': url,
-            'photoPath': path,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, merge: true);
     } catch (error) {
       await reference.delete().catchError((_) {});
       throw SecretChatProfileUploadException(
         SecretChatProfileUploadError.profileUpdateDenied,
-        'The image uploaded, but your Secret Chat profile could not be updated. Your previous photo was kept.',
+        'The uploaded image could not be linked to your profile. Your previous photo was kept.',
         error,
       );
     }
-    final oldPath = existing?.photoPath;
-    if (oldPath != null && oldPath != path) {
-      try {
-        await storage.ref(oldPath).delete();
-      } catch (_) {
-        _photoCleanupWarning =
-            'Your new photo is active, but the previous upload could not be cleaned up yet.';
-      }
-    }
-    _profileCache.remove(uid);
-    return (await fetchCurrentProfile())!;
   }
 
   Future<SecretChatProfile?> removeProfilePhoto() async {
     final uid = _requireUserId();
-    final existing = await fetchCurrentProfile();
-    await _firestoreService
-        .setDocument(FirestoreCollections.secretChatProfiles, uid, {
-          'photoUrl': FieldValue.delete(),
-          'photoPath': FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, merge: true);
-    if (existing?.photoPath != null) {
-      await storage.ref(existing!.photoPath!).delete().catchError((_) {});
+    final result = await functions
+        .httpsCallable('removeSecretChatProfilePhoto')
+        .call();
+    return _cacheCallableProfile(uid, result.data);
+  }
+
+  SecretChatProfile _cacheCallableProfile(String uid, Object? resultData) {
+    if (resultData is! Map || resultData['profile'] is! Map) {
+      throw StateError('Secret Chat returned an invalid profile response.');
     }
-    _profileCache.remove(uid);
-    return fetchCurrentProfile();
+    final profile = SecretChatProfile.fromJson(
+      Map<String, dynamic>.from(resultData['profile'] as Map),
+    );
+    if (profile.userId != uid) {
+      throw StateError('Secret Chat returned a profile for another account.');
+    }
+    _profileCache[uid] = profile;
+    return profile;
+  }
+
+  SecretChatProfileUploadError _uploadError(FirebaseException error) {
+    return error.code.contains('app-check')
+        ? SecretChatProfileUploadError.appCheckRejected
+        : SecretChatProfileUploadError.uploadFailed;
+  }
+
+  String _uploadMessage(FirebaseException error, {required bool denied}) {
+    if (error.code.contains('app-check')) {
+      return 'Device verification was rejected. Confirm this app is registered with Firebase App Check and retry.';
+    }
+    if (denied) {
+      return 'Firebase Storage denied this profile photo. Refresh your sign-in and try again.';
+    }
+    if (error.code == 'retry-limit-exceeded' || error.code == 'canceled') {
+      return 'The photo upload was interrupted. Check your connection and retry.';
+    }
+    return 'The photo could not be uploaded. Please check your connection and retry.';
   }
 
   Future<SecretChatProfileStats> fetchProfileStats() async {
     final uid = _requireUserId();
-    final data = await _firestoreService.getDocument(
+    var data = await _firestoreService.getDocument(
       FirestoreCollections.secretChatProfileStats,
       uid,
     );
     if (data == null) {
-      try {
-        await functions.httpsCallable('rebuildMySecretChatStats').call<void>();
-        final rebuilt = await _firestoreService.getDocument(
-          FirestoreCollections.secretChatProfileStats,
-          uid,
+      await functions.httpsCallable('rebuildMySecretChatStats').call<void>();
+      data = await _firestoreService.getDocument(
+        FirestoreCollections.secretChatProfileStats,
+        uid,
+      );
+      if (data == null) {
+        throw StateError(
+          'Secret Chat statistics were not available after rebuilding.',
         );
-        if (rebuilt != null) {
-          return SecretChatProfileStats(
-            reads: (rebuilt['reads'] as num?)?.toInt() ?? 0,
-            reactions: (rebuilt['reactions'] as num?)?.toInt() ?? 0,
-            comments: (rebuilt['comments'] as num?)?.toInt() ?? 0,
-          );
-        }
-      } catch (_) {
-        // Use a legacy fallback until the trusted Functions backend is live.
       }
-      final legacyPosts = await _firestoreService.getDocuments(
-        FirestoreCollections.secretChats,
-        whereEquals: {'authorId': uid},
-        limit: 500,
-      );
-      return SecretChatProfileStats(
-        reads: legacyPosts.fold(
-          0,
-          (total, post) => total + ((post['readCount'] as num?)?.toInt() ?? 0),
-        ),
-        reactions: legacyPosts.fold(
-          0,
-          (total, post) => total + ((post['likeCount'] as num?)?.toInt() ?? 0),
-        ),
-        comments: legacyPosts.fold(
-          0,
-          (total, post) =>
-              total + ((post['commentCount'] as num?)?.toInt() ?? 0),
-        ),
-      );
     }
     return SecretChatProfileStats(
       reads: (data['reads'] as num?)?.toInt() ?? 0,
@@ -486,7 +448,7 @@ class SecretChatRepository {
     final uid = _requireUserId();
     final docs = await _firestoreService.getDocuments(
       FirestoreCollections.secretChats,
-      whereEquals: {'authorId': uid},
+      whereEquals: {'authorId': uid, 'moderationStatus': 'active'},
       orderBy: 'createdAt',
       limit: limit,
     );

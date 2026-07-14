@@ -39,6 +39,7 @@ class SecretChatScreen extends StatefulWidget {
     this.onProfile,
     this.onPostOpened,
     this.onRetryPost,
+    this.onDeletePost,
   });
 
   final List<SecretChatModel> posts;
@@ -61,6 +62,7 @@ class SecretChatScreen extends StatefulWidget {
   final VoidCallback? onProfile;
   final Future<void> Function(String postId)? onPostOpened;
   final Future<void> Function(String postId)? onRetryPost;
+  final Future<void> Function(String postId)? onDeletePost;
 
   @override
   State<SecretChatScreen> createState() => _SecretChatScreenState();
@@ -178,6 +180,9 @@ class _SecretChatScreenState extends State<SecretChatScreen>
           onRetry: post.hasFailed && widget.onRetryPost != null
               ? () => widget.onRetryPost!(post.id)
               : null,
+          onDelete: post.isMine && widget.onDeletePost != null
+              ? () => _confirmDeletePost(post)
+              : null,
         );
       },
     );
@@ -221,9 +226,46 @@ class _SecretChatScreenState extends State<SecretChatScreen>
           addComment: widget.onAddComment,
           onToggleLike: widget.onToggleLike,
           onToggleSave: widget.onToggleSave,
+          onDeletePost: widget.onDeletePost,
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeletePost(SecretChatModel post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this post?'),
+        content: const Text(
+          'This permanently removes the post and its replies from Secret Chat.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.onDeletePost?.call(post.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Secret Chat post deleted.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   void _showSignInRequired() {

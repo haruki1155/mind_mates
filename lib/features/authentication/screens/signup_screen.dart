@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../quick_assessment/models/quick_assessment_models.dart';
 import '../../../models/user_model.dart';
+import '../../../models/profile_roles.dart';
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
@@ -42,6 +43,8 @@ class _SignupBodyState extends State<_SignupBody> {
   final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _schoolIdController = TextEditingController();
+  final _yearLevelController = TextEditingController();
+  final _positionController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String? _selectedDepartment;
@@ -55,6 +58,8 @@ class _SignupBodyState extends State<_SignupBody> {
     _middleNameController.dispose();
     _lastNameController.dispose();
     _schoolIdController.dispose();
+    _yearLevelController.dispose();
+    _positionController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -100,14 +105,18 @@ class _SignupBodyState extends State<_SignupBody> {
     final userProvider = context.read<UserProvider>();
     final role = assessmentProvider.selectedRole;
     final usesSector = role == AssessmentRole.staff;
+    final isStudent = role == AssessmentRole.student;
     final userId = await authProvider.signUp(
       password: _passwordController.text,
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,
       schoolId: _schoolIdController.text,
       department: usesSector ? '' : _selectedDepartment ?? '',
-      course: usesSector ? '' : _selectedCourse ?? '',
+      course: isStudent ? _selectedCourse ?? '' : '',
       sector: usesSector ? _selectedSector : null,
+      employeeId: isStudent ? null : _schoolIdController.text,
+      yearLevel: isStudent ? _yearLevelController.text : null,
+      position: isStudent ? null : _positionController.text,
       middleName: _middleNameController.text,
       role: role,
     );
@@ -146,6 +155,8 @@ class _SignupBodyState extends State<_SignupBody> {
     required AssessmentRole? role,
   }) {
     final usesSector = role == AssessmentRole.staff;
+    final isStudent = role == AssessmentRole.student;
+    final populationRole = role?.populationRole;
     return UserModel(
       id: userId,
       email: AuthRepository.authEmailForSchoolId(_schoolIdController.text),
@@ -153,10 +164,18 @@ class _SignupBodyState extends State<_SignupBody> {
       middleName: _middleNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       schoolId: _schoolIdController.text.trim(),
+      employeeId: isStudent ? null : _schoolIdController.text.trim(),
       department: usesSector ? null : _selectedDepartment?.trim(),
-      course: usesSector ? null : _selectedCourse?.trim(),
+      course: isStudent ? _selectedCourse?.trim() : null,
+      yearLevel: isStudent ? _yearLevelController.text.trim() : null,
       sector: usesSector ? _selectedSector?.trim() : null,
+      position: isStudent ? null : _positionController.text.trim(),
       role: role?.name,
+      populationRole: populationRole,
+      declaredRole: populationRole,
+      accessRole: AccessRole.appUser,
+      verificationStatus: VerificationStatus.pending,
+      profileVersion: 2,
       createdAt: DateTime.now(),
       dayStreak: 0,
     );
@@ -187,6 +206,8 @@ class _SignupBodyState extends State<_SignupBody> {
                     middleNameController: _middleNameController,
                     lastNameController: _lastNameController,
                     schoolIdController: _schoolIdController,
+                    yearLevelController: _yearLevelController,
+                    positionController: _positionController,
                     passwordController: _passwordController,
                     confirmPasswordController: _confirmPasswordController,
                     selectedDepartment: _selectedDepartment,
@@ -269,6 +290,8 @@ class _SignupFormCard extends StatelessWidget {
     required this.middleNameController,
     required this.lastNameController,
     required this.schoolIdController,
+    required this.yearLevelController,
+    required this.positionController,
     required this.passwordController,
     required this.confirmPasswordController,
     required this.selectedDepartment,
@@ -291,6 +314,8 @@ class _SignupFormCard extends StatelessWidget {
   final TextEditingController middleNameController;
   final TextEditingController lastNameController;
   final TextEditingController schoolIdController;
+  final TextEditingController yearLevelController;
+  final TextEditingController positionController;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
   final String? selectedDepartment;
@@ -310,6 +335,7 @@ class _SignupFormCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final selectedCourses = _coursesForDepartment(selectedDepartment);
     final usesSector = role == AssessmentRole.staff;
+    final isStudent = role == AssessmentRole.student;
 
     return Container(
       width: 346,
@@ -353,11 +379,14 @@ class _SignupFormCard extends StatelessWidget {
             const SizedBox(height: 7),
             _SignupField(
               controller: schoolIdController,
-              label: 'School ID',
+              label: isStudent ? 'School ID' : 'Employee ID',
               icon: Icons.badge_outlined,
               keyboardType: TextInputType.text,
               textInputAction: TextInputAction.next,
-              validator: (value) => requiredValidator(value, 'School ID'),
+              validator: (value) => requiredValidator(
+                value,
+                isStudent ? 'School ID' : 'Employee ID',
+              ),
             ),
             const SizedBox(height: 7),
             if (usesSector) ...[
@@ -381,17 +410,39 @@ class _SignupFormCard extends StatelessWidget {
                 validator: (value) =>
                     requiredValidator(value, 'College or department'),
               ),
-              const SizedBox(height: 7),
-              _SignupDropdownField(
-                label: 'Course or Program',
-                icon: Icons.school_outlined,
-                value: selectedCourse,
-                items: selectedCourses,
-                onChanged: selectedDepartment == null ? null : onCourseChanged,
-                validator: (value) =>
-                    requiredValidator(value, 'Course or program'),
-              ),
+              if (isStudent) ...[
+                const SizedBox(height: 7),
+                _SignupDropdownField(
+                  label: 'Course or Program',
+                  icon: Icons.school_outlined,
+                  value: selectedCourse,
+                  items: selectedCourses,
+                  onChanged: selectedDepartment == null
+                      ? null
+                      : onCourseChanged,
+                  validator: (value) =>
+                      requiredValidator(value, 'Course or program'),
+                ),
+              ],
             ],
+            const SizedBox(height: 7),
+            if (isStudent)
+              _SignupField(
+                controller: yearLevelController,
+                label: 'Year Level',
+                icon: Icons.timeline_outlined,
+                textInputAction: TextInputAction.next,
+                validator: (value) => requiredValidator(value, 'Year level'),
+              )
+            else
+              _SignupField(
+                controller: positionController,
+                label: 'Position or Designation',
+                icon: Icons.work_outline,
+                textInputAction: TextInputAction.next,
+                validator: (value) =>
+                    requiredValidator(value, 'Position or designation'),
+              ),
             const SizedBox(height: 7),
             _SignupField(
               controller: passwordController,

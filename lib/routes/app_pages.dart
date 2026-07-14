@@ -20,6 +20,7 @@ import '../features/quick_assessment/screens/quick_assessment_question_screen.da
 import '../features/quick_assessment/screens/quick_assessment_role_screen.dart';
 import '../features/secret_chat/pages/secret_chat_page.dart';
 import '../features/secret_chat/screens/secret_chat_profile_screen.dart';
+import '../features/sleep/screens/sleep_quality_screen.dart';
 import '../features/splash/screens/splash_screen.dart';
 import '../features/student_assessment/screens/student_assessment_complete_screen.dart';
 import '../features/student_assessment/screens/student_assessment_screen.dart';
@@ -58,6 +59,7 @@ class AppPages {
     RouteNames.logMood: (_) => const LogMoodScreen(),
     RouteNames.journal: (_) => const JournalScreen(),
     RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
+    RouteNames.sleepQuality: (_) => const SleepQualityScreen(),
     RouteNames.adminStatus: (_) => const AdminStatusDashboardScreen(),
   };
 }

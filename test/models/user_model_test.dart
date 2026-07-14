@@ -53,12 +53,12 @@ void main() {
       ).toProfileUpdateJson();
 
       expect(user['name'], 'Ana Rivera');
-      expect(user['schoolId'], 'UCU-1');
-      expect(user['department'], 'Guidance');
-      expect(user['course'], 'Master of Arts in Education - all major fields');
-      expect(user['sector'], 'Guidance/PACC');
-      expect(user['role'], 'faculty');
-      expect(user['updatedAt'], isA<String>());
+      expect(user.containsKey('schoolId'), isFalse);
+      expect(user.containsKey('department'), isFalse);
+      expect(user.containsKey('course'), isFalse);
+      expect(user.containsKey('sector'), isFalse);
+      expect(user.containsKey('role'), isFalse);
+      expect(user['updatedAt'], isNotNull);
     });
 
     test('roleLabel maps known categories and falls back to User', () {
@@ -133,10 +133,7 @@ void main() {
       });
 
       expect(user.quickAssessmentCompleted, isTrue);
-      expect(
-        user.quickAssessmentCompletedAt,
-        DateTime(2026, 7, 7, 9, 30),
-      );
+      expect(user.quickAssessmentCompletedAt, DateTime(2026, 7, 7, 9, 30));
     });
   });
 }

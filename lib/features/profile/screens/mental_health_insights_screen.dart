@@ -54,10 +54,11 @@ class _MentalHealthInsightsScreenState
     final report = _watchProviderOrNull<ReportProvider>(context)?.latestReport;
     final metrics = InsightMetricsSummary.from(moods: moods, report: report);
     final hasCheckedInToday = moodProvider?.hasCheckedInToday == true;
-    final featured = _featuredResource(data);
+    final insightsTheme = _InsightsTheme.of(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: _InsightsPalette.background,
+      backgroundColor: insightsTheme.background,
       body: Stack(
         children: [
           const _InsightsBackground(),
@@ -70,39 +71,20 @@ class _MentalHealthInsightsScreenState
                   child: _Header(onNotificationTap: _openNotifications),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 20, 12, 42),
+                  padding: EdgeInsets.fromLTRB(16, 18, 16, 44 + bottomInset),
                   sliver: SliverList.list(
                     children: [
                       _HeroSearchCard(
                         controller: _searchController,
                         onChanged: _updateSearchQuery,
                       ),
-                      const SizedBox(height: 22),
-                      const _SectionHeading(
-                        title: 'Explore by topic',
-                        subtitle:
-                            'Practical, easy-to-understand wellness resources',
-                      ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 26),
                       _CategoryRow(
                         categories: data?.categories ?? const [],
                         onCategoryTap: (category) =>
                             _openCategory(category, data),
                       ),
-                      if (!hasSearchQuery && featured != null) ...[
-                        const SizedBox(height: 22),
-                        const _SectionHeading(
-                          title: 'Recommended starting point',
-                          subtitle:
-                              'A useful resource selected from your library',
-                        ),
-                        const SizedBox(height: 12),
-                        _FeaturedResourceCard(
-                          item: featured,
-                          onTap: () => _openInsightArticle(featured),
-                        ),
-                      ],
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 24),
                       _WeeklyGlanceCard(
                         metrics: metrics,
                         onLogMoodTap: _openLogMood,
@@ -121,30 +103,39 @@ class _MentalHealthInsightsScreenState
                         ),
                         const SizedBox(height: 16),
                       ],
-                      if ((insightsProvider?.isLoading ?? false) &&
-                          data == null)
-                        const _InsightSectionSkeleton()
-                      else if (insightsProvider?.errorMessage != null &&
-                          data == null)
-                        _InsightsErrorState(
-                          onRetry: () => insightsProvider?.loadInsights(
-                            _currentUserId(),
-                            forceRefresh: true,
+                      AnimatedSwitcher(
+                        key: const Key('insights_content_switcher'),
+                        duration: _insightsMotionDuration(context, 180),
+                        transitionBuilder: (child, animation) {
+                          final offset = Tween<Offset>(
+                            begin: const Offset(0, 0.018),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: offset,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: KeyedSubtree(
+                          key: ValueKey(
+                            _insightContentStateKey(
+                              insightsProvider,
+                              data,
+                              visibleSections,
+                              hasSearchQuery,
+                            ),
                           ),
-                        )
-                      else if (data == null || data.resources.isEmpty)
-                        const _EmptyInsightState()
-                      else if (visibleSections.isEmpty && hasSearchQuery)
-                        _NoInsightResultsState(query: _searchQuery)
-                      else
-                        for (final section in visibleSections) ...[
-                          _InsightSectionView(
-                            section: section,
-                            onItemTap: _openInsightArticle,
-                            onSeeAllTap: () => _openInsightSection(section),
+                          child: _buildInsightContent(
+                            insightsProvider: insightsProvider,
+                            data: data,
+                            visibleSections: visibleSections,
+                            hasSearchQuery: hasSearchQuery,
                           ),
-                          const SizedBox(height: 24),
-                        ],
+                        ),
+                      ),
                       _PaaccSupportCard(onContactTap: _openServices),
                     ],
                   ),
@@ -191,6 +182,56 @@ class _MentalHealthInsightsScreenState
     setState(() => _searchQuery = value);
   }
 
+  String _insightContentStateKey(
+    InsightsProvider? provider,
+    InsightsDashboardData? data,
+    List<InsightSection> sections,
+    bool hasSearchQuery,
+  ) {
+    if ((provider?.isLoading ?? false) && data == null) return 'loading';
+    if (provider?.errorMessage != null && data == null) return 'error';
+    if (data == null || data.resources.isEmpty) return 'empty';
+    if (sections.isEmpty && hasSearchQuery) return 'no-results:$_searchQuery';
+    return 'sections:${sections.map((section) => section.id).join(',')}:$_searchQuery';
+  }
+
+  Widget _buildInsightContent({
+    required InsightsProvider? insightsProvider,
+    required InsightsDashboardData? data,
+    required List<InsightSection> visibleSections,
+    required bool hasSearchQuery,
+  }) {
+    if ((insightsProvider?.isLoading ?? false) && data == null) {
+      return const _InsightSectionSkeleton();
+    }
+    if (insightsProvider?.errorMessage != null && data == null) {
+      return _InsightsErrorState(
+        onRetry: () => insightsProvider?.loadInsights(
+          _currentUserId(),
+          forceRefresh: true,
+        ),
+      );
+    }
+    if (data == null || data.resources.isEmpty) {
+      return const _EmptyInsightState();
+    }
+    if (visibleSections.isEmpty && hasSearchQuery) {
+      return _NoInsightResultsState(query: _searchQuery);
+    }
+    return Column(
+      children: [
+        for (final section in visibleSections) ...[
+          _InsightSectionView(
+            section: section,
+            onItemTap: _openInsightArticle,
+            onSeeAllTap: () => _openInsightSection(section),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ],
+    );
+  }
+
   List<InsightSection> _visibleSections(InsightsDashboardData? data) {
     final query = _searchQuery.trim().toLowerCase();
     if (data == null) return const [];
@@ -223,17 +264,6 @@ class _MentalHealthInsightsScreenState
     ];
 
     return values.any((value) => value.toLowerCase().contains(query));
-  }
-
-  InsightCardItem? _featuredResource(InsightsDashboardData? data) {
-    if (data == null) return null;
-    for (final section in data.sections) {
-      if (section.id != 'recommended') continue;
-      final article = section.items.where((item) => !item.isVideoPlaceholder);
-      if (article.isNotEmpty) return article.first;
-    }
-    final articles = data.resources.where((item) => !item.isVideoPlaceholder);
-    return articles.isEmpty ? null : articles.first;
   }
 
   void _openNotifications() {
@@ -293,58 +323,74 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
-      height: 82,
-      padding: const EdgeInsets.fromLTRB(20, 0, 18, 0),
-      decoration: const BoxDecoration(
-        color: _InsightsPalette.sun,
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 12,
-            offset: Offset(0, 5),
-          ),
-        ],
+      key: const Key('insights_header'),
+      constraints: const BoxConstraints(minHeight: 78),
+      padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: theme.header,
+        boxShadow: theme.cardShadow,
       ),
       child: Row(
         children: [
-          Image.asset(
-            'assets/images/INSIGHTS/logo.png 3.png',
-            width: 31,
-            height: 31,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.psychology_alt, size: 30),
-          ),
-          const SizedBox(width: 6),
-          Image.asset(
-            'assets/images/INSIGHTS/MindMate.png',
-            height: 26,
-            errorBuilder: (context, error, stackTrace) => const Text(
-              'MindMate',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                shadows: [
-                  Shadow(
-                    color: Colors.black54,
-                    blurRadius: 4,
-                    offset: Offset(1, 2),
-                  ),
-                ],
-              ),
+          Container(
+            width: 42,
+            height: 42,
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0x33B58500)),
+            ),
+            child: Image.asset(
+              'assets/images/INSIGHTS/creativity_15557951 1.png',
+              key: const Key('insights_header_brain_asset'),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.psychology_alt_rounded, size: 25),
             ),
           ),
-          const Spacer(),
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: onNotificationTap,
-            icon: Image.asset(
-              'assets/images/INSIGHTS/Notification.png',
-              width: 24,
-              height: 24,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.notifications, color: Colors.black),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'MindMate',
+                  style: _InsightsText.brandTitle.copyWith(
+                    color: const Color(0xFF241B00),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Wellness insights',
+                  style: _InsightsText.brandSubtitle.copyWith(
+                    color: const Color(0xFF5F4900),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(210),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: IconButton(
+              tooltip: 'Notifications',
+              padding: EdgeInsets.zero,
+              onPressed: onNotificationTap,
+              icon: Image.asset(
+                'assets/images/INSIGHTS/Notification.png',
+                width: 22,
+                height: 22,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.notifications_none_rounded, size: 23),
+              ),
             ),
           ),
         ],
@@ -361,96 +407,126 @@ class _HeroSearchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+      key: const Key('insights_hero'),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: BoxDecoration(
-        color: _InsightsPalette.sun,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
+        gradient: LinearGradient(
+          colors: [theme.heroStart, theme.heroEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.border),
+        boxShadow: theme.cardShadow,
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const Icon(Icons.favorite, color: Color(0xFFFF6F8F), size: 28),
+              Image.asset(
+                'assets/images/INSIGHTS/Creativity.png',
+                key: const Key('insights_hero_brain_asset'),
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.psychology_alt_rounded,
+                  color: Color(0xFFFF6F8F),
+                  size: 28,
+                ),
+              ),
               const SizedBox(width: 9),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Insights',
+                      key: const Key('insights_hero_title'),
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 19,
+                        color: theme.isDark
+                            ? const Color(0xFFFFF7E3)
+                            : const Color(0xFF251C00),
+                        fontSize: 21,
                         fontWeight: FontWeight.w900,
-                        height: 1,
+                        height: 1.05,
                       ),
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
                       'Your mental wellness hub',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: theme.isDark
+                            ? const Color(0xFFFFEAB0)
+                            : const Color(0xFF6F5200),
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
-              Image.asset(
-                'assets/images/INSIGHTS/Pulse.png',
-                width: 32,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.monitor_heart, color: Colors.black),
+              Container(
+                width: 40,
+                height: 40,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: theme.isDark
+                      ? Colors.white.withAlpha(210)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Image.asset(
+                  'assets/images/INSIGHTS/Pulse.png',
+                  width: 28,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.monitor_heart, color: Colors.black),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           TextField(
             controller: controller,
             onChanged: onChanged,
             textInputAction: TextInputAction.search,
-            style: const TextStyle(
-              color: Color(0xFF2D2618),
+            style: TextStyle(
+              color: theme.text,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
             decoration: InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(vertical: 13),
               border: InputBorder.none,
               hintText: 'Search insights...',
-              hintStyle: const TextStyle(
-                color: Color(0xFF8D7F5E),
+              hintStyle: TextStyle(
+                color: theme.secondaryText,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
-              prefixIcon: const Icon(
+              prefixIcon: Icon(
                 Icons.search,
                 size: 22,
-                color: Color(0xFF2D6EA7),
+                color: theme.isDark
+                    ? const Color(0xFF9CCBFF)
+                    : const Color(0xFF2D6EA7),
               ),
               prefixIconConstraints: const BoxConstraints(
                 minWidth: 36,
                 minHeight: 32,
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: theme.searchSurface,
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide(color: theme.border.withAlpha(100)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide(color: theme.accent, width: 1.5),
               ),
             ),
           ),
@@ -468,15 +544,19 @@ class _SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: _InsightsText.sectionTitle),
+        Text(
+          title,
+          style: _InsightsText.sectionTitle.copyWith(color: theme.text),
+        ),
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: Color(0xFF6F654E),
+          style: TextStyle(
+            color: theme.secondaryText,
             fontSize: 12,
             height: 1.35,
             fontWeight: FontWeight.w600,
@@ -495,27 +575,28 @@ class _CategoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveCategories = categories.isEmpty
+    final sourceCategories = categories.isEmpty
         ? const [
-            InsightCategory(
-              id: 'stress_burnout',
-              label: 'Stress relief',
-              icon: 'stress',
-            ),
-            InsightCategory(
-              id: 'anxiety',
-              label: 'Manage anxiety',
-              icon: 'anxiety',
-            ),
             InsightCategory(
               id: 'emotional_wellbeing',
               label: 'Emotions',
               icon: 'mood',
             ),
             InsightCategory(
+              id: 'stress_burnout',
+              label: 'Stress relief',
+              icon: 'stress',
+            ),
+            InsightCategory(
               id: 'sleep_mental_health',
               label: 'Better sleep',
               icon: 'sleep',
+              isSelected: true,
+            ),
+            InsightCategory(
+              id: 'anxiety',
+              label: 'Manage anxiety',
+              icon: 'anxiety',
             ),
             InsightCategory(
               id: 'self_esteem_confidence',
@@ -529,24 +610,112 @@ class _CategoryRow extends StatelessWidget {
             ),
           ]
         : categories;
+    final effectiveCategories = _orderedInsightCategories(sourceCategories);
 
-    return SizedBox(
-      height: 104,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: effectiveCategories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (_, index) {
-          final category = effectiveCategories[index];
-          return SizedBox(
-            width: 104,
-            child: _CategoryTile(
-              category: category,
-              onTap: () => onCategoryTap(category),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        final tileWidth = ((constraints.maxWidth - (gap * 3)) / 4).clamp(
+          76.0,
+          86.0,
+        );
+        return SizedBox(
+          key: const Key('insights_category_strip'),
+          height: 104,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                for (
+                  var index = 0;
+                  index < effectiveCategories.length;
+                  index++
+                ) ...[
+                  SizedBox(
+                    width: tileWidth,
+                    child: _CategoryTile(
+                      category: effectiveCategories[index],
+                      onTap: () => onCategoryTap(effectiveCategories[index]),
+                    ),
+                  ),
+                  if (index != effectiveCategories.length - 1)
+                    const SizedBox(width: gap),
+                ],
+              ],
             ),
-          );
-        },
+          ),
+        );
+      },
+    );
+  }
+}
+
+List<InsightCategory> _orderedInsightCategories(
+  List<InsightCategory> categories,
+) {
+  const priority = {
+    'emotional_wellbeing': 0,
+    'stress_burnout': 1,
+    'sleep_mental_health': 2,
+    'anxiety': 3,
+    'self_esteem_confidence': 4,
+    'depression_support': 5,
+  };
+  final indexed = categories.indexed.toList(growable: false);
+  indexed.sort((left, right) {
+    final leftPriority = priority[left.$2.id] ?? (100 + left.$1);
+    final rightPriority = priority[right.$2.id] ?? (100 + right.$1);
+    return leftPriority.compareTo(rightPriority);
+  });
+  return indexed.map((entry) => entry.$2).toList(growable: false);
+}
+
+String _categoryDisplayLabel(InsightCategory category) {
+  if (category.id == 'emotional_wellbeing') return 'Mood tracking';
+  return category.label;
+}
+
+Duration _insightsMotionDuration(BuildContext context, int milliseconds) {
+  final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+  return reduceMotion ? Duration.zero : Duration(milliseconds: milliseconds);
+}
+
+class _InsightsPressScale extends StatefulWidget {
+  const _InsightsPressScale({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_InsightsPressScale> createState() => _InsightsPressScaleState();
+}
+
+class _InsightsPressScaleState extends State<_InsightsPressScale> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = _insightsMotionDuration(context, 140);
+    return Listener(
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: AnimatedScale(
+        key: const Key('insights_press_scale'),
+        scale: _pressed ? 0.98 : 1,
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: _pressed ? 0.94 : 1,
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -560,72 +729,105 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE8D89D)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 10,
-                offset: Offset(0, 4),
+    final theme = _InsightsTheme.of(context);
+    final style = _resolvedCategoryVisualStyle(
+      context,
+      category.id,
+      category.icon,
+    );
+    final displayLabel = _categoryDisplayLabel(category);
+    final selected = category.isSelected;
+    final surface = selected ? theme.selectedCategory : style.surface;
+    final border = selected ? theme.selectedCategoryBorder : style.border;
+    final foreground = selected ? theme.onSelectedCategory : theme.text;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Explore $displayLabel',
+      child: _InsightsPressScale(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: Key('insights_category_${category.id}'),
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(15),
+            child: Ink(
+              key: Key('insights_category_surface_${category.id}'),
+              padding: const EdgeInsets.fromLTRB(6, 9, 6, 8),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: border),
+                boxShadow: theme.tileShadow,
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFF2BF),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _categoryIcon(category.icon),
-                  size: 23,
-                  color: const Color(0xFF715900),
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _CategoryVisual(style: style, size: 42, selected: selected),
+                  const SizedBox(height: 7),
+                  Text(
+                    displayLabel,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 10,
+                      height: 1.08,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                category.label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  height: 1.05,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
 
-  IconData _categoryIcon(String key) {
-    switch (key) {
-      case 'stress':
-        return Icons.self_improvement;
-      case 'sleep':
-        return Icons.bedtime;
-      case 'anxiety':
-        return Icons.cloud_outlined;
-      case 'mood':
-      default:
-        return Icons.sentiment_satisfied_alt;
-    }
+class _CategoryVisual extends StatelessWidget {
+  const _CategoryVisual({
+    required this.style,
+    required this.size,
+    this.selected = false,
+  });
+
+  final _CategoryVisualStyle style;
+  final double size;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: Key('insights_category_visual_${style.id}'),
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(style.assetName == null ? 11 : 7),
+      decoration: BoxDecoration(
+        color: selected ? Colors.white.withAlpha(150) : style.badge,
+        borderRadius: BorderRadius.circular(size * 0.34),
+        border: Border.all(
+          color: selected ? Colors.white.withAlpha(190) : style.border,
+        ),
+      ),
+      child: style.assetName == null
+          ? Icon(
+              style.icon,
+              key: Key('insights_category_fallback_${style.id}'),
+              color: style.accent,
+              size: size * 0.5,
+            )
+          : Image.asset(
+              style.assetName!,
+              key: Key('insights_category_asset_${style.id}'),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) =>
+                  Icon(style.icon, color: style.accent, size: size * 0.5),
+            ),
+    );
   }
 }
 
@@ -642,6 +844,7 @@ class _WeeklyGlanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     final items = [
       InsightMetric(
         label: 'Check-ins',
@@ -661,28 +864,35 @@ class _WeeklyGlanceCard extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(15, 15, 15, 17),
-      decoration: _InsightsDecor.card(),
+      key: const Key('insights_weekly_card'),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+      decoration: theme.card(radius: 18),
       child: Column(
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'This week at a glance',
-                  style: _InsightsText.sectionTitle,
+                  style: _InsightsText.sectionTitle.copyWith(color: theme.text),
                 ),
               ),
-              TextButton(
+              const SizedBox(width: 8),
+              ElevatedButton(
+                key: const Key('insights_log_mood_action'),
                 onPressed: onLogMoodTap,
-                style: TextButton.styleFrom(
-                  foregroundColor: _InsightsPalette.gold,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(72, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.accent,
+                  foregroundColor: theme.onAccent,
+                  elevation: 0,
+                  minimumSize: const Size(92, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: const StadiumBorder(),
                 ),
                 child: Text(
-                  actionLabel,
+                  actionLabel.startsWith('View')
+                      ? "View today's mood"
+                      : 'Log mood',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
@@ -691,11 +901,15 @@ class _WeeklyGlanceCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 21),
+          const SizedBox(height: 14),
           Row(
             children: [
-              for (final item in items)
-                Expanded(child: _MetricColumn(metric: item)),
+              for (var index = 0; index < items.length; index++) ...[
+                Expanded(
+                  child: _MetricColumn(metric: items[index], index: index),
+                ),
+                if (index != items.length - 1) const SizedBox(width: 8),
+              ],
             ],
           ),
         ],
@@ -705,23 +919,59 @@ class _WeeklyGlanceCard extends StatelessWidget {
 }
 
 class _MetricColumn extends StatelessWidget {
-  const _MetricColumn({required this.metric});
+  const _MetricColumn({required this.metric, required this.index});
 
   final InsightMetric metric;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(_metricIcon(metric.icon), size: 28, color: _InsightsPalette.gold),
-        const SizedBox(height: 8),
-        Text(metric.value, style: _InsightsText.metricValue),
-        Text(
-          metric.label,
-          textAlign: TextAlign.center,
-          style: _InsightsText.metricLabel,
+    final theme = _InsightsTheme.of(context);
+    final accents = [
+      const Color(0xFFA86500),
+      const Color(0xFF397250),
+      const Color(0xFF476C9E),
+    ];
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 92),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          accents[index % accents.length].withAlpha(theme.isDark ? 48 : 22),
+          theme.surfaceMuted,
         ),
-      ],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            _metricIcon(metric.icon),
+            size: 23,
+            color: theme.isDark
+                ? Color.lerp(
+                    accents[index % accents.length],
+                    Colors.white,
+                    0.42,
+                  )
+                : accents[index % accents.length],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            metric.value,
+            style: _InsightsText.metricValue.copyWith(color: theme.text),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            metric.label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: _InsightsText.metricLabel.copyWith(color: theme.text),
+          ),
+        ],
+      ),
     );
   }
 
@@ -751,33 +1001,46 @@ class _InsightSectionView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
-              child: Text(section.title, style: _InsightsText.sectionTitle),
+              child: Text(
+                section.title,
+                style: _InsightsText.sectionTitle.copyWith(color: theme.text),
+              ),
             ),
             if (section.showSeeAll)
               TextButton(
                 onPressed: onSeeAllTap,
                 style: TextButton.styleFrom(
-                  foregroundColor: _InsightsPalette.gold,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(54, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: theme.accent,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(72, 44),
                 ),
-                child: const Text(
-                  'See all →',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'See all',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(width: 3),
+                    Icon(Icons.arrow_forward_rounded, size: 13),
+                  ],
                 ),
               ),
           ],
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: section.id == 'patterns' ? 138 : 126,
+          height: section.id == 'patterns' ? 148 : 140,
           child: section.items.isEmpty
               ? const _InlineEmptyState()
               : ListView.separated(
@@ -949,20 +1212,30 @@ class _FeaturedResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _resolvedCategoryVisualStyle(
+      context,
+      item.categoryId,
+      'mood',
+    );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         child: Ink(
-          padding: const EdgeInsets.all(18),
-          decoration: _InsightsDecor.card(radius: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: _InsightsTheme.of(context).card(radius: 22),
           child: Row(
             children: [
-              const CircleAvatar(
-                radius: 25,
-                backgroundColor: Color(0xFFFFF0B4),
-                child: Icon(Icons.auto_stories_outlined, color: Colors.black87),
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: style.badge,
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: Icon(Icons.auto_stories_outlined, color: style.accent),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -980,7 +1253,19 @@ class _FeaturedResourceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_rounded),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: style.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 18,
+                  color: style.accent,
+                ),
+              ),
             ],
           ),
         ),
@@ -1049,7 +1334,7 @@ class _CategoryEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _InsightsDecor.card(radius: 18),
+      decoration: _InsightsTheme.of(context).card(radius: 18),
       child: const Column(
         children: [
           Icon(Icons.menu_book_outlined, size: 32),
@@ -1142,7 +1427,7 @@ class _SectionDetailCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Ink(
           padding: const EdgeInsets.all(14),
-          decoration: _InsightsDecor.card(radius: 12),
+          decoration: _InsightsTheme.of(context).card(radius: 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1200,86 +1485,144 @@ class _InsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return SizedBox(
-      width: 203,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: isPatternCard
-                  ? const Color(0xFFFFDA66)
-                  : const Color(0xFFFFD466),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _InsightsPalette.gold, width: 1),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (!isPatternCard && item.imageAsset.isNotEmpty)
-                    Image.asset(
-                      item.imageAsset,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox.shrink(),
-                    ),
-                  if (!isPatternCard)
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0x22FFFFFF), Color(0xAA000000)],
+      width: 214,
+      child: _InsightsPressScale(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(18),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: isPatternCard
+                    ? (theme.isDark
+                          ? const Color(0xFF59450E)
+                          : const Color(0xFFFFDE83))
+                    : theme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: theme.border),
+                boxShadow: theme.cardShadow,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (!isPatternCard) _ResourceThumbnail(item: item),
+                    if (!isPatternCard)
+                      const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0x05FFFFFF), Color(0xB0000000)],
+                          ),
                         ),
                       ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.all(11),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _CategoryPill(label: item.category),
-                        if (item.isVideoPlaceholder) ...[
-                          const SizedBox(height: 6),
-                          const _CategoryPill(label: 'Video coming soon'),
+                    Padding(
+                      padding: const EdgeInsets.all(11),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _CategoryPill(label: item.category),
+                          if (item.isVideoPlaceholder) ...[
+                            const SizedBox(height: 6),
+                            const _CategoryPill(label: 'Video coming soon'),
+                          ],
+                          const Spacer(),
+                          Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isPatternCard ? theme.text : Colors.white,
+                              fontSize: 13,
+                              height: 1.05,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isPatternCard
+                                  ? theme.secondaryText
+                                  : Colors.white,
+                              fontSize: 10,
+                              height: 1.25,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
-                        const Spacer(),
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isPatternCard ? Colors.black : Colors.white,
-                            fontSize: 13,
-                            height: 1.05,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isPatternCard
-                                ? const Color(0xFF2B2619)
-                                : Colors.white,
-                            fontSize: 10,
-                            height: 1.25,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResourceThumbnail extends StatelessWidget {
+  const _ResourceThumbnail({required this.item});
+
+  final InsightCardItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.imageAsset.trim().isEmpty) {
+      return _ResourceThumbnailFallback(item: item);
+    }
+
+    return Image.asset(
+      item.imageAsset,
+      key: Key('insights_resource_image_${item.id}'),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          _ResourceThumbnailFallback(item: item),
+    );
+  }
+}
+
+class _ResourceThumbnailFallback extends StatelessWidget {
+  const _ResourceThumbnailFallback({required this.item});
+
+  final InsightCardItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _resolvedCategoryVisualStyle(
+      context,
+      item.categoryId,
+      'mood',
+    );
+    return DecoratedBox(
+      key: Key('insights_resource_fallback_${item.id}'),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [style.surface, style.badge],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Align(
+        alignment: const Alignment(0.68, -0.42),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(180),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(style.icon, size: 29, color: style.accent),
         ),
       ),
     );
@@ -1330,7 +1673,7 @@ class InsightArticleDetailScreen extends StatelessWidget {
           ],
           Container(
             padding: const EdgeInsets.all(18),
-            decoration: _InsightsDecor.card(radius: 12),
+            decoration: _InsightsTheme.of(context).card(radius: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1570,30 +1913,54 @@ class _PaaccSupportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('PAACC support services', style: _InsightsText.sectionTitle),
+        Text(
+          'PAACC support services',
+          style: _InsightsText.sectionTitle.copyWith(color: theme.text),
+        ),
         const SizedBox(height: 14),
         Container(
+          key: const Key('insights_paacc_card'),
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 21, 20, 20),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _InsightsPalette.gold),
+            gradient: LinearGradient(
+              colors: [theme.surface, theme.surfaceMuted],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: theme.border),
+            boxShadow: theme.cardShadow,
           ),
           child: Column(
             children: [
-              const Row(
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.favorite, color: _InsightsPalette.gold, size: 31),
-                  SizedBox(width: 14),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xFFFFE6EC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(9),
+                      child: Icon(
+                        Icons.favorite_rounded,
+                        color: Color(0xFFB9506D),
+                        size: 23,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Text(
                       'Need to talk to someone?',
                       style: TextStyle(
+                        color: theme.text,
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1602,11 +1969,12 @@ class _PaaccSupportCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   "PAACC counseling services are available 24/7 for students and faculty. You're never alone.",
                   style: TextStyle(
+                    color: theme.secondaryText,
                     fontSize: 14,
                     height: 1.45,
                     fontWeight: FontWeight.w500,
@@ -1615,17 +1983,16 @@ class _PaaccSupportCard extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                width: 190,
-                height: 38,
+                width: double.infinity,
+                height: 46,
                 child: ElevatedButton(
                   onPressed: onContactTap,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _InsightsPalette.gold,
-                    foregroundColor: Colors.white,
-                    elevation: 5,
-                    shadowColor: const Color(0x66000000),
+                    backgroundColor: theme.accent,
+                    foregroundColor: theme.onAccent,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
                   child: const Text(
@@ -1647,16 +2014,17 @@ class _InlineEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
       width: 260,
       padding: const EdgeInsets.all(16),
-      decoration: _InsightsDecor.card(radius: 12),
-      child: const Center(
+      decoration: _InsightsTheme.of(context).card(radius: 20),
+      child: Center(
         child: Text(
           'Insights will appear here when content is connected.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Color(0xFF6F654D),
+            color: theme.secondaryText,
             fontSize: 12,
             height: 1.35,
             fontWeight: FontWeight.w700,
@@ -1672,18 +2040,19 @@ class _EmptyInsightState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: _InsightsDecor.card(radius: 12),
-      child: const Column(
+      decoration: _InsightsTheme.of(context).card(radius: 20),
+      child: Column(
         children: [
-          Icon(Icons.auto_stories_outlined, size: 34),
-          SizedBox(height: 10),
+          Icon(Icons.auto_stories_outlined, size: 34, color: theme.accent),
+          const SizedBox(height: 10),
           Text(
             'No wellness resources are available yet.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF6F654D),
+              color: theme.secondaryText,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1703,7 +2072,7 @@ class _InsightsErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _InsightsDecor.card(radius: 18),
+      decoration: _InsightsTheme.of(context).card(radius: 18),
       child: Column(
         children: [
           const Icon(Icons.cloud_off_outlined, size: 34),
@@ -1737,21 +2106,26 @@ class _InsightsErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF4D3),
+        color: theme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE7C65B)),
+        border: Border.all(color: theme.border),
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, size: 20),
+          Icon(Icons.info_outline, size: 20, color: theme.accent),
           const SizedBox(width: 9),
-          const Expanded(
+          Expanded(
             child: Text(
               'Showing saved resources. Refresh didn’t complete.',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: theme.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
@@ -1768,14 +2142,15 @@ class _NoInsightResultsState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: _InsightsDecor.card(radius: 12),
+      decoration: _InsightsTheme.of(context).card(radius: 12),
       child: Text(
         'No insights found for "$query".',
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Color(0xFF6F654D),
+        style: TextStyle(
+          color: theme.secondaryText,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -1801,7 +2176,7 @@ class InsightsNotificationsScreen extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.all(20),
           padding: const EdgeInsets.all(22),
-          decoration: _InsightsDecor.card(radius: 12),
+          decoration: _InsightsTheme.of(context).card(radius: 12),
           child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1908,6 +2283,7 @@ class _Circle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _InsightsTheme.of(context);
     return Positioned(
       top: top,
       left: left,
@@ -1917,8 +2293,8 @@ class _Circle extends StatelessWidget {
         child: Container(
           width: size,
           height: size,
-          decoration: const BoxDecoration(
-            color: Color(0x55F4D772),
+          decoration: BoxDecoration(
+            color: theme.accent.withAlpha(theme.isDark ? 20 : 42),
             shape: BoxShape.circle,
           ),
         ),
@@ -1927,21 +2303,263 @@ class _Circle extends StatelessWidget {
   }
 }
 
+class _InsightsTheme {
+  const _InsightsTheme({
+    required this.isDark,
+    required this.background,
+    required this.header,
+    required this.surface,
+    required this.surfaceMuted,
+    required this.text,
+    required this.secondaryText,
+    required this.border,
+    required this.accent,
+    required this.onAccent,
+    required this.heroStart,
+    required this.heroEnd,
+    required this.searchSurface,
+    required this.selectedCategory,
+    required this.selectedCategoryBorder,
+    required this.onSelectedCategory,
+  });
+
+  factory _InsightsTheme.of(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDark) {
+      return const _InsightsTheme(
+        isDark: true,
+        background: Color(0xFF15120D),
+        header: Color(0xFFE0A500),
+        surface: Color(0xFF241F17),
+        surfaceMuted: Color(0xFF30291E),
+        text: Color(0xFFFFF7E3),
+        secondaryText: Color(0xFFD8CBAA),
+        border: Color(0xFF80661E),
+        accent: Color(0xFFFFC42E),
+        onAccent: Color(0xFF241B00),
+        heroStart: Color(0xFF6A4E00),
+        heroEnd: Color(0xFF3A2E11),
+        searchSurface: Color(0xFF2B251C),
+        selectedCategory: Color(0xFFFFBC00),
+        selectedCategoryBorder: Color(0xFFFFD464),
+        onSelectedCategory: Color(0xFF211800),
+      );
+    }
+    return const _InsightsTheme(
+      isDark: false,
+      background: Color(0xFFFFF7DB),
+      header: Color(0xFFFFCB30),
+      surface: Color(0xFFFFFFFF),
+      surfaceMuted: Color(0xFFFFFBEE),
+      text: Color(0xFF17130B),
+      secondaryText: Color(0xFF6F603D),
+      border: Color(0xFFE7AF15),
+      accent: Color(0xFFF5B800),
+      onAccent: Color(0xFF211800),
+      heroStart: Color(0xFFFFC30B),
+      heroEnd: Color(0xFFFFD75B),
+      searchSurface: Color(0xFFFFFFFF),
+      selectedCategory: Color(0xFFFFBC00),
+      selectedCategoryBorder: Color(0xFFE9A900),
+      onSelectedCategory: Color(0xFF211800),
+    );
+  }
+
+  final bool isDark;
+  final Color background;
+  final Color header;
+  final Color surface;
+  final Color surfaceMuted;
+  final Color text;
+  final Color secondaryText;
+  final Color border;
+  final Color accent;
+  final Color onAccent;
+  final Color heroStart;
+  final Color heroEnd;
+  final Color searchSurface;
+  final Color selectedCategory;
+  final Color selectedCategoryBorder;
+  final Color onSelectedCategory;
+
+  List<BoxShadow> get cardShadow => isDark
+      ? const [
+          BoxShadow(
+            color: Color(0x59000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ]
+      : const [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ];
+
+  List<BoxShadow> get tileShadow => isDark
+      ? const []
+      : const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 7,
+            offset: Offset(0, 3),
+          ),
+        ];
+
+  BoxDecoration card({double radius = 18, Color? color}) {
+    return BoxDecoration(
+      color: color ?? surface,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: border.withAlpha(isDark ? 150 : 115)),
+      boxShadow: cardShadow,
+    );
+  }
+}
+
+class _CategoryVisualStyle {
+  const _CategoryVisualStyle({
+    required this.id,
+    required this.surface,
+    required this.badge,
+    required this.border,
+    required this.accent,
+    required this.icon,
+    this.assetName,
+  });
+
+  final String id;
+  final Color surface;
+  final Color badge;
+  final Color border;
+  final Color accent;
+  final IconData icon;
+  final String? assetName;
+}
+
+_CategoryVisualStyle _categoryVisualStyle(String id, String iconKey) {
+  return switch (id) {
+    'stress_burnout' => const _CategoryVisualStyle(
+      id: 'stress_burnout',
+      surface: Color(0xFFFFF4D5),
+      badge: Color(0xFFFFE7A8),
+      border: Color(0xFFE9C96C),
+      accent: Color(0xFF8B6200),
+      icon: Icons.self_improvement_rounded,
+      assetName: 'assets/images/INSIGHTS/🧘 Stress relief.png',
+    ),
+    'anxiety' => const _CategoryVisualStyle(
+      id: 'anxiety',
+      surface: Color(0xFFEAF2FD),
+      badge: Color(0xFFD7E7FA),
+      border: Color(0xFFB8CEE8),
+      accent: Color(0xFF3E6798),
+      icon: Icons.cloud_outlined,
+      assetName: 'assets/images/INSIGHTS/💭 Manage anxiety.png',
+    ),
+    'emotional_wellbeing' => const _CategoryVisualStyle(
+      id: 'emotional_wellbeing',
+      surface: Color(0xFFE9F5EA),
+      badge: Color(0xFFD5ECD8),
+      border: Color(0xFFB7D8BD),
+      accent: Color(0xFF397250),
+      icon: Icons.sentiment_satisfied_alt_rounded,
+      assetName: 'assets/images/INSIGHTS/😊 Mood tracking.png',
+    ),
+    'sleep_mental_health' => const _CategoryVisualStyle(
+      id: 'sleep_mental_health',
+      surface: Color(0xFFF0ECFC),
+      badge: Color(0xFFE2DAF8),
+      border: Color(0xFFC9BDE9),
+      accent: Color(0xFF625394),
+      icon: Icons.bedtime_rounded,
+      assetName: 'assets/images/INSIGHTS/😴 Better sleep.png',
+    ),
+    'self_esteem_confidence' => const _CategoryVisualStyle(
+      id: 'self_esteem_confidence',
+      surface: Color(0xFFFFEEE4),
+      badge: Color(0xFFFFDDC9),
+      border: Color(0xFFE9C1AA),
+      accent: Color(0xFF95583A),
+      icon: Icons.workspace_premium_rounded,
+    ),
+    'depression_support' => const _CategoryVisualStyle(
+      id: 'depression_support',
+      surface: Color(0xFFFCEBF0),
+      badge: Color(0xFFF8D9E2),
+      border: Color(0xFFE5BAC7),
+      accent: Color(0xFF994D65),
+      icon: Icons.favorite_rounded,
+    ),
+    _ => _CategoryVisualStyle(
+      id: id.isEmpty ? 'neutral' : id,
+      surface: const Color(0xFFF7F1E2),
+      badge: const Color(0xFFEDE2C6),
+      border: const Color(0xFFD8CAA8),
+      accent: const Color(0xFF715F35),
+      icon: _fallbackCategoryIcon(iconKey),
+    ),
+  };
+}
+
+_CategoryVisualStyle _resolvedCategoryVisualStyle(
+  BuildContext context,
+  String id,
+  String iconKey,
+) {
+  final base = _categoryVisualStyle(id, iconKey);
+  final theme = _InsightsTheme.of(context);
+  if (!theme.isDark) return base;
+  final accent = Color.lerp(base.accent, Colors.white, 0.38)!;
+  return _CategoryVisualStyle(
+    id: base.id,
+    surface: Color.alphaBlend(base.accent.withAlpha(38), theme.surface),
+    badge: Color.alphaBlend(base.accent.withAlpha(58), theme.surfaceMuted),
+    border: base.accent.withAlpha(170),
+    accent: accent,
+    icon: base.icon,
+    assetName: base.assetName,
+  );
+}
+
+IconData _fallbackCategoryIcon(String key) => switch (key) {
+  'stress' => Icons.self_improvement_rounded,
+  'sleep' => Icons.bedtime_rounded,
+  'anxiety' => Icons.cloud_outlined,
+  _ => Icons.auto_awesome_rounded,
+};
+
 class _InsightsPalette {
   const _InsightsPalette._();
 
-  static const background = Color(0xFFFFF7DE);
+  static const background = Color(0xFFFFF9E9);
   static const sun = Color(0xFFFFCA24);
-  static const gold = Color(0xFFF4B600);
+  static const gold = Color(0xFFB98200);
+  static const ink = Color(0xFF292316);
+  static const mutedInk = Color(0xFF675B3D);
 }
 
 class _InsightsText {
   const _InsightsText._();
 
   static const sectionTitle = TextStyle(
-    color: Colors.black,
-    fontSize: 14,
+    color: _InsightsPalette.ink,
+    fontSize: 15,
     fontWeight: FontWeight.w900,
+  );
+
+  static const brandTitle = TextStyle(
+    color: _InsightsPalette.ink,
+    fontSize: 18,
+    height: 1,
+    fontWeight: FontWeight.w900,
+  );
+
+  static const brandSubtitle = TextStyle(
+    color: _InsightsPalette.mutedInk,
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
   );
 
   static const metricValue = TextStyle(
@@ -1955,22 +2573,4 @@ class _InsightsText {
     height: 1.1,
     fontWeight: FontWeight.w900,
   );
-}
-
-class _InsightsDecor {
-  const _InsightsDecor._();
-
-  static BoxDecoration card({double radius = 14}) {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(radius),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x22000000),
-          blurRadius: 8,
-          offset: Offset(0, 4),
-        ),
-      ],
-    );
-  }
 }

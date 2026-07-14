@@ -100,7 +100,7 @@ class AdminStatusSummaryModel {
       status: AdminUserStatus.fromString(json['status']),
       updatedAt: dateTimeFromFirestoreOrNow(json['updatedAt']),
       mentalStatusLabel: _stringOrNull(json['mentalStatusLabel']),
-      role: _stringOrNull(json['role']),
+      role: _stringOrNull(json['populationRole'] ?? json['role']),
       latestAssessmentStatus: _stringOrNull(json['latestAssessmentStatus']),
       quickAssessmentStatus: _stringOrNull(json['quickAssessmentStatus']),
       fullAssessmentStatus: _stringOrNull(json['fullAssessmentStatus']),

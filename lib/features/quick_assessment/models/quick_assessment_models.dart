@@ -1,4 +1,5 @@
 import '../../student_assessment/models/assessment_interpretation_models.dart';
+import '../../../models/profile_roles.dart';
 
 enum AssessmentRole {
   student,
@@ -28,24 +29,22 @@ enum AssessmentRole {
   }
 
   static AssessmentRole? fromStoredValue(String? value) {
-    final normalized = value?.trim().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
-
-    switch (normalized) {
-      case 'student':
-        return AssessmentRole.student;
-      case 'faculty':
-      case 'teaching':
-        return AssessmentRole.faculty;
-      case 'staff':
-      case 'nonteaching':
-        return AssessmentRole.staff;
-      default:
-        return null;
-    }
+    return fromPopulationRole(PopulationRole.parse(value));
   }
+
+  PopulationRole get populationRole => switch (this) {
+    AssessmentRole.student => PopulationRole.student,
+    AssessmentRole.faculty => PopulationRole.teaching,
+    AssessmentRole.staff => PopulationRole.nonTeaching,
+  };
+
+  static AssessmentRole? fromPopulationRole(PopulationRole? role) =>
+      switch (role) {
+        PopulationRole.student => AssessmentRole.student,
+        PopulationRole.teaching => AssessmentRole.faculty,
+        PopulationRole.nonTeaching => AssessmentRole.staff,
+        null => null,
+      };
 }
 
 enum QuickQuestionDirection { risk, protective }

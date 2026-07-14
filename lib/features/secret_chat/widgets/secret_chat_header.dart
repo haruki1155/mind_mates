@@ -46,8 +46,8 @@ class SecretChatHeaderDelegate extends SliverPersistentHeaderDelegate {
             Row(
               children: [
                 _HeaderIconButton(
-                  icon: Icons.bubble_chart_outlined,
-                  tooltip: 'Secret Chat',
+                  icon: Icons.home_rounded,
+                  tooltip: 'Home',
                   onTap: onBack,
                 ),
                 const SizedBox(width: 14),

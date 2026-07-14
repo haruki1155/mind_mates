@@ -14,6 +14,7 @@ import '../../quick_assessment/models/quick_assessment_models.dart';
 import '../../counseling/screens/pacc_counseling_screen.dart';
 import '../../counseling/widgets/appointment_details_sheet.dart';
 import '../../../models/appointment_model.dart';
+import '../../../models/profile_roles.dart';
 import '../../../services/firebase/app_notification_service.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../models/home_dashboard_data.dart';
@@ -41,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _showBottomNav = true;
   bool _isOpeningAssessment = false;
+  bool _isAssessmentBannerDismissed = false;
   _HomeNavDestination _activeDestination = _HomeNavDestination.today;
   String? _loadedBackendUserId;
   String? _loadedAppointmentUserId;
@@ -108,6 +110,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final nextAppointment = _nextAppointment(
       appointmentProvider?.appointments ?? const [],
     );
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = screenWidth < 360 ? 12.0 : 18.0;
 
     return Scaffold(
       backgroundColor: HomePalette.background,
@@ -128,18 +132,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 112),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    14,
+                    horizontalPadding,
+                    124,
+                  ),
                   sliver: SliverList.list(
                     children: [
-                      HomeAnimatedSection(
-                        delay: 0,
-                        child: HomeAssessmentBanner(
-                          data: data.assessment,
-                          onStart: _openStudentAssessment,
-                          onClose: () {},
+                      if (!_isAssessmentBannerDismissed)
+                        HomeAnimatedSection(
+                          delay: 0,
+                          child: HomeAssessmentBanner(
+                            data: data.assessment,
+                            onStart: _openStudentAssessment,
+                            onClose: _dismissAssessmentBanner,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       HomeAnimatedSection(
                         delay: 70,
                         child: HomeWelcomeCard(
@@ -155,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       if (appointmentProvider != null) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         HomeAnimatedSection(
                           delay: 95,
                           child: _HomeAppointmentPreview(
@@ -180,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 28),
+                      const SizedBox(height: HomeMetrics.sectionGap),
                       HomeAnimatedSection(
                         delay: 120,
                         child: HomePaccServicesSection(
@@ -189,16 +199,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           onViewAll: _openServices,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: HomeMetrics.sectionGap),
                       HomeAnimatedSection(
                         delay: 170,
                         child: HomeDailyInsightsSection(
                           insights: data.insights,
                           affirmation: data.affirmation,
                           onOpen: _openPlaceholder,
+                          nowProvider: widget._nowProvider,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: HomeMetrics.sectionGap),
                       HomeAnimatedSection(
                         delay: 220,
                         child: HomeMentalHealthCheckCard(
@@ -210,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ).pushNamed(RouteNames.mentalHealthReport),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: HomeMetrics.sectionGap),
                       HomeAnimatedSection(
                         delay: 270,
                         child: HomeResourcesSection(
@@ -219,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onSeeAll: () => _openPlaceholder('All Resources'),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: HomeMetrics.sectionGap),
                       HomeAnimatedSection(
                         delay: 320,
                         child: HomeToolkitSection(
@@ -234,9 +245,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
+            left: 12,
+            right: 12,
+            bottom: 8,
             child: _HomeBottomNav(
               isVisible: _showBottomNav,
               activeDestination: _activeDestination,
@@ -276,6 +287,26 @@ class _HomeScreenState extends State<HomeScreen> {
             : displayName,
         role: role ?? base.user.role,
       ),
+      assessment: user == null
+          ? base.assessment
+          : HomeAssessmentPromptData(
+              title: switch (user.effectivePopulationRole) {
+                PopulationRole.student => 'Check in on academic well-being',
+                PopulationRole.teaching => 'Check in on teaching well-being',
+                PopulationRole.nonTeaching =>
+                  'Check in on workplace well-being',
+                null => 'Complete your profile for a tailored assessment',
+              },
+              description:
+                  user.verificationStatus == VerificationStatus.verified
+                  ? 'Your questions are personalized for your verified ${user.roleLabel.toLowerCase()} role.'
+                  : '${user.verificationStatus.label}. You can still use your declared role and all support services.',
+              actionLabel: base.assessment.actionLabel,
+              attemptsUsedThisMonth: base.assessment.attemptsUsedThisMonth,
+              maxAttemptsPerMonth: base.assessment.maxAttemptsPerMonth,
+              nextAvailableAt: base.assessment.nextAvailableAt,
+              canTakeAssessment: base.assessment.canTakeAssessment,
+            ),
       streak: user == null
           ? base.streak
           : HomeStreakData(
@@ -390,13 +421,19 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_scrollController.hasClients) return;
     _scrollController.animateTo(
       0,
-      duration: const Duration(milliseconds: 420),
+      duration: HomeMotion.duration(context, 420),
       curve: Curves.easeOutCubic,
     );
   }
 
   void _openProfile() {
     Navigator.of(context).pushNamed(RouteNames.profile);
+  }
+
+  void _dismissAssessmentBanner() {
+    setState(() {
+      _isAssessmentBannerDismissed = true;
+    });
   }
 
   void _openServices() {
@@ -547,10 +584,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (shouldStart != true || !mounted) return;
 
       final assessmentProvider = context.read<AssessmentProvider>();
-      final savedRole = context.read<UserProvider>().user?.role;
+      final savedRole = context.read<UserProvider>().user?.assessmentRole;
       final role =
           assessmentProvider.selectedRole ??
-          AssessmentRole.fromStoredValue(savedRole) ??
+          savedRole ??
           AssessmentRole.student;
 
       if (assessmentProvider.selectedRole != role) {
@@ -667,7 +704,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    if (resource.title == 'View your insights') {
+    if (resource.title == 'View your insights' ||
+        resource.title == 'Mental Wellbeing 101') {
       Navigator.of(context).pushNamed(RouteNames.mentalHealthInsights);
       return;
     }
@@ -687,6 +725,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (title == 'Mindful breathing' || title == 'Breathing exercise') {
       Navigator.of(context).pushNamed(RouteNames.mindfulBreathing);
+      return;
+    }
+
+    if (title == 'Sleep Quality') {
+      Navigator.of(context).pushNamed(RouteNames.sleepQuality);
       return;
     }
 
@@ -727,8 +770,9 @@ class _HomeAppointmentPreview extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: HomeDecor.card(
-        color: const Color(0xFFFFF9E8),
-        borderColor: const Color(0xFFE8D38A),
+        color: HomePalette.surfaceWarm,
+        borderColor: const Color(0x80E8D38A),
+        radius: HomeMetrics.radiusLarge,
       ),
       child: isLoading
           ? const Row(
@@ -783,7 +827,7 @@ class _HomeAppointmentPreview extends StatelessWidget {
             )
           : InkWell(
               onTap: onOpen,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(HomeMetrics.radius),
               child: Row(
                 children: [
                   Container(
@@ -791,7 +835,7 @@ class _HomeAppointmentPreview extends StatelessWidget {
                     height: 52,
                     decoration: BoxDecoration(
                       color: HomePalette.softGold,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(HomeMetrics.radius),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -872,29 +916,33 @@ class _HomeBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = isVisible ?? true;
     final active = activeDestination ?? _HomeNavDestination.today;
+    final motionDuration = HomeMotion.duration(context, 220);
 
     return SafeArea(
       top: false,
       child: AnimatedSlide(
         offset: visible ? Offset.zero : const Offset(0, 1),
-        duration: const Duration(milliseconds: 220),
+        duration: motionDuration,
         curve: Curves.easeOutCubic,
         child: AnimatedOpacity(
           opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 180),
+          duration: HomeMotion.duration(context, 180),
           curve: Curves.easeOutCubic,
           child: IgnorePointer(
             ignoring: !visible,
             child: Container(
-              height: 70,
+              height: 68,
               decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+                color: HomePalette.surface,
+                border: Border.fromBorderSide(
+                  BorderSide(color: HomePalette.outlineStrong),
+                ),
+                borderRadius: BorderRadius.all(Radius.circular(22)),
                 boxShadow: [
                   BoxShadow(
-                    color: Color(0x1A000000),
-                    blurRadius: 14,
-                    offset: Offset(0, -5),
+                    color: HomePalette.shadowStrong,
+                    blurRadius: 18,
+                    offset: Offset(0, 6),
                   ),
                 ],
               ),
@@ -903,6 +951,7 @@ class _HomeBottomNav extends StatelessWidget {
                 children: [
                   _HomeBottomNavItem(
                     icon: Icons.calendar_today,
+                    assetName: 'Calendar.png',
                     label: 'Today',
                     isActive: active == _HomeNavDestination.today,
                     onTap: () =>
@@ -910,6 +959,7 @@ class _HomeBottomNav extends StatelessWidget {
                   ),
                   _HomeBottomNavItem(
                     icon: Icons.forum_outlined,
+                    assetName: '💭.png',
                     label: 'Secret chat',
                     isActive: active == _HomeNavDestination.secretChat,
                     onTap: () => onDestinationSelected?.call(
@@ -926,6 +976,7 @@ class _HomeBottomNav extends StatelessWidget {
                   ),
                   _HomeBottomNavItem(
                     icon: Icons.chat_bubble_outline,
+                    assetName: 'mail.png',
                     label: 'Messages',
                     isActive: active == _HomeNavDestination.messages,
                     onTap: () => onDestinationSelected?.call(
@@ -934,6 +985,8 @@ class _HomeBottomNav extends StatelessWidget {
                   ),
                   _HomeBottomNavItem(
                     icon: Icons.person,
+                    assetName: 'Customer.png',
+                    assetColor: HomePalette.text,
                     label: 'Profile',
                     isActive: active == _HomeNavDestination.profile,
                     onTap: () => onDestinationSelected?.call(
@@ -956,48 +1009,67 @@ class _HomeBottomNavItem extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.assetName,
+    this.assetColor,
   });
 
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final String? assetName;
+  final Color? assetColor;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: SizedBox(
-        width: 66,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 170),
-              curve: Curves.easeOutCubic,
-              width: isActive ? 34 : 28,
-              height: isActive ? 34 : 28,
-              decoration: BoxDecoration(
-                color: isActive ? HomePalette.sun : Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: HomeMotion.duration(context, 170),
+                curve: Curves.easeOutCubic,
+                width: isActive ? 36 : 30,
+                height: isActive ? 34 : 30,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFFFFD75C)
+                      : Colors.transparent,
+                  border: isActive
+                      ? Border.all(color: const Color(0x669A7000))
+                      : null,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: assetName == null
+                    ? Icon(icon, size: 20, color: HomePalette.text)
+                    : Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: HomeDashboardAssetImage(
+                          assetName: assetName!,
+                          color: assetColor,
+                        ),
+                      ),
               ),
-              child: Icon(icon, size: 20, color: HomePalette.text),
-            ),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: HomePalette.text,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: HomePalette.text,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

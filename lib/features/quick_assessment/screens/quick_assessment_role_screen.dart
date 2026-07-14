@@ -13,9 +13,12 @@ class QuickAssessmentRoleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     try {
-      if (context.watch<UserProvider>().user?.quickAssessmentCompleted == true) {
+      final user = context.watch<UserProvider>().user;
+      if (user?.quickAssessmentCompleted == true) {
         return const _CompletedAssessmentRedirect();
       }
+      final storedRole = user?.assessmentRole;
+      if (storedRole != null) return _StoredRoleRedirect(role: storedRole);
     } on ProviderNotFoundException {
       // Standalone previews can render without authentication state.
     }
@@ -53,6 +56,33 @@ class QuickAssessmentRoleScreen extends StatelessWidget {
   }
 }
 
+class _StoredRoleRedirect extends StatefulWidget {
+  const _StoredRoleRedirect({required this.role});
+
+  final AssessmentRole role;
+
+  @override
+  State<_StoredRoleRedirect> createState() => _StoredRoleRedirectState();
+}
+
+class _StoredRoleRedirectState extends State<_StoredRoleRedirect> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AssessmentProvider>().selectRole(widget.role);
+      Navigator.of(
+        context,
+      ).pushReplacementNamed(RouteNames.quickAssessmentName);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
+
 class _CompletedAssessmentRedirect extends StatefulWidget {
   const _CompletedAssessmentRedirect();
 
@@ -68,10 +98,9 @@ class _CompletedAssessmentRedirectState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        RouteNames.home,
-        (route) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(RouteNames.home, (route) => false);
     });
   }
 

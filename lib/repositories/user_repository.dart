@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../database/firestore_collections.dart';
 import '../models/user_model.dart';
+import '../models/profile_roles.dart';
 import '../services/firebase/firestore_service.dart';
 
 enum UserActivityType {
@@ -136,6 +138,22 @@ class UserRepository {
       uid,
       user.toProfileUpdateJson(),
     );
+  }
+
+  Future<void> requestRoleCorrection({
+    required PopulationRole requestedRole,
+    required String reason,
+  }) async {
+    final trimmedReason = reason.trim();
+    if (trimmedReason.length < 10 || trimmedReason.length > 500) {
+      throw ArgumentError('Reason must be between 10 and 500 characters.');
+    }
+    await FirebaseFunctions.instance
+        .httpsCallable('requestRoleCorrection')
+        .call({
+          'requestedRole': requestedRole.storedValue,
+          'reason': trimmedReason,
+        });
   }
 
   Future<UserModel?> recordActivity(

@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../models/user_model.dart';
+import '../../../models/profile_roles.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
+import '../../../providers/sleep_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
-import '../../quick_assessment/models/quick_assessment_models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.data});
@@ -23,6 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late final AnimationController _ambientController;
   bool _requestedProfile = false;
   bool _requestedReport = false;
+  bool _requestedSleep = false;
 
   static const List<ProfileActionItem> _actions = [
     ProfileActionItem(
@@ -63,11 +65,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     final userProvider = context.read<UserProvider>();
     final shouldLoadProfile = userProvider.user == null && !_requestedProfile;
     final shouldLoadReport = !_requestedReport;
+    final sleepProvider = _sleepProviderOrNull(context);
+    final shouldLoadSleep = sleepProvider != null && !_requestedSleep;
 
-    if (!shouldLoadProfile && !shouldLoadReport) return;
+    if (!shouldLoadProfile && !shouldLoadReport && !shouldLoadSleep) return;
 
     if (shouldLoadProfile) _requestedProfile = true;
     if (shouldLoadReport) _requestedReport = true;
+    if (shouldLoadSleep) _requestedSleep = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -83,6 +88,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           reportProvider.ensureWeeklyPlaceholder(userId);
         });
       }
+      if (shouldLoadSleep) sleepProvider.load(userId);
     });
   }
 
@@ -97,6 +103,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Consumer<UserProvider>(
       builder: (context, userProvider, _) {
         final reportProvider = _watchReportProviderOrNull(context);
+        final sleepProvider = _watchSleepProviderOrNull(context);
         final authProvider = widget.data == null && userProvider.user == null
             ? _authProviderOrNull(context)
             : null;
@@ -112,6 +119,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                       title: reportProvider!.latestReport!.title,
                       description: reportProvider.latestReport!.description,
                     ),
+              sleepAverage: sleepProvider?.profileAverage,
+              onSleepTap: () =>
+                  Navigator.of(context).pushNamed(RouteNames.sleepQuality),
             );
 
         return Scaffold(
@@ -232,6 +242,22 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  SleepProvider? _sleepProviderOrNull(BuildContext context) {
+    try {
+      return context.read<SleepProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
+  SleepProvider? _watchSleepProviderOrNull(BuildContext context) {
+    try {
+      return context.watch<SleepProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
   static const _defaultSummary = ProfileSummaryData(
     title: 'Mental Health Summary',
     description: "This week's positive moods",
@@ -242,6 +268,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     String? fallbackUserId,
     String? fallbackEmail,
     ProfileSummaryData? summary,
+    double? sleepAverage,
+    VoidCallback? onSleepTap,
   }) {
     final effectiveUser =
         user ??
@@ -257,6 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return ProfileViewData(
       displayName: effectiveUser.displayName,
       role: effectiveUser.roleLabel,
+      verificationLabel: effectiveUser.verificationStatus.label,
       avatarAssetName: effectiveUser.avatarAssetName,
       metrics: [
         ProfileMetricData(
@@ -264,10 +293,13 @@ class _ProfileScreenState extends State<ProfileScreen>
           value: '${effectiveUser.dayStreak}',
           icon: Icons.local_fire_department,
         ),
-        const ProfileMetricData(
+        ProfileMetricData(
           label: 'Sleep',
-          value: '--/10',
+          value: sleepAverage == null
+              ? '--/5'
+              : '${sleepAverage.toStringAsFixed(1)}/5',
           icon: Icons.sentiment_satisfied_alt,
+          onTap: onSleepTap,
         ),
         const ProfileMetricData(
           label: 'Stress',
@@ -308,6 +340,7 @@ class ProfileViewData {
   const ProfileViewData({
     this.displayName,
     this.role,
+    this.verificationLabel,
     this.email,
     this.schoolId,
     this.department,
@@ -319,6 +352,7 @@ class ProfileViewData {
 
   final String? displayName;
   final String? role;
+  final String? verificationLabel;
   final String? email;
   final String? schoolId;
   final String? department;
@@ -333,11 +367,13 @@ class ProfileMetricData {
     required this.label,
     required this.value,
     required this.icon,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
 }
 
 class ProfileSummaryData {
@@ -441,6 +477,14 @@ class _ProfileSummaryCard extends StatelessWidget {
                             Text(displayName, style: _ProfileText.profileName),
                           if (role != null)
                             Text(role, style: _ProfileText.profileRole),
+                          if (data?.verificationLabel != null)
+                            Text(
+                              data!.verificationLabel!,
+                              style: _ProfileText.profileRole.copyWith(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                         ],
                       )
                     : const Column(
@@ -544,13 +588,24 @@ class _MetricSlot extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
-        Icon(metric.icon, size: 28, color: Colors.black),
-        const SizedBox(height: 8),
-        Text(metric.value, style: _ProfileText.metricValue),
-        Text(metric.label, style: _ProfileText.metricLabel),
-      ],
+    return Semantics(
+      button: metric.onTap != null,
+      label: metric.onTap == null ? null : 'Open ${metric.label}',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: metric.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Icon(metric.icon, size: 28, color: Colors.black),
+              const SizedBox(height: 8),
+              Text(metric.value, style: _ProfileText.metricValue),
+              Text(metric.label, style: _ProfileText.metricLabel),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1073,9 +1128,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _lastNameController;
   late final TextEditingController _schoolIdController;
   late final TextEditingController _departmentController;
-  late String _role;
-
-  static const _roles = ['student', 'faculty', 'staff'];
 
   @override
   void initState() {
@@ -1095,9 +1147,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     _departmentController = TextEditingController(
       text: widget.user.department ?? '',
     );
-    final currentRole =
-        AssessmentRole.fromStoredValue(widget.user.role)?.name ?? 'student';
-    _role = _roles.contains(currentRole) ? currentRole : 'student';
   }
 
   @override
@@ -1168,6 +1217,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   _EditField(
                     controller: _schoolIdController,
                     label: 'School ID',
+                    enabled: false,
                     textInputAction: TextInputAction.next,
                     validator: _required,
                   ),
@@ -1175,32 +1225,22 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   _EditField(
                     controller: _departmentController,
                     label: 'College or Department',
+                    enabled: false,
                     textInputAction: TextInputAction.done,
                     validator: _required,
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _role,
-                    decoration: _editDecoration('Role'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'student',
-                        child: Text('Student'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'faculty',
-                        child: Text('Teaching'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'staff',
-                        child: Text('Non-Teaching'),
-                      ),
-                    ],
-                    onChanged: isSaving
-                        ? null
-                        : (value) {
-                            if (value != null) setState(() => _role = value);
-                          },
+                  InputDecorator(
+                    decoration: _editDecoration('Verified population role'),
+                    child: Text(widget.user.roleLabel),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: isSaving ? null : _requestRoleCorrection,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text('Request role correction'),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   SizedBox(
@@ -1251,9 +1291,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       firstName: _firstNameController.text.trim(),
       middleName: _middleNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
-      schoolId: _schoolIdController.text.trim(),
-      department: _departmentController.text.trim(),
-      role: _role,
     );
     final success = await context.read<UserProvider>().updateProfile(updated);
 
@@ -1278,6 +1315,89 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         ),
       );
   }
+
+  Future<void> _requestRoleCorrection() async {
+    final reasonController = TextEditingController();
+    var requested =
+        widget.user.effectivePopulationRole == PopulationRole.student
+        ? PopulationRole.teaching
+        : PopulationRole.student;
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Request role correction'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<PopulationRole>(
+                initialValue: requested,
+                items: PopulationRole.values
+                    .where(
+                      (role) => role != widget.user.effectivePopulationRole,
+                    )
+                    .map(
+                      (role) => DropdownMenuItem(
+                        value: role,
+                        child: Text(role.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => requested = value);
+                },
+                decoration: const InputDecoration(labelText: 'Requested role'),
+              ),
+              TextField(
+                controller: reasonController,
+                maxLength: 500,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText:
+                      'Explain why your institutional role needs correction.',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (reasonController.text.trim().length >= 10) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (submitted != true || !mounted) {
+      reasonController.dispose();
+      return;
+    }
+    final success = await context.read<UserProvider>().requestRoleCorrection(
+      requestedRole: requested,
+      reason: reasonController.text,
+    );
+    reasonController.dispose();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Role correction request submitted.'
+              : 'Unable to submit request.',
+        ),
+      ),
+    );
+  }
 }
 
 class _EditField extends StatelessWidget {
@@ -1286,17 +1406,20 @@ class _EditField extends StatelessWidget {
     required this.label,
     this.textInputAction,
     this.validator,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
   final String label;
   final TextInputAction? textInputAction;
   final String? Function(String?)? validator;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      enabled: enabled,
       textInputAction: textInputAction,
       validator: validator,
       decoration: _editDecoration(label),
