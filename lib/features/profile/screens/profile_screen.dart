@@ -136,6 +136,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   slivers: [
                     SliverToBoxAdapter(
                       child: _ProfileHeader(
+                        onHomeTap: () =>
+                            Navigator.of(context).pushNamedAndRemoveUntil(
+                              RouteNames.home,
+                              (route) => false,
+                            ),
                         onNotificationTap: () =>
                             _openPlaceholder(context, 'Notifications'),
                       ),
@@ -294,7 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           icon: Icons.local_fire_department,
         ),
         ProfileMetricData(
-          label: 'Sleep',
+          label: 'Sleep Quality',
           value: sleepAverage == null
               ? '--/5'
               : '${sleepAverage.toStringAsFixed(1)}/5',
@@ -391,8 +396,12 @@ class ProfileActionItem {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.onNotificationTap});
+  const _ProfileHeader({
+    required this.onHomeTap,
+    required this.onNotificationTap,
+  });
 
+  final VoidCallback onHomeTap;
   final VoidCallback onNotificationTap;
 
   @override
@@ -424,6 +433,13 @@ class _ProfileHeader extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           const Spacer(),
+          Tooltip(
+            message: 'Home',
+            child: IconButton(
+              onPressed: onHomeTap,
+              icon: const Icon(Icons.home_outlined, color: Colors.black),
+            ),
+          ),
           Tooltip(
             message: 'Notifications',
             child: IconButton(

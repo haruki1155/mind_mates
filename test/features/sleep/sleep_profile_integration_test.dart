@@ -14,7 +14,7 @@ import 'package:mind_mates/services/auth/auth_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('Profile shows latest-seven sleep average and opens the diary', (
+  testWidgets('Profile shows sleep quality and opens the diary', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -35,6 +35,7 @@ void main() {
         ],
         child: MaterialApp(
           routes: {
+            RouteNames.home: (_) => const Scaffold(body: Text('Home route')),
             RouteNames.sleepQuality: (_) =>
                 const Scaffold(body: Text('Sleep diary route')),
           },
@@ -46,10 +47,88 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('4.0/5'), findsOneWidget);
-    await tester.tap(find.text('Sleep'));
+    expect(find.text('Sleep Quality'), findsOneWidget);
+    await tester.tap(find.text('Sleep Quality'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Sleep diary route'), findsOneWidget);
+  });
+
+  testWidgets('Profile shows an empty sleep quality until an entry is saved', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final userProvider = UserProvider(_UserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'user@example.com'));
+    final repository = _SleepRepository(entries: const []);
+    final sleepProvider = SleepProvider(repository);
+    await sleepProvider.load('user_1');
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: userProvider),
+          ChangeNotifierProvider.value(value: sleepProvider),
+          ChangeNotifierProvider(
+            create: (_) => AuthProvider(_AuthRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          routes: {
+            RouteNames.home: (_) => const Scaffold(body: Text('Home route')),
+            RouteNames.sleepQuality: (_) => const Scaffold(),
+          },
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('--/5'), findsOneWidget);
+    await sleepProvider.save(_entry());
+    await tester.pump();
+    expect(find.text('4.0/5'), findsOneWidget);
+  });
+
+  testWidgets('Profile Home button clears the navigation stack', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final userProvider = UserProvider(_UserRepository())
+      ..setUser(const UserModel(id: 'user_1', email: 'user@example.com'));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: userProvider),
+          ChangeNotifierProvider.value(
+            value: SleepProvider(_SleepRepository(entries: const [])),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AuthProvider(_AuthRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          routes: {
+            RouteNames.home: (_) => const Scaffold(body: Text('Home route')),
+          },
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byTooltip('Home'), findsOneWidget);
+    await tester.tap(find.byTooltip('Home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home route'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsNothing);
+    expect(
+      tester.state<NavigatorState>(find.byType(Navigator)).canPop(),
+      isFalse,
+    );
   });
 }
 
@@ -62,9 +141,14 @@ class _AuthRepository extends AuthRepository {
 class _UserRepository extends UserRepository {}
 
 class _SleepRepository extends SleepRepository {
+  _SleepRepository({List<SleepEntry>? entries})
+    : _entries = entries ?? [_entry()];
+
+  List<SleepEntry> _entries;
+
   @override
   Future<SleepLoadResult> load(String userId) async => SleepLoadResult(
-    entries: [_entry()],
+    entries: _entries,
     consent: SleepConsent(
       choice: SleepConsentChoice.localOnly,
       version: SleepConsent.currentVersion,
@@ -72,6 +156,15 @@ class _SleepRepository extends SleepRepository {
     ),
     pendingSync: false,
   );
+
+  @override
+  Future<List<SleepEntry>> save(
+    SleepEntry entry, {
+    required bool cloudEnabled,
+  }) async {
+    _entries = [..._entries.where((value) => value.id != entry.id), entry];
+    return _entries;
+  }
 }
 
 SleepEntry _entry() {
