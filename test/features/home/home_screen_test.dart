@@ -6,6 +6,7 @@ import 'package:mind_mates/features/home/widgets/home_dashboard_widgets.dart';
 import 'package:mind_mates/models/mood_model.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
+import 'package:mind_mates/models/profile_roles.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
 import 'package:mind_mates/providers/breathing_provider.dart';
 import 'package:mind_mates/providers/insights_provider.dart';
@@ -223,8 +224,17 @@ void main() {
   testWidgets('home assessment banner can be dismissed for the session', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final userProvider = UserProvider(_FakeUserRepository())
-      ..setUser(const UserModel(id: 'user_1', email: 'leo@example.com'));
+      ..setUser(
+        const UserModel(
+          id: 'user_1',
+          email: 'leo@example.com',
+          populationRole: PopulationRole.student,
+        ),
+      );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -254,11 +264,12 @@ void main() {
       ),
     );
 
-    expect(find.text('Time for Your Stress Assessment'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Check in on academic well-being'), findsOneWidget);
     await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Time for Your Stress Assessment'), findsNothing);
+    expect(find.text('Check in on academic well-being'), findsNothing);
   });
 
   testWidgets('home Mental Wellbeing 101 opens mental health insights', (
@@ -707,6 +718,10 @@ class _FakeReportRepository extends ReportRepository {
 
   @override
   Future<ReportModel?> fetchLatestReport(String userId) async => latest;
+
+  @override
+  Future<String> createPlaceholderWeeklyReport(String userId) async =>
+      'test_placeholder';
 }
 
 class _FakeBreathingRepository extends BreathingRepository {}

@@ -96,6 +96,8 @@ class AdminPortalRepository {
   AccessRole get currentAccessRole => _currentAccessRole;
   bool _isSuperAdmin = false;
   bool get isSuperAdmin => _isSuperAdmin;
+  bool _mustChangePassword = false;
+  bool get mustChangePassword => _mustChangePassword;
 
   Future<void> signInStaff({
     required String schoolId,
@@ -116,6 +118,7 @@ class AdminPortalRepository {
       legacyRole: profile?['role'],
     );
     final status = StaffAccountStatus.parse(profile?['staffAccountStatus']);
+    _mustChangePassword = profile?['mustChangePassword'] == true;
     if (status == StaffAccountStatus.pending) {
       throw StateError(
         'Your staff registration is awaiting administrator approval.',
@@ -153,6 +156,7 @@ class AdminPortalRepository {
       user.uid,
     );
     final status = StaffAccountStatus.parse(profile?['staffAccountStatus']);
+    _mustChangePassword = profile?['mustChangePassword'] == true;
     final role = AccessRole.parse(
       profile?['accessRole'],
       legacyRole: profile?['role'],
@@ -209,6 +213,7 @@ class AdminPortalRepository {
   Future<void> signOut() async {
     _currentAccessRole = AccessRole.appUser;
     _isSuperAdmin = false;
+    _mustChangePassword = false;
     await FirebaseAuth.instance.signOut();
   }
 
@@ -221,6 +226,17 @@ class AdminPortalRepository {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> completeMandatoryPasswordChange(String password) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('Administrator session is missing.');
+    await user.updatePassword(password);
+    await FirebaseFunctions.instance
+        .httpsCallable('completeAdminPasswordChange')
+        .call();
+    _mustChangePassword = false;
+    await user.getIdToken(true);
   }
 
   Stream<List<College>> watchColleges() => _firestoreService

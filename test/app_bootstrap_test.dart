@@ -31,6 +31,7 @@ void main() {
         mobileApp: const MaterialApp(home: Text('Mobile application')),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('MindMate'), findsOneWidget);
     expect(find.text('Counseling Management System'), findsOneWidget);

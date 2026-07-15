@@ -14,6 +14,8 @@
     ,"profiles:apply": "npm run build && node lib/backfill_profiles.js --apply"
     ,"public-ids:dry-run": "npm run build && node lib/backfill_public_user_ids.js"
     ,"public-ids:apply": "npm run build && node lib/backfill_public_user_ids.js --apply"
+    ,"admin:dry-run": "npm run build && node lib/provision_super_admin.js"
+    ,"admin:provision": "npm run build && node lib/provision_super_admin.js --apply"
   },
   "dependencies": {
     "@google-cloud/dialogflow-cx": "^4.10.0",

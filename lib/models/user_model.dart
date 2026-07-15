@@ -28,6 +28,8 @@ class UserModel {
     this.accessRole = AccessRole.appUser,
     this.verificationStatus = VerificationStatus.pending,
     this.staffAccountStatus,
+    this.mustChangePassword = false,
+    this.passwordChangedAt,
     this.verifiedAt,
     this.verifiedBy,
     this.profileVersion = 2,
@@ -66,6 +68,8 @@ class UserModel {
   final AccessRole accessRole;
   final VerificationStatus verificationStatus;
   final StaffAccountStatus? staffAccountStatus;
+  final bool mustChangePassword;
+  final DateTime? passwordChangedAt;
   final DateTime? verifiedAt;
   final String? verifiedBy;
   final int profileVersion;
@@ -155,6 +159,8 @@ class UserModel {
     AccessRole? accessRole,
     VerificationStatus? verificationStatus,
     StaffAccountStatus? staffAccountStatus,
+    bool? mustChangePassword,
+    DateTime? passwordChangedAt,
     DateTime? verifiedAt,
     String? verifiedBy,
     int? profileVersion,
@@ -191,6 +197,8 @@ class UserModel {
       accessRole: accessRole ?? this.accessRole,
       verificationStatus: verificationStatus ?? this.verificationStatus,
       staffAccountStatus: staffAccountStatus ?? this.staffAccountStatus,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      passwordChangedAt: passwordChangedAt ?? this.passwordChangedAt,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       verifiedBy: verifiedBy ?? this.verifiedBy,
       profileVersion: profileVersion ?? this.profileVersion,
@@ -239,6 +247,8 @@ class UserModel {
         legacy: !json.containsKey('profileVersion'),
       ),
       staffAccountStatus: StaffAccountStatus.parse(json['staffAccountStatus']),
+      mustChangePassword: json['mustChangePassword'] == true,
+      passwordChangedAt: _dateOrNull(json['passwordChangedAt']),
       verifiedAt: _dateOrNull(json['verifiedAt']),
       verifiedBy: _stringOrNull(json['verifiedBy']),
       profileVersion: _intOrDefault(json['profileVersion'], 1),
@@ -281,6 +291,8 @@ class UserModel {
       'verificationStatus': verificationStatus.storedValue,
       if (staffAccountStatus != null)
         'staffAccountStatus': staffAccountStatus!.name,
+      'mustChangePassword': mustChangePassword,
+      'passwordChangedAt': passwordChangedAt?.toIso8601String(),
       'verifiedAt': verifiedAt?.toIso8601String(),
       'verifiedBy': verifiedBy ?? '',
       'profileVersion': profileVersion,

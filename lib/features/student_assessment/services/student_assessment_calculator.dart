@@ -43,7 +43,15 @@ class StudentAssessmentCalculator {
     var oftenOrAlwaysCount = 0;
     final coreScores = <double>[];
 
-    for (final answer in answers.where((answer) => !answer.isSkipped)) {
+    // A corrected answer may be represented more than once by callers that
+    // append to an answer log. Score the latest answer once per question so
+    // duplicates cannot inflate the deeper-question trigger.
+    final answerById = {
+      for (final answer in answers) answer.questionId: answer,
+    };
+    for (final answer in answerById.values.where(
+      (answer) => !answer.isSkipped,
+    )) {
       final question = coreQuestions
           .where((question) => question.id == answer.questionId)
           .firstOrNull;

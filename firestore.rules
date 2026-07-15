@@ -30,6 +30,12 @@ service cloud.firestore {
       return hasClinicalAccess();
     }
 
+    // Clinical staff may review care data, but only administrator accounts
+    // may change portal configuration and curated content.
+    function isPortalAdmin() {
+      return currentAccessRole() == 'admin';
+    }
+
     function isSystemAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/system_config/security)
@@ -117,7 +123,9 @@ service cloud.firestore {
         || isAdmin();
       allow list: if isOwner(resource.data.userId) || isAdmin();
       allow update, delete: if isAdmin()
-        || (isOwner(resource.data.userId) && resource.data.type != 'quick');
+        || (isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId
+          && resource.data.type != 'quick');
     }
 
     match /assessment_feedback/{feedbackId} {
@@ -181,7 +189,10 @@ service cloud.firestore {
 
     match /reports/{reportId} {
       allow create: if isOwner(request.resource.data.userId) || isAdmin();
-      allow read, update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if isAdmin()
+        || (isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId);
     }
 
     match /admin_status_summaries/{userId} {
@@ -194,14 +205,14 @@ service cloud.firestore {
       allow create: if isOwner(request.resource.data.userId);
       allow read, delete: if isOwner(resource.data.userId) || isAdmin();
       allow update: if (isOwner(resource.data.userId)
-        && isOwner(request.resource.data.userId)) || isAdmin();
+        && request.resource.data.userId == resource.data.userId) || isAdmin();
     }
 
     match /breathing_sessions/{sessionId} {
       allow create: if isOwner(request.resource.data.userId);
       allow read, delete: if isOwner(resource.data.userId) || isAdmin();
       allow update: if (isOwner(resource.data.userId)
-        && isOwner(request.resource.data.userId)) || isAdmin();
+        && request.resource.data.userId == resource.data.userId) || isAdmin();
     }
 
     match /mind_aid_messages/{messageId} {
@@ -324,7 +335,7 @@ service cloud.firestore {
     }
 
     match /mind_aid_config/{documentId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isPortalAdmin();
     }
 
     match /_mind_aid_events/{eventId} {
@@ -476,25 +487,38 @@ service cloud.firestore {
 
     match /inquiries/{inquiryId} {
       allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'userId', 'subject', 'message', 'category', 'email', 'name',
+          'role', 'status', 'createdAt'
+        ])
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() >= 1
+        && request.resource.data.subject.size() <= 160
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 1
+        && request.resource.data.message.size() <= 4000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
       allow read: if isOwner(resource.data.userId) || hasPortalAccess();
-      allow update: if hasPortalAccess();
+      allow update: if hasPortalAccess()
+        && request.resource.data.userId == resource.data.userId;
       allow delete: if false;
     }
 
     match /insight_categories/{categoryId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isPortalAdmin();
     }
 
     match /insight_content/{contentId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isPortalAdmin();
     }
 
     match /insight_rules/{ruleId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isPortalAdmin();
     }
 
     match /recommendations/{recommendationId} {

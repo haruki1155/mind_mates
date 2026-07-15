@@ -12,6 +12,7 @@ import '../../../repositories/admin_portal_repository.dart';
 import 'admin_status_dashboard_screen.dart';
 import 'staff_registration_screen.dart';
 import 'user_management_page.dart';
+import 'admin_change_password_screen.dart';
 
 const _yellow = Color(0xFFF6B900);
 const _orange = Color(0xFFFF9700);
@@ -87,7 +88,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => AdminPortalHome(repository: repository),
+          builder: (_) => repository.mustChangePassword
+              ? AdminChangePasswordScreen(repository: repository)
+              : AdminPortalHome(repository: repository),
         ),
       );
     } catch (error) {
@@ -105,87 +108,91 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: const Color(0xFFFFF4CF),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 375),
-        child: Card(
-          elevation: 0,
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(40, 38, 40, 52),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/images/Login/logo.png',
-                  height: 72,
-                  errorBuilder: (_, _, _) => const Icon(
-                    Icons.psychology_alt_rounded,
-                    color: _yellow,
-                    size: 62,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'MindMate',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Counseling Management System',
-                  style: TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 34),
-                _LoginField(
-                  label: 'Email',
-                  hint: 'Enter your email address',
-                  controller: _schoolId,
-                ),
-                const SizedBox(height: 14),
-                _LoginField(
-                  label: 'Password',
-                  hint: 'Enter your password',
-                  obscure: true,
-                  controller: _password,
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _yellow,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    onPressed: _submitting ? null : _signIn,
-                    child: Text(
-                      _submitting ? 'Signing in...' : 'Sign in',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+    body: SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 375),
+          child: Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(40, 38, 40, 52),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/Login/logo.png',
+                    height: 72,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.psychology_alt_rounded,
+                      color: _yellow,
+                      size: 62,
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: _submitting ? null : _resetPassword,
-                  child: const Text('Forgot password?'),
-                ),
-                TextButton(
-                  onPressed: _submitting
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => StaffRegistrationScreen(
-                              repository:
-                                  widget.repository ?? AdminPortalRepository(),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'MindMate',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Counseling Management System',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 34),
+                  _LoginField(
+                    label: 'Email',
+                    hint: 'Enter your email address',
+                    controller: _schoolId,
+                  ),
+                  const SizedBox(height: 14),
+                  _LoginField(
+                    label: 'Password',
+                    hint: 'Enter your password',
+                    obscure: true,
+                    controller: _password,
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _yellow,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      onPressed: _submitting ? null : _signIn,
+                      child: Text(
+                        _submitting ? 'Signing in...' : 'Sign in',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: _submitting ? null : _resetPassword,
+                    child: const Text('Forgot password?'),
+                  ),
+                  TextButton(
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StaffRegistrationScreen(
+                                repository:
+                                    widget.repository ??
+                                    AdminPortalRepository(),
+                              ),
                             ),
                           ),
-                        ),
-                  child: const Text('Register Staff Account'),
-                ),
-              ],
+                    child: const Text('Register Staff Account'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

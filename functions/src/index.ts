@@ -453,6 +453,23 @@ export const confirmSuperAdmin = onCall(async (request) => {
   return {isSuperAdmin: true};
 });
 
+export const completeAdminPasswordChange = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  const actor = await requireSuperAdmin(actorId);
+  const target = db.collection("users").doc(actorId);
+  const audit = db.collection("admin_audit_logs").doc();
+  await db.runTransaction(async (transaction) => {
+    const profile = await transaction.get(target);
+    if (!profile.exists) throw new HttpsError("not-found", "Administrator profile not found.");
+    transaction.update(target, {mustChangePassword: false, passwordChangedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    transaction.create(audit, {actorId, actorAccessRole: actor.accessRole, targetUserId: actorId,
+      action: "initialAdminPasswordChanged", reason: "Mandatory initial password change completed",
+      before: {mustChangePassword: profile.data()?.mustChangePassword === true},
+      after: {mustChangePassword: false}, createdAt: FieldValue.serverTimestamp()});
+  });
+  return {ok: true};
+});
+
 export const requestRoleCorrection = onCall(async (request) => {
   const userId = requireAuthenticatedUser(request);
   const requestedRole = String(request.data?.requestedRole ?? "");

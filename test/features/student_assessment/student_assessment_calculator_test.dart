@@ -54,6 +54,70 @@ void main() {
       );
     });
 
+    test('does not count duplicate answer records twice', () {
+      final questions = [
+        for (var index = 0; index < 3; index++)
+          StudentAssessmentQuestion(
+            id: 'core_$index',
+            text: 'Question $index',
+            section: AssessmentSection.academicCore,
+            direction: AssessmentDirection.risk,
+          ),
+      ];
+      final answers = [
+        for (final question in questions)
+          StudentAssessmentAnswer(
+            questionId: question.id,
+            answer: LikertAnswer.never,
+          ),
+        const StudentAssessmentAnswer(
+          questionId: 'core_0',
+          answer: LikertAnswer.often,
+        ),
+      ];
+
+      expect(
+        StudentAssessmentCalculator.shouldShowDeeperQuestions(
+          questions: questions,
+          answers: answers,
+          coreSection: AssessmentSection.academicCore,
+        ),
+        isFalse,
+      );
+    });
+
+    test('ignores answers for unknown question IDs', () {
+      final questions = [
+        for (var index = 0; index < 3; index++)
+          StudentAssessmentQuestion(
+            id: 'known_$index',
+            text: 'Question $index',
+            section: AssessmentSection.academicCore,
+            direction: AssessmentDirection.risk,
+          ),
+      ];
+      final answers = [
+        for (final question in questions)
+          StudentAssessmentAnswer(
+            questionId: question.id,
+            answer: LikertAnswer.never,
+          ),
+        const StudentAssessmentAnswer(
+          questionId: 'unknown',
+          answer: LikertAnswer.always,
+        ),
+      ];
+
+      expect(
+        StudentAssessmentCalculator.shouldShowDeeperQuestions(
+          questions: questions,
+          answers: answers,
+          coreSection: AssessmentSection.academicCore,
+        ),
+        isFalse,
+      );
+    });
+
     test('calculates weighted student result', () {
       final questions = StudentAssessmentQuestions.questions
           .where((question) => !question.isConditional)
@@ -203,13 +267,42 @@ void main() {
     );
 
     test('uses consistent concern-band boundaries', () {
+      expect(StudentAssessmentCalculator.getStatus(0), 'Low Concern');
       expect(StudentAssessmentCalculator.getStatus(20), 'Low Concern');
       expect(StudentAssessmentCalculator.getStatus(20.01), 'Watchful');
       expect(StudentAssessmentCalculator.getStatus(40), 'Watchful');
       expect(StudentAssessmentCalculator.getStatus(60), 'Moderate Concern');
       expect(StudentAssessmentCalculator.getStatus(80), 'Elevated Concern');
       expect(StudentAssessmentCalculator.getStatus(80.01), 'High Concern');
+      expect(StudentAssessmentCalculator.getStatus(100), 'High Concern');
     });
+
+    test(
+      'serializes nullable results and answer metadata without losing values',
+      () {
+        const answer = StudentAssessmentAnswer(
+          questionId: 'q1',
+          answer: LikertAnswer.often,
+          isSkipped: true,
+        );
+        expect(answer.toJson(), {
+          'questionId': 'q1',
+          'answer': 'often',
+          'value': 4,
+          'isSkipped': true,
+        });
+
+        final result = StudentAssessmentCalculator.calculate(
+          questions: const [],
+          answers: const [],
+        );
+        final json = result.toJson();
+        expect(json['overallScore'], isNull);
+        expect(json['status'], 'Insufficient Responses');
+        expect(json['totalResponses'], 0);
+        expect(json['interpretation'], isA<Map<String, Object>>());
+      },
+    );
 
     test(
       'does not trigger faculty deeper questions from protective answers',

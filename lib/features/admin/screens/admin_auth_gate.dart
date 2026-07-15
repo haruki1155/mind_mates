@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../repositories/admin_portal_repository.dart';
 import 'admin_portal.dart';
+import 'admin_change_password_screen.dart';
 
 class AdminAuthGate extends StatefulWidget {
   const AdminAuthGate({super.key});
@@ -20,7 +21,9 @@ class _AdminAuthGateState extends State<AdminAuthGate> {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
       return snapshot.data == true
-          ? AdminPortalHome(repository: repository)
+          ? repository.mustChangePassword
+                ? AdminChangePasswordScreen(repository: repository)
+                : AdminPortalHome(repository: repository)
           : AdminLoginScreen(repository: repository);
     },
   );
