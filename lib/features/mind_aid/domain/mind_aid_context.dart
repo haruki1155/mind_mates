@@ -10,7 +10,7 @@ class MindAidAssessmentContext {
   });
 
   final String userType;
-  final double overallScore;
+  final double? overallScore;
   final String status;
   final List<String> mainConcernAreas;
   final Map<String, double> subscaleScores;
@@ -231,7 +231,7 @@ class MindAidContext {
   final MindAidWellnessSnapshot? wellnessSnapshot;
 
   int? get effectiveAssessmentScore {
-    final fullScore = assessment?.overallScore.round();
+    final fullScore = assessment?.overallScore?.round();
     return fullScore ??
         quickAssessment?.score ??
         assessmentScore ??

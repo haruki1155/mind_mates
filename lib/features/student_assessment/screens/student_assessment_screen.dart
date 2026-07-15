@@ -59,6 +59,10 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   children: [
                     _AssessmentHeader(
                       progress: provider.studentProgress,
+                      categoryProgress: provider.studentCategoryProgress,
+                      categoryProgressLabel:
+                          provider.studentCategoryProgressLabel,
+                      category: question.section.label,
                       title: provider.activeAssessmentTitle,
                     ),
                     const Padding(
@@ -105,6 +109,8 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         child: _QuestionBody(
                           key: ValueKey(question.id),
                           question: question,
+                          selectedAnswer: provider.currentStudentAnswer,
+                          canGoBack: provider.canGoBackStudentQuestion,
                           onAnswer: (answer) {
                             final wasLast = provider.isLastStudentQuestion;
                             provider.answerCurrentStudentQuestion(answer);
@@ -114,15 +120,7 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                               );
                             }
                           },
-                          onSkip: () {
-                            final wasLast = provider.isLastStudentQuestion;
-                            provider.skipCurrentStudentQuestion();
-                            if (wasLast && context.mounted) {
-                              Navigator.of(context).pushReplacementNamed(
-                                RouteNames.studentAssessmentComplete,
-                              );
-                            }
-                          },
+                          onBack: provider.goBackStudentQuestion,
                         ),
                       ),
                     ),
@@ -139,9 +137,18 @@ class _StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 }
 
 class _AssessmentHeader extends StatelessWidget {
-  const _AssessmentHeader({required this.progress, required this.title});
+  const _AssessmentHeader({
+    required this.progress,
+    required this.categoryProgress,
+    required this.categoryProgressLabel,
+    required this.category,
+    required this.title,
+  });
 
   final double progress;
+  final double categoryProgress;
+  final String categoryProgressLabel;
+  final String category;
   final String title;
 
   @override
@@ -179,7 +186,7 @@ class _AssessmentHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Answer honestly for the best insights',
+                      'Assessment completion',
                       style: TextStyle(
                         color: _StudentPalette.secondaryText,
                         fontSize: 11,
@@ -244,6 +251,25 @@ class _AssessmentHeader extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 9),
+          Text(
+            '$category · $categoryProgressLabel',
+            style: const TextStyle(
+              color: _StudentPalette.secondaryText,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: categoryProgress.clamp(0, 1),
+              minHeight: 5,
+              backgroundColor: Colors.white,
+              valueColor: const AlwaysStoppedAnimation(_StudentPalette.text),
+            ),
+          ),
         ],
       ),
     );
@@ -254,13 +280,17 @@ class _QuestionBody extends StatelessWidget {
   const _QuestionBody({
     super.key,
     required this.question,
+    required this.selectedAnswer,
+    required this.canGoBack,
     required this.onAnswer,
-    required this.onSkip,
+    required this.onBack,
   });
 
   final StudentAssessmentQuestion question;
+  final LikertAnswer? selectedAnswer;
+  final bool canGoBack;
   final ValueChanged<LikertAnswer> onAnswer;
-  final VoidCallback onSkip;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -274,7 +304,7 @@ class _QuestionBody extends StatelessWidget {
               _SectionPill(label: question.section.label),
               const Spacer(),
               TextButton(
-                onPressed: onSkip,
+                onPressed: canGoBack ? onBack : null,
                 style: TextButton.styleFrom(
                   foregroundColor: _StudentPalette.secondaryText,
                   minimumSize: const Size(0, 28),
@@ -285,10 +315,39 @@ class _QuestionBody extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                child: const Text('Skip'),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back_rounded, size: 17),
+                    SizedBox(width: 4),
+                    Text('Back'),
+                  ],
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Text(
+            _categoryPurpose(question.section),
+            style: const TextStyle(
+              color: _StudentPalette.secondaryText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+          ),
+          if (question.isConditional) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'This optional follow-up helps explain your earlier answers. It does not increase your numeric category score.',
+              style: TextStyle(
+                color: _StudentPalette.secondaryText,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           Text(
             question.text,
@@ -301,7 +360,11 @@ class _QuestionBody extends StatelessWidget {
           ),
           const SizedBox(height: 52),
           for (final answer in LikertAnswer.values) ...[
-            _LikertOption(answer: answer, onTap: () => onAnswer(answer)),
+            _LikertOption(
+              answer: answer,
+              selected: selectedAnswer == answer,
+              onTap: () => onAnswer(answer),
+            ),
             const SizedBox(height: 13),
           ],
           const SizedBox(height: 30),
@@ -319,6 +382,29 @@ class _QuestionBody extends StatelessWidget {
     );
   }
 }
+
+String _categoryPurpose(AssessmentSection section) => switch (section) {
+  AssessmentSection.academicCore || AssessmentSection.academicDeeper =>
+    'Explores how academic demands may be affecting your daily well-being.',
+  AssessmentSection.financialConcern =>
+    'Explores how financial concerns may be affecting study and well-being.',
+  AssessmentSection.socialAdjustment =>
+    'Explores connection, belonging, and access to social support.',
+  AssessmentSection.workplaceStressCore ||
+  AssessmentSection.workplaceStressDeeper ||
+  AssessmentSection.workplaceResponsibilityCore ||
+  AssessmentSection.workplaceResponsibilityDeeper =>
+    'Explores how workplace demands may be affecting daily well-being.',
+  AssessmentSection.professionalSupport || AssessmentSection.workplaceSupport =>
+    'Explores support, communication, and respect in the workplace.',
+  AssessmentSection.professionalWellBeing ||
+  AssessmentSection.workplaceWellBeing =>
+    'Explores coping, motivation, and well-being at work.',
+  AssessmentSection.sleepRest =>
+    'Explores sleep quality, rest, and daytime effects.',
+  AssessmentSection.emotionalWellBeing =>
+    'Explores emotional balance, coping, hope, and current strain.',
+};
 
 class _SectionPill extends StatelessWidget {
   const _SectionPill({required this.label});
@@ -347,9 +433,14 @@ class _SectionPill extends StatelessWidget {
 }
 
 class _LikertOption extends StatefulWidget {
-  const _LikertOption({required this.answer, required this.onTap});
+  const _LikertOption({
+    required this.answer,
+    required this.selected,
+    required this.onTap,
+  });
 
   final LikertAnswer answer;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -368,12 +459,13 @@ class _LikertOptionState extends State<_LikertOption> {
 
   @override
   Widget build(BuildContext context) {
+    final highlighted = _pressed || widget.selected;
     return AnimatedScale(
       scale: _pressed ? 0.97 : 1,
       duration: const Duration(milliseconds: 80),
       curve: Curves.easeOutCubic,
       child: Material(
-        color: _pressed
+        color: highlighted
             ? QuickAssessmentPalette.selectedFill
             : _StudentPalette.card,
         borderRadius: BorderRadius.circular(10),
@@ -389,10 +481,10 @@ class _LikertOptionState extends State<_LikertOption> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _pressed
+                color: highlighted
                     ? _StudentPalette.border
                     : _StudentPalette.softBorder,
-                width: _pressed ? 2 : 1,
+                width: highlighted ? 2 : 1,
               ),
               boxShadow: [
                 BoxShadow(

@@ -58,6 +58,7 @@ class AssessmentProvider extends ChangeNotifier {
   bool get hasStudentAssessmentStarted => _studentQuestions.isNotEmpty;
   bool get isLastStudentQuestion =>
       _studentQuestionIndex == _studentQuestions.length - 1;
+  bool get canGoBackStudentQuestion => _studentQuestionIndex > 0;
   AssessmentUserType get activeAssessmentUserType {
     switch (_selectedRole) {
       case AssessmentRole.faculty:
@@ -83,12 +84,49 @@ class AssessmentProvider extends ChangeNotifier {
 
   double get studentProgress {
     if (_studentQuestions.isEmpty) return 0;
-    return _studentQuestionIndex / _studentQuestions.length;
+    return (_studentQuestionIndex + 1) / _studentQuestions.length;
+  }
+
+  double get studentCategoryProgress {
+    final current = currentStudentQuestion;
+    if (current == null) return 0;
+    final categoryQuestions = _studentQuestions
+        .where((question) => question.section == current.section)
+        .toList();
+    final position = categoryQuestions.indexWhere(
+      (question) => question.id == current.id,
+    );
+    return categoryQuestions.isEmpty
+        ? 0
+        : (position + 1) / categoryQuestions.length;
+  }
+
+  String get studentCategoryProgressLabel {
+    final current = currentStudentQuestion;
+    if (current == null) return '';
+    final categoryQuestions = _studentQuestions
+        .where((question) => question.section == current.section)
+        .toList();
+    final position = categoryQuestions.indexWhere(
+      (question) => question.id == current.id,
+    );
+    return 'Question ${position + 1} of ${categoryQuestions.length} in this category';
   }
 
   StudentAssessmentQuestion? get currentStudentQuestion {
     if (_studentQuestions.isEmpty) return null;
     return _studentQuestions[_studentQuestionIndex];
+  }
+
+  LikertAnswer? get currentStudentAnswer {
+    final question = currentStudentQuestion;
+    if (question == null) return null;
+    return _studentAnswers
+        .where(
+          (answer) => answer.questionId == question.id && !answer.isSkipped,
+        )
+        .firstOrNull
+        ?.answer;
   }
 
   QuickAssessmentOption? selectedOptionFor(String questionId) {
@@ -243,16 +281,8 @@ class AssessmentProvider extends ChangeNotifier {
       ),
     );
 
-    if (_isDeeperTriggerPoint(question) && _shouldShowDeeperQuestions()) {
-      final deeperQuestions = _questionsForActiveRole()
-          .where((question) => question.isConditional)
-          .toList();
-      final insertIndex = _studentQuestionIndex + 1;
-      _studentQuestions = [
-        ..._studentQuestions.take(insertIndex),
-        ...deeperQuestions,
-        ..._studentQuestions.skip(insertIndex),
-      ];
+    if (_isDeeperTriggerPoint(question)) {
+      _syncDeeperQuestionsAfterTrigger();
     }
 
     if (isLastStudentQuestion) {
@@ -269,8 +299,11 @@ class AssessmentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void skipCurrentStudentQuestion() {
-    answerCurrentStudentQuestion(LikertAnswer.sometimes, isSkipped: true);
+  void goBackStudentQuestion() {
+    if (!canGoBackStudentQuestion) return;
+    _studentResult = null;
+    _studentQuestionIndex -= 1;
+    notifyListeners();
   }
 
   Future<Map<String, Object>?> saveStudentAssessmentForUser(String userId) {
@@ -281,6 +314,16 @@ class AssessmentProvider extends ChangeNotifier {
       userId: userId,
       result: result,
       answers: _studentAnswers,
+    );
+  }
+
+  Future<void> saveAssessmentClarityFeedback(String clarity) {
+    final result = _studentResult;
+    if (result == null) return Future.value();
+    return _repository.saveAssessmentClarityFeedback(
+      clarity: clarity,
+      algorithmVersion: result.interpretation.algorithmVersion,
+      questionSetVersion: result.interpretation.questionSetVersion,
     );
   }
 
@@ -323,6 +366,34 @@ class AssessmentProvider extends ChangeNotifier {
       questions: questions,
       answers: _studentAnswers,
       coreSection: coreSection,
+    );
+  }
+
+  void _syncDeeperQuestionsAfterTrigger() {
+    final triggerIndex = _studentQuestionIndex;
+    final conditionalIds = _questionsForActiveRole()
+        .where((question) => question.isConditional)
+        .map((question) => question.id)
+        .toSet();
+    _studentQuestions = _studentQuestions
+        .where((question) => !question.isConditional)
+        .toList();
+
+    if (_shouldShowDeeperQuestions()) {
+      final deeperQuestions = _questionsForActiveRole()
+          .where((question) => question.isConditional)
+          .toList();
+      final insertIndex = triggerIndex + 1;
+      _studentQuestions = [
+        ..._studentQuestions.take(insertIndex),
+        ...deeperQuestions,
+        ..._studentQuestions.skip(insertIndex),
+      ];
+      return;
+    }
+
+    _studentAnswers.removeWhere(
+      (answer) => conditionalIds.contains(answer.questionId),
     );
   }
 }

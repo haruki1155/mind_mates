@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../database/firestore_collections.dart';
 import '../features/quick_assessment/models/quick_assessment_models.dart';
 import '../features/student_assessment/models/student_assessment_models.dart';
+import '../features/student_assessment/data/student_assessment_questions.dart';
 import '../services/firebase/firestore_service.dart';
 
 class AssessmentRepository {
@@ -106,13 +107,31 @@ class AssessmentRepository {
       'non-teaching personnel' || 'non-teaching' || 'staff' => 'nonTeaching',
       _ => '',
     };
+    final questionBank = switch (populationRole) {
+      'teaching' => StudentAssessmentQuestions.facultyQuestions,
+      'nonTeaching' => StudentAssessmentQuestions.staffQuestions,
+      _ => StudentAssessmentQuestions.questions,
+    };
+    final questionById = {
+      for (final question in questionBank) question.id: question,
+    };
+    final responseSnapshots = answers.map((answer) {
+      final question = questionById[answer.questionId];
+      return <String, Object>{
+        ...answer.toJson(),
+        if (question != null) 'questionText': question.text,
+        if (question != null) 'category': question.section.label,
+        if (question != null) 'direction': question.direction.name,
+        'answerLabel': answer.answer.label,
+      };
+    }).toList();
     final payload = <String, Object>{
       'userId': userId,
       'type': result.userType.toLowerCase(),
       'role': result.userType.toLowerCase(),
       'populationRole': populationRole,
       ...result.toJson(),
-      'responses': answers.map((answer) => answer.toJson()).toList(),
+      'responses': responseSnapshots,
       'createdAt': FieldValue.serverTimestamp(),
     };
 
@@ -122,6 +141,20 @@ class AssessmentRepository {
     );
 
     return payload;
+  }
+
+  Future<void> saveAssessmentClarityFeedback({
+    required String clarity,
+    required String algorithmVersion,
+    required String questionSetVersion,
+  }) async {
+    await _firestoreService
+        .createDocument(FirestoreCollections.assessmentFeedback, {
+          'clarity': clarity,
+          'algorithmVersion': algorithmVersion,
+          'questionSetVersion': questionSetVersion,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   Future<Map<String, dynamic>?> fetchLatestAssessment(String userId) async {

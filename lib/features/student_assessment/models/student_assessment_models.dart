@@ -125,7 +125,7 @@ class StudentAssessmentResult {
   });
 
   final String userType;
-  final double overallScore;
+  final double? overallScore;
   final String status;
   final Map<String, double> subscaleScores;
   final List<String> mainConcernAreas;
@@ -137,7 +137,7 @@ class StudentAssessmentResult {
   Map<String, Object> toJson() {
     return {
       'userType': userType,
-      'overallScore': overallScore,
+      'overallScore': ?overallScore,
       'status': status,
       'subscaleScores': subscaleScores,
       'mainConcernAreas': mainConcernAreas,

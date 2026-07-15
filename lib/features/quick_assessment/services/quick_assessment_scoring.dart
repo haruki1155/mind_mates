@@ -124,8 +124,14 @@ class QuickAssessmentScoring {
         band: band,
         answeredCount: 1,
         skippedCount: 0,
+        presentedCount: 1,
+        completionPercent: 100,
+        isScorable: true,
         interpretation:
             '${entry.key} is currently in the ${band.label.toLowerCase()} screening range.',
+        suggestedAction: recommendedNextStepForLevel(
+          overallLevel(averageConcernScore(responses)),
+        ),
       );
     }).toList()..sort((a, b) => b.score.compareTo(a.score));
     final level = overallLevel(averageConcernScore(responses));

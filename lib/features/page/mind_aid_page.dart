@@ -343,7 +343,7 @@ class _MindAidPageState extends State<MindAidPage> {
         'full',
         assessment.userType,
         assessment.status,
-        assessment.overallScore.round(),
+        assessment.overallScore?.round(),
         assessment.mainConcernAreas.join('|'),
         categoryKey,
         _snapshotKey(contextValue.wellnessSnapshot),

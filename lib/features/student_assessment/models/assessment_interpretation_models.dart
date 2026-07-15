@@ -45,7 +45,11 @@ class AssessmentDomainResult {
     required this.band,
     required this.answeredCount,
     required this.skippedCount,
+    required this.presentedCount,
+    required this.completionPercent,
+    required this.isScorable,
     required this.interpretation,
+    required this.suggestedAction,
     this.elevatedIndicators = const [],
     this.protectiveIndicators = const [],
   });
@@ -55,7 +59,11 @@ class AssessmentDomainResult {
   final AssessmentConcernBand band;
   final int answeredCount;
   final int skippedCount;
+  final int presentedCount;
+  final double completionPercent;
+  final bool isScorable;
   final String interpretation;
+  final String suggestedAction;
   final List<String> elevatedIndicators;
   final List<String> protectiveIndicators;
 
@@ -68,7 +76,11 @@ class AssessmentDomainResult {
           AssessmentConcernBand.low,
       answeredCount: _int(json['answeredCount']),
       skippedCount: _int(json['skippedCount']),
+      presentedCount: _int(json['presentedCount']),
+      completionPercent: _double(json['completionPercent']),
+      isScorable: json['isScorable'] == true,
       interpretation: json['interpretation']?.toString() ?? '',
+      suggestedAction: json['suggestedAction']?.toString() ?? '',
       elevatedIndicators: _strings(json['elevatedIndicators']),
       protectiveIndicators: _strings(json['protectiveIndicators']),
     );
@@ -80,7 +92,11 @@ class AssessmentDomainResult {
     'band': band.name,
     'answeredCount': answeredCount,
     'skippedCount': skippedCount,
+    'presentedCount': presentedCount,
+    'completionPercent': completionPercent,
+    'isScorable': isScorable,
     'interpretation': interpretation,
+    'suggestedAction': suggestedAction,
     'elevatedIndicators': elevatedIndicators,
     'protectiveIndicators': protectiveIndicators,
   };
@@ -134,8 +150,8 @@ class AssessmentInterpretation {
     required this.suggestedActions,
     this.protectiveFactors = const [],
     this.functionalImpactFlags = const [],
-    this.algorithmVersion = 'wellness_interpretation_v2',
-    this.questionSetVersion = 'role_based_v2',
+    this.algorithmVersion = 'wellness_interpretation_v3',
+    this.questionSetVersion = 'role_based_v3',
     this.recallPeriodDays = 14,
   });
 
@@ -156,7 +172,7 @@ class AssessmentInterpretation {
     final quality = _map(json['responseQuality']);
     return AssessmentInterpretation(
       algorithmVersion:
-          json['algorithmVersion']?.toString() ?? 'wellness_interpretation_v2',
+          json['algorithmVersion']?.toString() ?? 'wellness_interpretation_v3',
       questionSetVersion: json['questionSetVersion']?.toString() ?? 'legacy',
       recallPeriodDays: _int(json['recallPeriodDays'], fallback: 14),
       supportPriority:

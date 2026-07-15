@@ -80,6 +80,19 @@ service cloud.firestore {
         || (isOwner(resource.data.userId) && resource.data.type != 'quick');
     }
 
+    match /assessment_feedback/{feedbackId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'clarity', 'algorithmVersion', 'questionSetVersion', 'createdAt'
+        ])
+        && request.resource.data.clarity in ['clear', 'partlyClear', 'unclear']
+        && request.resource.data.algorithmVersion is string
+        && request.resource.data.questionSetVersion is string
+        && request.resource.data.createdAt == request.time;
+      allow read: if hasPortalAccess();
+      allow update, delete: if false;
+    }
+
     function validSecretChatCategories(data) {
       return data.categories is list
         && data.categories.size() >= 1

@@ -89,6 +89,14 @@ class _StudentAssessmentCompleteScreenState
                             child: _CategoryScoreDots(result: result),
                           ),
                           const SizedBox(height: 12),
+                          _AnimatedResultSection(
+                            delay: 110,
+                            child: _PilotFeedbackCard(
+                              onSelected:
+                                  provider.saveAssessmentClarityFeedback,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           const _AnimatedResultSection(
                             delay: 130,
                             child: _PaccCard(),
@@ -190,13 +198,13 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 508,
+      height: 570,
       decoration: const BoxDecoration(color: QuickAssessmentPalette.primary),
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
           Positioned(
-            top: 380,
+            top: 442,
             left: -80,
             right: -80,
             child: Container(
@@ -282,7 +290,7 @@ class _HeroBadge extends StatelessWidget {
 class _ScoreGauge extends StatefulWidget {
   const _ScoreGauge({required this.score, required this.status});
 
-  final double score;
+  final double? score;
   final String status;
 
   @override
@@ -293,7 +301,7 @@ class _ScoreGaugeState extends State<_ScoreGauge> {
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: widget.score),
+      tween: Tween(begin: 0, end: widget.score ?? 0),
       duration: const Duration(milliseconds: 900),
       curve: Curves.easeOutQuart,
       builder: (context, animatedScore, _) {
@@ -318,7 +326,7 @@ class _ScoreGaugeState extends State<_ScoreGauge> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Overall Score',
+                  'Secondary overall concern index',
                   style: TextStyle(
                     color: _ResultPalette.text,
                     fontSize: 15,
@@ -342,7 +350,9 @@ class _ScoreGaugeState extends State<_ScoreGauge> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            animatedScore.round().toString(),
+                            widget.score == null
+                                ? '—'
+                                : animatedScore.round().toString(),
                             style: const TextStyle(
                               color: _ResultPalette.text,
                               fontSize: 38,
@@ -351,8 +361,8 @@ class _ScoreGaugeState extends State<_ScoreGauge> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            '/ 100',
+                          Text(
+                            widget.score == null ? 'Not available' : '/ 100',
                             style: TextStyle(
                               color: _ResultPalette.mutedText,
                               fontSize: 13,
@@ -411,8 +421,10 @@ class _ScoreGaugeState extends State<_ScoreGauge> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Higher score means higher concern level',
+                Text(
+                  widget.score == null
+                      ? 'More answers are needed in one or more categories.'
+                      : 'This summarizes category patterns; it is not a mental-health grade.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _ResultPalette.mutedText,
@@ -619,6 +631,66 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
+class _PilotFeedbackCard extends StatefulWidget {
+  const _PilotFeedbackCard({required this.onSelected});
+
+  final Future<void> Function(String clarity) onSelected;
+
+  @override
+  State<_PilotFeedbackCard> createState() => _PilotFeedbackCardState();
+}
+
+class _PilotFeedbackCardState extends State<_PilotFeedbackCard> {
+  bool _submitted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Help improve this university pilot', style: _ResultText.title),
+          const SizedBox(height: 8),
+          Text(
+            _submitted
+                ? 'Thank you. Your anonymous clarity rating was recorded.'
+                : 'Were your category results easy to understand? No written response or user ID is stored.',
+            style: _ResultText.body,
+          ),
+          if (!_submitted) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                _feedbackButton('Clear', 'clear'),
+                _feedbackButton('Partly clear', 'partlyClear'),
+                _feedbackButton('Unclear', 'unclear'),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _feedbackButton(String label, String value) {
+    return OutlinedButton(
+      onPressed: () async {
+        try {
+          await widget.onSelected(value);
+          if (mounted) setState(() => _submitted = true);
+        } catch (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to save feedback right now.')),
+          );
+        }
+      },
+      child: Text(label),
+    );
+  }
+}
+
 class _InsightsCard extends StatelessWidget {
   const _InsightsCard({required this.result});
 
@@ -683,14 +755,10 @@ class _CategoryBars extends StatelessWidget {
         children: [
           Text('Wellness Domains', style: _ResultText.title),
           const SizedBox(height: 16),
-          for (final entry in result.subscaleScores.entries.indexed)
+          for (final entry in result.interpretation.domainResults.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: 13),
-              child: _ScoreBar(
-                label: entry.$2.key,
-                score: entry.$2.value,
-                staggerIndex: entry.$1,
-              ),
+              child: _ScoreBar(domain: entry.$2, staggerIndex: entry.$1),
             ),
           const SizedBox(height: 8),
           const Center(
@@ -711,14 +779,9 @@ class _CategoryBars extends StatelessWidget {
 }
 
 class _ScoreBar extends StatelessWidget {
-  const _ScoreBar({
-    required this.label,
-    required this.score,
-    required this.staggerIndex,
-  });
+  const _ScoreBar({required this.domain, required this.staggerIndex});
 
-  final String label;
-  final double score;
+  final AssessmentDomainResult domain;
   final int staggerIndex;
 
   @override
@@ -726,7 +789,7 @@ class _ScoreBar extends StatelessWidget {
     final duration = Duration(milliseconds: 430 + (staggerIndex * 45));
 
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: score / 100),
+      tween: Tween(begin: 0, end: domain.isScorable ? domain.score / 100 : 0),
       duration: duration,
       curve: Curves.easeOutQuart,
       builder: (context, value, _) {
@@ -737,7 +800,7 @@ class _ScoreBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    label,
+                    domain.domain,
                     style: const TextStyle(
                       color: _ResultPalette.text,
                       fontSize: 12,
@@ -746,7 +809,9 @@ class _ScoreBar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${(score * value).round()}%',
+                  domain.isScorable
+                      ? '${(domain.score * value).round()}% · ${domain.band.label}'
+                      : 'Insufficient responses',
                   style: const TextStyle(
                     color: _ResultPalette.secondaryText,
                     fontSize: 12,
@@ -759,12 +824,23 @@ class _ScoreBar extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
-                value: value,
+                value: domain.isScorable ? value : null,
                 minHeight: 8,
                 backgroundColor: Colors.white,
                 valueColor: const AlwaysStoppedAnimation(
                   QuickAssessmentPalette.primary,
                 ),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              '${domain.interpretation} ${domain.suggestedAction} '
+              '${domain.answeredCount}/${domain.presentedCount} core questions answered.',
+              style: const TextStyle(
+                color: _ResultPalette.mutedText,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
               ),
             ),
           ],

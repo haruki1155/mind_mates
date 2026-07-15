@@ -156,10 +156,12 @@ class MindAidResponseComposer {
     final concernText = assessment.mainConcernAreas.isEmpty
         ? top?.key
         : assessment.mainConcernAreas.take(2).join(' and ');
+    final scoreText = assessment.overallScore == null
+        ? 'An overall concern index was not calculated because one or more categories needed additional responses.'
+        : 'Your secondary overall concern index is ${assessment.overallScore!.round()}/100, with a status of ${assessment.status}.';
     final buffer = StringBuffer(
       'I reviewed your latest ${assessment.userType.toLowerCase()} assessment. '
-      'Your overall score is ${assessment.overallScore.round()}/100, with a status of ${assessment.status}. '
-      'This is not a diagnosis, but it may indicate areas that deserve extra care.',
+      '$scoreText This experimental university wellness screener is not a diagnosis.',
     );
 
     if (top != null) {

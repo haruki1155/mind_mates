@@ -103,9 +103,22 @@ class _AssessmentCard extends StatelessWidget {
             const Text('Wellness domain profile'),
             ...domains.map(
               (domain) => Text(
-                '${domain['domain']}: ${domain['score']}/100 '
-                '(${domain['band']})',
+                domain['isScorable'] == true
+                    ? '${domain['domain']}: ${domain['score']}/100 '
+                          '(${domain['band']}); ${domain['answeredCount']}/${domain['presentedCount']} core items answered'
+                    : '${domain['domain']}: insufficient responses '
+                          '(${domain['answeredCount']}/${domain['presentedCount']} core items answered)',
               ),
+            ),
+            _ListSection(
+              title: 'Flagged responses by category',
+              values: domains
+                  .expand(
+                    (domain) => _strings(
+                      domain['elevatedIndicators'],
+                    ).map((item) => '${domain['domain']}: $item'),
+                  )
+                  .toList(),
             ),
             _ListSection(
               title: 'Protective factors',
@@ -137,7 +150,7 @@ class _AssessmentCard extends StatelessWidget {
               ],
             ),
             const Text(
-              'This custom wellness screening supports review and does not provide a diagnosis.',
+              'Experimental university wellness-awareness screener. This is not a formally validated instrument or a diagnosis and does not replace professional judgment.',
             ),
           ],
         ),
@@ -155,11 +168,15 @@ class _TrendSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final previousScores = {
-      for (final domain in previous)
+      for (final domain in previous.where(
+        (domain) => domain['isScorable'] == true,
+      ))
         domain['domain']?.toString() ?? '': _number(domain['score']),
     };
     final comparable = current.where(
-      (domain) => previousScores.containsKey(domain['domain']?.toString()),
+      (domain) =>
+          domain['isScorable'] == true &&
+          previousScores.containsKey(domain['domain']?.toString()),
     );
     return Padding(
       padding: const EdgeInsets.only(top: 12),

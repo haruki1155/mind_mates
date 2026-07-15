@@ -77,7 +77,7 @@ void main() {
       expect(result.subscaleScores['Sleep and Rest'], 50);
       expect(
         result.interpretation.algorithmVersion,
-        'wellness_interpretation_v2',
+        'wellness_interpretation_v3',
       );
       expect(result.interpretation.responseQuality.completionPercent, 100);
     });
@@ -125,6 +125,90 @@ void main() {
       );
 
       expect(result.interpretation.protectiveFactors, contains(question.text));
+    });
+
+    test('does not report missing categories as zero concern', () {
+      final questions = StudentAssessmentQuestions.questions
+          .where(
+            (question) => question.section == AssessmentSection.academicCore,
+          )
+          .toList();
+      final answers = [
+        for (final question in questions)
+          StudentAssessmentAnswer(
+            questionId: question.id,
+            answer: LikertAnswer.never,
+          ),
+      ];
+
+      final result = StudentAssessmentCalculator.calculate(
+        questions: StudentAssessmentQuestions.questions
+            .where((question) => !question.isConditional)
+            .toList(),
+        answers: answers,
+      );
+
+      expect(result.overallScore, isNull);
+      expect(result.subscaleScores.containsKey('Sleep and Rest'), isFalse);
+      expect(
+        result.interpretation.domainResults
+            .firstWhere((domain) => domain.domain == 'Sleep and Rest')
+            .isScorable,
+        isFalse,
+      );
+    });
+
+    test(
+      'conditional follow-up answers do not change the core domain score',
+      () {
+        final core = StudentAssessmentQuestions.questions
+            .where(
+              (question) => question.section == AssessmentSection.academicCore,
+            )
+            .toList();
+        final deeper = StudentAssessmentQuestions.questions
+            .where(
+              (question) =>
+                  question.section == AssessmentSection.academicDeeper,
+            )
+            .toList();
+        final coreAnswers = [
+          for (final question in core)
+            StudentAssessmentAnswer(
+              questionId: question.id,
+              answer: LikertAnswer.often,
+            ),
+        ];
+        final withoutFollowUps = StudentAssessmentCalculator.calculate(
+          questions: [...core],
+          answers: coreAnswers,
+        );
+        final withFollowUps = StudentAssessmentCalculator.calculate(
+          questions: [...core, ...deeper],
+          answers: [
+            ...coreAnswers,
+            for (final question in deeper)
+              StudentAssessmentAnswer(
+                questionId: question.id,
+                answer: LikertAnswer.never,
+              ),
+          ],
+        );
+
+        expect(
+          withFollowUps.subscaleScores['Academic Stress'],
+          withoutFollowUps.subscaleScores['Academic Stress'],
+        );
+      },
+    );
+
+    test('uses consistent concern-band boundaries', () {
+      expect(StudentAssessmentCalculator.getStatus(20), 'Low Concern');
+      expect(StudentAssessmentCalculator.getStatus(20.01), 'Watchful');
+      expect(StudentAssessmentCalculator.getStatus(40), 'Watchful');
+      expect(StudentAssessmentCalculator.getStatus(60), 'Moderate Concern');
+      expect(StudentAssessmentCalculator.getStatus(80), 'Elevated Concern');
+      expect(StudentAssessmentCalculator.getStatus(80.01), 'High Concern');
     });
 
     test(
@@ -217,6 +301,54 @@ void main() {
         AssessmentSection.academicDeeper,
       );
     });
+
+    test('goes back and allows a previous answer to be changed', () {
+      final provider = AssessmentProvider(AssessmentRepository())
+        ..startStudentAssessment();
+
+      provider.answerCurrentStudentQuestion(LikertAnswer.always);
+      expect(provider.studentQuestionIndex, 1);
+
+      provider.goBackStudentQuestion();
+      expect(provider.studentQuestionIndex, 0);
+      expect(provider.currentStudentAnswer, LikertAnswer.always);
+
+      provider.answerCurrentStudentQuestion(LikertAnswer.rarely);
+      expect(provider.studentQuestionIndex, 1);
+      expect(
+        provider.studentAnswers
+            .singleWhere((answer) => answer.questionId == 'academic_core_1')
+            .answer,
+        LikertAnswer.rarely,
+      );
+    });
+
+    test(
+      'removes conditional questions when the trigger answer is corrected',
+      () {
+        final provider = AssessmentProvider(AssessmentRepository())
+          ..startStudentAssessment();
+
+        for (var index = 0; index < 10; index++) {
+          provider.answerCurrentStudentQuestion(
+            index == 9 ? LikertAnswer.always : LikertAnswer.never,
+          );
+        }
+        expect(provider.currentStudentQuestion?.isConditional, isTrue);
+
+        provider.goBackStudentQuestion();
+        provider.answerCurrentStudentQuestion(LikertAnswer.never);
+
+        expect(
+          provider.studentQuestions.any((question) => question.isConditional),
+          isFalse,
+        );
+        expect(
+          provider.currentStudentQuestion?.section,
+          AssessmentSection.financialConcern,
+        );
+      },
+    );
 
     test('starts faculty questions from selected role', () {
       final provider = AssessmentProvider(AssessmentRepository());
@@ -351,6 +483,8 @@ void main() {
       );
 
       expect(neutralMaterial.color, QuickAssessmentPalette.card);
+      expect(find.text('Back'), findsOneWidget);
+      expect(find.text('Skip'), findsNothing);
     });
   });
 

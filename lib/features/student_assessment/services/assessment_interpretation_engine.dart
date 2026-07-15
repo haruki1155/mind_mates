@@ -8,6 +8,7 @@ class AssessmentInterpretationEngine {
     required List<StudentAssessmentQuestion> questions,
     required List<StudentAssessmentAnswer> answers,
     required Map<String, double> domainScores,
+    required Map<String, Set<AssessmentSection>> domainSections,
     required String userType,
   }) {
     final answerById = {
@@ -53,11 +54,14 @@ class AssessmentInterpretationEngine {
     }
 
     final domainResults = <AssessmentDomainResult>[];
-    for (final entry in domainScores.entries) {
+    for (final entry in domainSections.entries) {
       final domainQuestions = questions
-          .where((question) => question.section.label == entry.key)
+          .where((question) => entry.value.contains(question.section))
           .toList();
-      final domainAnswers = domainQuestions
+      final scoredQuestions = domainQuestions
+          .where((question) => !question.isConditional)
+          .toList();
+      final domainAnswers = scoredQuestions
           .map((question) => answerById[question.id])
           .whereType<StudentAssessmentAnswer>()
           .toList();
@@ -67,21 +71,37 @@ class AssessmentInterpretationEngine {
       final domainSkipped = domainAnswers
           .where((answer) => answer.isSkipped)
           .length;
-      final band = bandFor(entry.value);
+      final domainCompletion = scoredQuestions.isEmpty
+          ? 0.0
+          : (domainAnswered / scoredQuestions.length) * 100;
+      final isScorable = domainScores.containsKey(entry.key);
+      final score = domainScores[entry.key] ?? 0;
+      final band = bandFor(score);
       domainResults.add(
         AssessmentDomainResult(
           domain: entry.key,
-          score: _round(entry.value),
+          score: _round(score),
           band: band,
           answeredCount: domainAnswered,
           skippedCount: domainSkipped,
+          presentedCount: scoredQuestions.length,
+          completionPercent: _round(domainCompletion),
+          isScorable: isScorable,
           elevatedIndicators: elevatedByDomain[entry.key] ?? const [],
           protectiveIndicators: protectiveByDomain[entry.key] ?? const [],
-          interpretation: _domainInterpretation(entry.key, band),
+          interpretation: isScorable
+              ? _domainInterpretation(entry.key, band)
+              : '${entry.key} needs more answered questions before a dependable category result can be shown.',
+          suggestedAction: isScorable
+              ? _domainAction(entry.key, band)
+              : 'Answer more ${entry.key.toLowerCase()} questions when you feel comfortable, or discuss this area directly with a counselor.',
         ),
       );
     }
-    domainResults.sort((a, b) => b.score.compareTo(a.score));
+    domainResults.sort((a, b) {
+      if (a.isScorable != b.isScorable) return a.isScorable ? -1 : 1;
+      return b.score.compareTo(a.score);
+    });
 
     final priority = _priority(
       quality: quality,
@@ -90,7 +110,9 @@ class AssessmentInterpretationEngine {
     );
     final rationale = _rationale(priority, domainResults, functionalFlags);
     final actions = _actions(priority, domainResults);
-    final focus = domainResults.where((domain) => domain.score > 40).take(3);
+    final focus = domainResults
+        .where((domain) => domain.isScorable && domain.score > 40)
+        .take(3);
     final focusText = focus.isEmpty
         ? 'No wellness domain showed a moderate or higher concern pattern.'
         : 'The main areas to review are ${focus.map((item) => item.domain).join(', ')}.';
@@ -127,6 +149,9 @@ class AssessmentInterpretationEngine {
     if (quality.confidence == AssessmentResponseConfidence.limited) {
       return AssessmentSupportPriority.insufficientResponses;
     }
+    if (domains.any((domain) => !domain.isScorable)) {
+      return AssessmentSupportPriority.insufficientResponses;
+    }
     final above80 = domains.where((domain) => domain.score > 80).length;
     final above60 = domains.where((domain) => domain.score > 60).length;
     final above40 = domains.where((domain) => domain.score > 40).length;
@@ -148,7 +173,10 @@ class AssessmentInterpretationEngine {
     List<String> functionalFlags,
   ) {
     final reasons = <String>[];
-    for (final domain in domains.where((domain) => domain.score > 40).take(3)) {
+    for (final domain
+        in domains
+            .where((domain) => domain.isScorable && domain.score > 40)
+            .take(3)) {
       reasons.add(
         '${domain.domain}: ${domain.score.toStringAsFixed(0)}/100 (${domain.band.label.toLowerCase()})',
       );
@@ -199,7 +227,8 @@ class AssessmentInterpretationEngine {
         'Speak directly with a counselor if you would prefer a conversation.',
       ];
     }
-    final top = domains.isEmpty ? null : domains.first.domain;
+    final scorable = domains.where((domain) => domain.isScorable);
+    final top = scorable.isEmpty ? null : scorable.first.domain;
     if (top != null) actions.add('Review practical support options for $top.');
     if (priority == AssessmentSupportPriority.followUpSuggested ||
         priority == AssessmentSupportPriority.promptFollowUp) {
@@ -224,6 +253,36 @@ class AssessmentInterpretationEngine {
         '$domain shows elevated strain that may benefit from follow-up.',
       AssessmentConcernBand.high =>
         '$domain shows a high concern pattern and deserves timely attention.',
+    };
+  }
+
+  static String _domainAction(String domain, AssessmentConcernBand band) {
+    final support = switch (domain) {
+      'Academic Stress' =>
+        'review workload, deadlines, and academic support options',
+      'Financial Well-Being' =>
+        'review available financial-aid or student-support resources',
+      'Social Adjustment' =>
+        'identify one trusted person or university group you can connect with',
+      'Sleep and Rest' =>
+        'choose one realistic sleep or rest routine to try this week',
+      'Emotional Well-Being' =>
+        'continue check-ins and consider a supportive conversation',
+      'Workplace Stress' || 'Workplace Responsibilities' =>
+        'review workload priorities and available workplace support',
+      'Professional Support' || 'Workplace Support' =>
+        'identify a trusted colleague, supervisor, or university support contact',
+      'Professional Well-Being' || 'Workplace Well-Being' =>
+        'choose one recovery or support step that feels manageable',
+      _ => 'review a practical support option for this area',
+    };
+    return switch (band) {
+      AssessmentConcernBand.low =>
+        'Continue the habits and support that are working in this area.',
+      AssessmentConcernBand.watchful => 'Monitor this area and $support.',
+      AssessmentConcernBand.moderate => 'Consider taking time to $support.',
+      AssessmentConcernBand.elevated || AssessmentConcernBand.high =>
+        'Consider discussing this area with university wellness support and $support.',
     };
   }
 

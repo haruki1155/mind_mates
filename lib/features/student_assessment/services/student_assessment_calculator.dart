@@ -6,27 +6,26 @@ enum AssessmentUserType { student, faculty, staff }
 class StudentAssessmentCalculator {
   const StudentAssessmentCalculator._();
 
+  static const double minimumDomainCompletion = 0.70;
+  static const int minimumDomainAnswers = 3;
+
   static double riskScore({
     required LikertAnswer answer,
     required AssessmentDirection direction,
   }) {
-    if (direction == AssessmentDirection.protective) {
-      return ((5 - answer.value) / 4) * 100;
-    }
-
-    return ((answer.value - 1) / 4) * 100;
+    return direction == AssessmentDirection.protective
+        ? ((5 - answer.value) / 4) * 100
+        : ((answer.value - 1) / 4) * 100;
   }
 
   static bool shouldShowDeeperAcademicQuestions({
     required List<StudentAssessmentQuestion> questions,
     required List<StudentAssessmentAnswer> answers,
-  }) {
-    return shouldShowDeeperQuestions(
-      questions: questions,
-      answers: answers,
-      coreSection: AssessmentSection.academicCore,
-    );
-  }
+  }) => shouldShowDeeperQuestions(
+    questions: questions,
+    answers: answers,
+    coreSection: AssessmentSection.academicCore,
+  );
 
   static bool shouldShowDeeperQuestions({
     required List<StudentAssessmentQuestion> questions,
@@ -44,17 +43,15 @@ class StudentAssessmentCalculator {
     var oftenOrAlwaysCount = 0;
     final coreScores = <double>[];
 
-    for (final answer in answers) {
-      if (answer.isSkipped) continue;
+    for (final answer in answers.where((answer) => !answer.isSkipped)) {
       final question = coreQuestions
           .where((question) => question.id == answer.questionId)
           .firstOrNull;
       if (question == null) continue;
-
-      if (answer.answer == LikertAnswer.always) alwaysCount += 1;
+      if (answer.answer == LikertAnswer.always) alwaysCount++;
       if (answer.answer == LikertAnswer.often ||
           answer.answer == LikertAnswer.always) {
-        oftenOrAlwaysCount += 1;
+        oftenOrAlwaysCount++;
       }
       coreScores.add(
         riskScore(answer: answer.answer, direction: question.direction),
@@ -71,350 +68,259 @@ class StudentAssessmentCalculator {
     required List<StudentAssessmentAnswer> answers,
     AssessmentUserType userType = AssessmentUserType.student,
   }) {
-    switch (userType) {
-      case AssessmentUserType.student:
-        return _calculateStudent(questions: questions, answers: answers);
-      case AssessmentUserType.faculty:
-        return _calculateFaculty(questions: questions, answers: answers);
-      case AssessmentUserType.staff:
-        return _calculateStaff(questions: questions, answers: answers);
+    final config = _RoleConfig.forType(userType);
+    final domainScores = <String, double>{};
+    final scorableDomains = <String, bool>{};
+    final weights = <String, double>{};
+
+    for (final domain in config.domains) {
+      final score = _scoreDomain(
+        questions: questions,
+        answers: answers,
+        sections: domain.scoredSections,
+      );
+      scorableDomains[domain.label] = score.isScorable;
+      weights[domain.label] = domain.weight;
+      if (score.isScorable) domainScores[domain.label] = _round(score.score!);
     }
-  }
 
-  static StudentAssessmentResult _calculateStudent({
-    required List<StudentAssessmentQuestion> questions,
-    required List<StudentAssessmentAnswer> answers,
-  }) {
-    final academicCoreScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.academicCore,
+    final allRequiredScorable = config.domains.every(
+      (domain) => scorableDomains[domain.label] == true,
     );
-    final hasDeeperAcademicAnswers = answers.any((answer) {
-      final question = questions
-          .where((question) => question.id == answer.questionId)
-          .firstOrNull;
-      return question?.section == AssessmentSection.academicDeeper;
-    });
-    final academicDeeperScore = hasDeeperAcademicAnswers
-        ? _sectionAverage(
-            questions: questions,
-            answers: answers,
-            section: AssessmentSection.academicDeeper,
+    final overallScore = allRequiredScorable
+        ? _round(
+            config.domains.fold<double>(
+              0,
+              (total, domain) =>
+                  total + domainScores[domain.label]! * domain.weight,
+            ),
           )
-        : 0.0;
-    final academicStressScore = hasDeeperAcademicAnswers
-        ? (academicCoreScore * 0.60) + (academicDeeperScore * 0.40)
-        : academicCoreScore;
-    final financialConcernScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.financialConcern,
-    );
-    final socialSupportRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.socialAdjustment,
-    );
-    final sleepRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.sleepRest,
-    );
-    final emotionalWellBeingRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.emotionalWellBeing,
-    );
-
-    final overallScore =
-        (academicStressScore * 0.25) +
-        (financialConcernScore * 0.15) +
-        (socialSupportRiskScore * 0.10) +
-        (sleepRiskScore * 0.20) +
-        (emotionalWellBeingRiskScore * 0.30);
-    final status = _getStudentStatus(overallScore);
-    final subscaleScores = {
-      'Academic Stress': academicStressScore,
-      'Financial Well-Being': financialConcernScore,
-      'Social Adjustment': socialSupportRiskScore,
-      'Sleep and Rest': sleepRiskScore,
-      'Emotional Well-Being': emotionalWellBeingRiskScore,
-    };
-    final roundedScores = subscaleScores.map(
-      (key, value) => MapEntry(key, _round(value)),
-    );
+        : null;
+    final status = overallScore == null
+        ? 'Insufficient Responses'
+        : getStatus(overallScore);
     final interpretation = AssessmentInterpretationEngine.build(
       questions: questions,
       answers: answers,
-      domainScores: roundedScores,
-      userType: 'Student',
+      domainScores: domainScores,
+      domainSections: {
+        for (final domain in config.domains) domain.label: domain.allSections,
+      },
+      userType: config.userLabel,
     );
 
     return StudentAssessmentResult(
-      userType: 'Student',
-      overallScore: _round(overallScore),
+      userType: config.userLabel,
+      overallScore: overallScore,
       status: status,
-      subscaleScores: roundedScores,
-      mainConcernAreas: getMainConcernAreas(subscaleScores),
-      message: getMessage(status),
-      disclaimer:
-          'This assessment is not a diagnosis. It is a university-based wellness screening tool designed to help students reflect on their current well-being. If you are experiencing severe distress, feel unsafe, or need immediate help, please contact your university guidance office, a trusted person, or a qualified mental health professional.',
-      totalResponses: answers.where((answer) => !answer.isSkipped).length,
-      interpretation: interpretation,
-    );
-  }
-
-  static StudentAssessmentResult _calculateFaculty({
-    required List<StudentAssessmentQuestion> questions,
-    required List<StudentAssessmentAnswer> answers,
-  }) {
-    final workplaceCoreScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceStressCore,
-    );
-    final hasDeeperAnswers = _hasSectionAnswer(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceStressDeeper,
-    );
-    final workplaceDeeperScore = hasDeeperAnswers
-        ? _sectionAverage(
-            questions: questions,
-            answers: answers,
-            section: AssessmentSection.workplaceStressDeeper,
-          )
-        : 0.0;
-    final workplaceStressScore = hasDeeperAnswers
-        ? (workplaceCoreScore * 0.60) + (workplaceDeeperScore * 0.40)
-        : workplaceCoreScore;
-    final professionalSupportRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.professionalSupport,
-    );
-    final professionalWellBeingRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.professionalWellBeing,
-    );
-    final sleepRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.sleepRest,
-    );
-    final generalEmotionalRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.emotionalWellBeing,
-    );
-    final overallScore =
-        (workplaceStressScore * 0.30) +
-        (professionalSupportRiskScore * 0.15) +
-        (professionalWellBeingRiskScore * 0.15) +
-        (sleepRiskScore * 0.15) +
-        (generalEmotionalRiskScore * 0.25);
-    final status = getStatus(overallScore);
-    final subscaleScores = {
-      'Workplace Stress': workplaceStressScore,
-      'Professional Support': professionalSupportRiskScore,
-      'Professional Well-Being': professionalWellBeingRiskScore,
-      'Sleep and Rest': sleepRiskScore,
-      'Emotional Well-Being': generalEmotionalRiskScore,
-    };
-    final roundedScores = subscaleScores.map(
-      (key, value) => MapEntry(key, _round(value)),
-    );
-    final interpretation = AssessmentInterpretationEngine.build(
-      questions: questions,
-      answers: answers,
-      domainScores: roundedScores,
-      userType: 'Teaching Personnel',
-    );
-
-    return StudentAssessmentResult(
-      userType: 'Teaching Personnel',
-      overallScore: _round(overallScore),
-      status: status,
-      subscaleScores: roundedScores,
-      mainConcernAreas: getMainConcernAreas(subscaleScores),
-      message: getMessage(status),
-      disclaimer: _workplaceDisclaimer,
-      totalResponses: answers.where((answer) => !answer.isSkipped).length,
-      interpretation: interpretation,
-    );
-  }
-
-  static StudentAssessmentResult _calculateStaff({
-    required List<StudentAssessmentQuestion> questions,
-    required List<StudentAssessmentAnswer> answers,
-  }) {
-    final workplaceResponsibilityCoreScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceResponsibilityCore,
-    );
-    final hasDeeperAnswers = _hasSectionAnswer(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceResponsibilityDeeper,
-    );
-    final workplaceResponsibilityDeeperScore = hasDeeperAnswers
-        ? _sectionAverage(
-            questions: questions,
-            answers: answers,
-            section: AssessmentSection.workplaceResponsibilityDeeper,
-          )
-        : 0.0;
-    final workplaceResponsibilityScore = hasDeeperAnswers
-        ? (workplaceResponsibilityCoreScore * 0.60) +
-              (workplaceResponsibilityDeeperScore * 0.40)
-        : workplaceResponsibilityCoreScore;
-    final workplaceSupportRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceSupport,
-    );
-    final workplaceWellBeingRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.workplaceWellBeing,
-    );
-    final sleepRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.sleepRest,
-    );
-    final generalEmotionalRiskScore = _sectionAverage(
-      questions: questions,
-      answers: answers,
-      section: AssessmentSection.emotionalWellBeing,
-    );
-    final overallScore =
-        (workplaceResponsibilityScore * 0.30) +
-        (workplaceSupportRiskScore * 0.15) +
-        (workplaceWellBeingRiskScore * 0.15) +
-        (sleepRiskScore * 0.15) +
-        (generalEmotionalRiskScore * 0.25);
-    final status = getStatus(overallScore);
-    final subscaleScores = {
-      'Workplace Responsibilities': workplaceResponsibilityScore,
-      'Workplace Support': workplaceSupportRiskScore,
-      'Workplace Well-Being': workplaceWellBeingRiskScore,
-      'Sleep and Rest': sleepRiskScore,
-      'Emotional Well-Being': generalEmotionalRiskScore,
-    };
-    final roundedScores = subscaleScores.map(
-      (key, value) => MapEntry(key, _round(value)),
-    );
-    final interpretation = AssessmentInterpretationEngine.build(
-      questions: questions,
-      answers: answers,
-      domainScores: roundedScores,
-      userType: 'Non-Teaching Personnel',
-    );
-
-    return StudentAssessmentResult(
-      userType: 'Non-Teaching Personnel',
-      overallScore: _round(overallScore),
-      status: status,
-      subscaleScores: roundedScores,
-      mainConcernAreas: getMainConcernAreas(subscaleScores),
-      message: getMessage(status),
-      disclaimer: _workplaceDisclaimer,
+      subscaleScores: domainScores,
+      mainConcernAreas: getMainConcernAreas(domainScores),
+      message: overallScore == null
+          ? 'Some wellness categories did not have enough responses for a dependable summary. Review the category results that are available.'
+          : getMessage(status),
+      disclaimer: _pilotDisclaimer,
       totalResponses: answers.where((answer) => !answer.isSkipped).length,
       interpretation: interpretation,
     );
   }
 
   static String getStatus(double score) {
-    if (score <= 20) return 'Very Good Well-Being';
-    if (score <= 40) return 'Generally Stable';
+    if (score <= 20) return 'Low Concern';
+    if (score <= 40) return 'Watchful';
     if (score <= 60) return 'Moderate Concern';
-    if (score <= 80) return 'High Concern';
-    return 'Very High Concern';
+    if (score <= 80) return 'Elevated Concern';
+    return 'High Concern';
   }
 
-  static String _getStudentStatus(double score) {
-    if (score <= 20) return 'Very Good Well-Being';
-    if (score <= 40) return 'Generally Stable';
-    if (score <= 60) return 'Moderate Concern';
-    if (score <= 80) return 'High Concern';
-    return 'Very High Concern';
-  }
+  static String getMessage(String status) => switch (status) {
+    'Low Concern' =>
+      'Your answered categories currently show a relatively low concern pattern. Continue the routines and support that are working for you.',
+    'Watchful' =>
+      'Your responses suggest some areas worth watching. Small supportive habits and regular check-ins may help you notice changes.',
+    'Moderate Concern' =>
+      'Your responses show noticeable strain in one or more wellness areas. Review the category details and consider talking with someone you trust.',
+    'Elevated Concern' =>
+      'Your responses show elevated strain. A conversation with university wellness support or a qualified professional may be helpful.',
+    'High Concern' =>
+      'Your responses show a high concern pattern. Timely support from the university guidance office or a qualified professional is recommended.',
+    _ => 'Your category results are ready to review.',
+  };
 
-  static String getMessage(String status) {
-    switch (status) {
-      case 'Very Good Well-Being':
-        return 'Your responses suggest that you are currently managing your academic, emotional, and personal well-being well. Continue maintaining healthy routines, social support, and balanced study habits.';
-      case 'Generally Stable':
-        return 'Your responses suggest that you may be experiencing some stress, but you appear to be generally coping. Continue monitoring your well-being and practice healthy academic, sleep, and emotional habits.';
-      case 'Moderate Concern':
-      case 'Moderate Well-Being':
-        return 'Your responses suggest a noticeable level of workplace stress or emotional strain. This does not mean you have a mental health condition, but it may be helpful to monitor your well-being, improve rest habits, and consider speaking with a trusted supervisor, HR personnel, or university wellness support.';
-      case 'High Concern':
-        return 'Your responses suggest a high level of stress or reduced well-being. You may benefit from speaking with a university guidance counselor or a qualified mental health professional for support.';
-      case 'Very High Concern':
-        return 'Your responses suggest a very high level of concern. This result is not a diagnosis, but it is strongly recommended that you reach out to your university guidance office or a qualified mental health professional as soon as possible.';
-      default:
-        return 'Your result has been calculated.';
-    }
-  }
+  static List<String> getMainConcernAreas(Map<String, double> scores) => scores
+      .entries
+      .where((entry) => entry.value > 60)
+      .map((entry) => entry.key)
+      .toList();
 
-  static List<String> getMainConcernAreas(Map<String, double> scores) {
-    return scores.entries
-        .where((entry) => entry.value >= 60)
-        .map((entry) => entry.key)
-        .toList();
-  }
-
-  static double _average(List<double> scores) {
-    if (scores.isEmpty) return 0;
-    return scores.reduce((a, b) => a + b) / scores.length;
-  }
-
-  static double _sectionAverage({
+  static _DomainScore _scoreDomain({
     required List<StudentAssessmentQuestion> questions,
     required List<StudentAssessmentAnswer> answers,
-    required AssessmentSection section,
+    required Set<AssessmentSection> sections,
   }) {
-    final scores = <double>[];
-
-    for (final question in questions.where(
-      (question) => question.section == section,
-    )) {
-      final answer = answers
-          .where((answer) => answer.questionId == question.id)
-          .firstOrNull;
-      if (answer == null) continue;
-      if (answer.isSkipped) continue;
-
-      scores.add(
+    final presented = questions
+        .where((question) => sections.contains(question.section))
+        .toList();
+    final answerById = {
+      for (final answer in answers) answer.questionId: answer,
+    };
+    final scored = <double>[];
+    for (final question in presented) {
+      final answer = answerById[question.id];
+      if (answer == null || answer.isSkipped) continue;
+      scored.add(
         riskScore(answer: answer.answer, direction: question.direction),
       );
     }
-
-    return _average(scores);
+    final completion = presented.isEmpty
+        ? 0.0
+        : scored.length / presented.length;
+    final isScorable =
+        scored.length >= minimumDomainAnswers &&
+        completion >= minimumDomainCompletion;
+    return _DomainScore(
+      score: isScorable ? _average(scored) : null,
+      isScorable: isScorable,
+    );
   }
 
-  static bool _hasSectionAnswer({
-    required List<StudentAssessmentQuestion> questions,
-    required List<StudentAssessmentAnswer> answers,
-    required AssessmentSection section,
-  }) {
-    return answers.any((answer) {
-      final question = questions
-          .where((question) => question.id == answer.questionId)
-          .firstOrNull;
-      return question?.section == section;
-    });
-  }
+  static double _average(List<double> scores) =>
+      scores.isEmpty ? 0 : scores.reduce((a, b) => a + b) / scores.length;
 
-  static double _round(double value) {
-    return double.parse(value.toStringAsFixed(2));
-  }
+  static double _round(double value) => double.parse(value.toStringAsFixed(2));
 
-  static const _workplaceDisclaimer =
-      'This assessment is not a diagnosis. It is a university-based wellness screening tool designed to help users reflect on their current well-being. If you are experiencing severe distress, feel unsafe, or need immediate help, please contact your university support office, a trusted person, or a qualified mental health professional.';
+  static const _pilotDisclaimer =
+      'This is an experimental university wellness-awareness screener, not a formally validated instrument or a diagnosis. It is designed to support reflection and conversation, not replace professional judgment. If you feel unsafe or need immediate help, contact your university support office, a trusted person, or a qualified mental health professional.';
+}
+
+class _DomainScore {
+  const _DomainScore({required this.score, required this.isScorable});
+  final double? score;
+  final bool isScorable;
+}
+
+class _DomainConfig {
+  const _DomainConfig({
+    required this.label,
+    required this.scoredSections,
+    required this.allSections,
+    required this.weight,
+  });
+  final String label;
+  final Set<AssessmentSection> scoredSections;
+  final Set<AssessmentSection> allSections;
+  final double weight;
+}
+
+class _RoleConfig {
+  const _RoleConfig(this.userLabel, this.domains);
+  final String userLabel;
+  final List<_DomainConfig> domains;
+
+  static _RoleConfig forType(AssessmentUserType type) => switch (type) {
+    AssessmentUserType.student => const _RoleConfig('Student', [
+      _DomainConfig(
+        label: 'Academic Stress',
+        scoredSections: {AssessmentSection.academicCore},
+        allSections: {
+          AssessmentSection.academicCore,
+          AssessmentSection.academicDeeper,
+        },
+        weight: .25,
+      ),
+      _DomainConfig(
+        label: 'Financial Well-Being',
+        scoredSections: {AssessmentSection.financialConcern},
+        allSections: {AssessmentSection.financialConcern},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Social Adjustment',
+        scoredSections: {AssessmentSection.socialAdjustment},
+        allSections: {AssessmentSection.socialAdjustment},
+        weight: .10,
+      ),
+      _DomainConfig(
+        label: 'Sleep and Rest',
+        scoredSections: {AssessmentSection.sleepRest},
+        allSections: {AssessmentSection.sleepRest},
+        weight: .20,
+      ),
+      _DomainConfig(
+        label: 'Emotional Well-Being',
+        scoredSections: {AssessmentSection.emotionalWellBeing},
+        allSections: {AssessmentSection.emotionalWellBeing},
+        weight: .30,
+      ),
+    ]),
+    AssessmentUserType.faculty => const _RoleConfig('Teaching Personnel', [
+      _DomainConfig(
+        label: 'Workplace Stress',
+        scoredSections: {AssessmentSection.workplaceStressCore},
+        allSections: {
+          AssessmentSection.workplaceStressCore,
+          AssessmentSection.workplaceStressDeeper,
+        },
+        weight: .30,
+      ),
+      _DomainConfig(
+        label: 'Professional Support',
+        scoredSections: {AssessmentSection.professionalSupport},
+        allSections: {AssessmentSection.professionalSupport},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Professional Well-Being',
+        scoredSections: {AssessmentSection.professionalWellBeing},
+        allSections: {AssessmentSection.professionalWellBeing},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Sleep and Rest',
+        scoredSections: {AssessmentSection.sleepRest},
+        allSections: {AssessmentSection.sleepRest},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Emotional Well-Being',
+        scoredSections: {AssessmentSection.emotionalWellBeing},
+        allSections: {AssessmentSection.emotionalWellBeing},
+        weight: .25,
+      ),
+    ]),
+    AssessmentUserType.staff => const _RoleConfig('Non-Teaching Personnel', [
+      _DomainConfig(
+        label: 'Workplace Responsibilities',
+        scoredSections: {AssessmentSection.workplaceResponsibilityCore},
+        allSections: {
+          AssessmentSection.workplaceResponsibilityCore,
+          AssessmentSection.workplaceResponsibilityDeeper,
+        },
+        weight: .30,
+      ),
+      _DomainConfig(
+        label: 'Workplace Support',
+        scoredSections: {AssessmentSection.workplaceSupport},
+        allSections: {AssessmentSection.workplaceSupport},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Workplace Well-Being',
+        scoredSections: {AssessmentSection.workplaceWellBeing},
+        allSections: {AssessmentSection.workplaceWellBeing},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Sleep and Rest',
+        scoredSections: {AssessmentSection.sleepRest},
+        allSections: {AssessmentSection.sleepRest},
+        weight: .15,
+      ),
+      _DomainConfig(
+        label: 'Emotional Well-Being',
+        scoredSections: {AssessmentSection.emotionalWellBeing},
+        allSections: {AssessmentSection.emotionalWellBeing},
+        weight: .25,
+      ),
+    ]),
+  };
 }

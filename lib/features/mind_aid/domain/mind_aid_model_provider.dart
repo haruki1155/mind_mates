@@ -189,7 +189,7 @@ If the user may be unsafe, say to seek immediate human support.''';
             }
           : {
               'userType': assessment.userType,
-              'overallScore': assessment.overallScore.round(),
+              'overallScore': assessment.overallScore?.round(),
               'status': assessment.status,
               'mainConcernAreas': assessment.mainConcernAreas,
               'topCategory': topCategory == null
