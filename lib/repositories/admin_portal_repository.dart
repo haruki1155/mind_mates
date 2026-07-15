@@ -94,6 +94,8 @@ class AdminPortalRepository {
   final FirestoreService _firestoreService;
   AccessRole _currentAccessRole = AccessRole.appUser;
   AccessRole get currentAccessRole => _currentAccessRole;
+  bool _isSuperAdmin = false;
+  bool get isSuperAdmin => _isSuperAdmin;
 
   Future<void> signInStaff({
     required String schoolId,
@@ -134,6 +136,9 @@ class AdminPortalRepository {
       throw StateError('This account does not have staff access.');
     }
     _currentAccessRole = role;
+    if (role == AccessRole.admin) {
+      _isSuperAdmin = await _confirmSuperAdmin();
+    }
   }
 
   User? get currentAuthUser => FirebaseAuth.instance.currentUser;
@@ -155,6 +160,9 @@ class AdminPortalRepository {
     if (status == StaffAccountStatus.approved ||
         (status == null && role.canUsePortal)) {
       _currentAccessRole = role;
+      if (role == AccessRole.admin) {
+        _isSuperAdmin = await _confirmSuperAdmin();
+      }
       return role.canUsePortal;
     }
     return false;
@@ -198,7 +206,22 @@ class AdminPortalRepository {
 
   Future<void> sendPasswordReset(String email) =>
       FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
-  Future<void> signOut() => FirebaseAuth.instance.signOut();
+  Future<void> signOut() async {
+    _currentAccessRole = AccessRole.appUser;
+    _isSuperAdmin = false;
+    await FirebaseAuth.instance.signOut();
+  }
+
+  Future<bool> _confirmSuperAdmin() async {
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('confirmSuperAdmin')
+          .call<Map<String, dynamic>>();
+      return result.data['isSuperAdmin'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Stream<List<College>> watchColleges() => _firestoreService
       .watchDocuments(FirestoreCollections.colleges)
@@ -236,6 +259,29 @@ class AdminPortalRepository {
                 ),
               ),
           );
+
+  Future<List<PublicAppUserRecord>> listPublicAppUsers() async {
+    final result = await FirebaseFunctions.instance
+        .httpsCallable('listPublicAppUsers')
+        .call<Map<String, dynamic>>();
+    final raw = result.data['users'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map(
+          (item) =>
+              PublicAppUserRecord.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList()
+      ..sort((a, b) => a.publicUserId.compareTo(b.publicUserId));
+  }
+
+  Future<int> backfillPublicAppUserIds() async {
+    final result = await FirebaseFunctions.instance
+        .httpsCallable('backfillPublicAppUserIds')
+        .call<Map<String, dynamic>>();
+    return (result.data['processed'] as num?)?.toInt() ?? 0;
+  }
 
   Stream<List<UserModel>> watchUsers() => _firestoreService
       .watchDocuments(FirestoreCollections.users)

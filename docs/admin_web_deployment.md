@@ -34,6 +34,20 @@ The first successful privileged operation mirrors this UID into the locked
 `system_config/security` document used by Firestore Rules. Never assign
 `accessRole: admin` to another profile.
 
+Before opening the redesigned User Management page, preview and apply stable
+anonymous IDs for existing app users:
+
+```powershell
+cd functions
+npm run public-ids:dry-run
+npm run public-ids:apply
+cd ..
+```
+
+Future app-user profiles receive a privacy-safe `USR-XXXXXX` identifier from
+the deployed `assignPublicIdOnUserCreate` trigger. The UID mappings and public
+ID reservations are server-only collections.
+
 ```powershell
 firebase deploy --only hosting --project mind-mates-cd2cf
 ```

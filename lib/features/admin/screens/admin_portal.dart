@@ -11,6 +11,7 @@ import '../domain/admin_management_models.dart';
 import '../../../repositories/admin_portal_repository.dart';
 import 'admin_status_dashboard_screen.dart';
 import 'staff_registration_screen.dart';
+import 'user_management_page.dart';
 
 const _yellow = Color(0xFFF6B900);
 const _orange = Color(0xFFFF9700);
@@ -267,6 +268,7 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
                   onChanged: _setPage,
                   compact: true,
                   accessRole: _repository.currentAccessRole,
+                  isSuperAdmin: _repository.isSuperAdmin,
                 ),
               )
             : null,
@@ -279,6 +281,7 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
                   page: _page,
                   onChanged: _setPage,
                   accessRole: _repository.currentAccessRole,
+                  isSuperAdmin: _repository.isSuperAdmin,
                 ),
               ),
             Expanded(
@@ -307,7 +310,7 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
 
   Widget _buildPage() => switch (_page) {
     AdminPortalPage.dashboard => _DashboardPage(repository: _repository),
-    AdminPortalPage.users => _UsersPage(repository: _repository),
+    AdminPortalPage.users => UserManagementPage(repository: _repository),
     AdminPortalPage.appointments => _AppointmentsPage(repository: _repository),
     AdminPortalPage.inquiries => _InquiriesPage(repository: _repository),
     AdminPortalPage.assessments => _AssessmentsPage(repository: _repository),
@@ -322,13 +325,16 @@ class _Nav extends StatelessWidget {
     required this.onChanged,
     this.compact = false,
     this.accessRole = AccessRole.admin,
+    this.isSuperAdmin = false,
   });
   final AdminPortalPage page;
   final ValueChanged<AdminPortalPage> onChanged;
   final bool compact;
   final AccessRole accessRole;
+  final bool isSuperAdmin;
 
   bool _allowed(AdminPortalPage page) => switch (page) {
+    AdminPortalPage.users => isSuperAdmin,
     AdminPortalPage.assessments ||
     AdminPortalPage.status => accessRole.canAccessClinicalData,
     _ => accessRole.canUsePortal || accessRole == AccessRole.admin,

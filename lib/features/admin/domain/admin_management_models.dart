@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../models/profile_roles.dart';
+
 enum StaffAccountStatus {
   pending,
   approved,
@@ -34,6 +36,24 @@ class StaffRegistration {
   final String email;
   final String employeeId;
   final StaffAccountStatus status;
+}
+
+class PublicAppUserRecord {
+  const PublicAppUserRecord({
+    required this.publicUserId,
+    required this.populationRole,
+  });
+
+  final String publicUserId;
+  final PopulationRole populationRole;
+
+  factory PublicAppUserRecord.fromJson(Map<String, dynamic> json) =>
+      PublicAppUserRecord(
+        publicUserId: '${json['publicUserId'] ?? ''}',
+        populationRole:
+            PopulationRole.parse(json['populationRole']) ??
+            PopulationRole.student,
+      );
 }
 
 class OrganizationRecord {

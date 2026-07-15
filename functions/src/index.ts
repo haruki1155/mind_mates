@@ -6,6 +6,7 @@ import {getDownloadURL, getStorage} from "firebase-admin/storage";
 import {onDocumentCreated, onDocumentDeleted, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {defineString} from "firebase-functions/params";
+import {randomBytes} from "node:crypto";
 export {aggregateMindAidFeedback, sendMindAidMessage} from "./mind_aid";
 
 if (!getApps().length) initializeApp();
@@ -18,6 +19,8 @@ const events = db.collection("_secret_chat_events");
 const analyticsEvents = db.collection("_analytics_events");
 const secretChatProfiles = db.collection("secret_chat_profiles");
 const secretChatAliases = db.collection("secret_chat_aliases");
+const publicUserIds = db.collection("user_public_ids");
+const publicUserIdReservations = db.collection("public_user_id_reservations");
 
 const SECRET_CHAT_ALIAS_PATTERN = /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/;
 const SECRET_CHAT_PHOTO_PATTERN = /^secret_chat_profiles\/([^/]+)\/avatar_[0-9]+\.(jpg|png)$/;
@@ -379,6 +382,76 @@ function requiredText(value: unknown, label: string, min: number, max: number): 
   }
   return text;
 }
+
+export function newPublicUserId(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(6);
+  return `USR-${Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")}`;
+}
+
+async function ensurePublicUserId(userId: string): Promise<string> {
+  const mappingRef = publicUserIds.doc(userId);
+  const existing = await mappingRef.get();
+  if (existing.exists) return String(existing.data()?.publicUserId ?? "");
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const publicUserId = newPublicUserId();
+    const reservationRef = publicUserIdReservations.doc(publicUserId);
+    try {
+      await db.runTransaction(async (transaction) => {
+        const [mapping, reservation] = await Promise.all([
+          transaction.get(mappingRef), transaction.get(reservationRef),
+        ]);
+        if (mapping.exists) return;
+        if (reservation.exists) throw new Error("PUBLIC_ID_COLLISION");
+        transaction.create(reservationRef, {userId, createdAt: FieldValue.serverTimestamp()});
+        transaction.create(mappingRef, {publicUserId, createdAt: FieldValue.serverTimestamp()});
+      });
+      const saved = await mappingRef.get();
+      if (saved.exists) return String(saved.data()?.publicUserId ?? publicUserId);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "PUBLIC_ID_COLLISION") throw error;
+    }
+  }
+  throw new HttpsError("resource-exhausted", "Unable to allocate a public user ID.");
+}
+
+export const assignPublicIdOnUserCreate = onDocumentCreated("users/{userId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.staffAccountStatus != null || data.accessRole === "admin") return;
+  await ensurePublicUserId(event.params.userId);
+});
+
+export const listPublicAppUsers = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  await requireSuperAdmin(actorId);
+  const snapshots = await db.collection("users").get();
+  const appUsers = snapshots.docs.filter((doc) => {
+    const data = doc.data();
+    return data.staffAccountStatus == null && data.accessRole !== "admin";
+  });
+  return {users: await Promise.all(appUsers.map(async (doc) => ({
+    publicUserId: await ensurePublicUserId(doc.id),
+    populationRole: String(doc.data().populationRole ?? doc.data().declaredRole ?? doc.data().role ?? ""),
+  })))};
+});
+
+export const backfillPublicAppUserIds = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  await requireSuperAdmin(actorId);
+  const snapshots = await db.collection("users").get();
+  const appUsers = snapshots.docs.filter((doc) => {
+    const data = doc.data();
+    return data.staffAccountStatus == null && data.accessRole !== "admin";
+  });
+  await Promise.all(appUsers.map((doc) => ensurePublicUserId(doc.id)));
+  return {ok: true, processed: appUsers.length};
+});
+
+export const confirmSuperAdmin = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  await requireSuperAdmin(actorId);
+  return {isSuperAdmin: true};
+});
 
 export const requestRoleCorrection = onCall(async (request) => {
   const userId = requireAuthenticatedUser(request);

@@ -65,7 +65,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow create: if validSelfProfileCreate(userId);
-      allow read: if isOwner(userId) || hasPortalAccess() || isLegacyPrivileged();
+      allow read: if isOwner(userId) || isSystemAdmin();
       allow update: if (isOwner(userId) && validSelfProfileUpdate());
       allow delete: if isSystemAdmin();
     }
@@ -97,6 +97,14 @@ service cloud.firestore {
     match /admin_audit_logs/{auditId} {
       allow read: if isSystemAdmin();
       allow write: if false;
+    }
+
+    match /user_public_ids/{userId} {
+      allow read, write: if false;
+    }
+
+    match /public_user_id_reservations/{publicId} {
+      allow read, write: if false;
     }
 
     match /assessments/{assessmentId} {
