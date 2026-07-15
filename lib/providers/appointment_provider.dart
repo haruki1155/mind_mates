@@ -33,7 +33,9 @@ class AppointmentProvider extends ChangeNotifier {
     try {
       final appointments = await _repository.fetchAppointments(userId);
       if (generation != _loadGeneration || _loadedUserId != userId) return;
-      _appointments = appointments;
+      _appointments = appointments
+          .where((appointment) => appointment.userId == userId)
+          .toList(growable: false);
     } catch (_) {
       if (generation != _loadGeneration || _loadedUserId != userId) return;
       _errorMessage = 'Unable to load appointments.';
@@ -52,9 +54,19 @@ class AppointmentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final created = await _repository.createAppointment(appointment);
+      if (created.userId != appointment.userId) {
+        throw StateError('Appointment owner mismatch.');
+      }
+      final existing = _loadedUserId == appointment.userId
+          ? _appointments
+          : const <AppointmentModel>[];
       _loadedUserId = appointment.userId;
-      _appointments = [created, ..._appointments]
-        ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+      _appointments =
+          [
+              created,
+              ...existing,
+            ].where((item) => item.userId == appointment.userId).toList()
+            ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
       return true;
     } catch (_) {
       _errorMessage = 'Unable to save appointment.';

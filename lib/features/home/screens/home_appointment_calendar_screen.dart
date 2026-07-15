@@ -57,8 +57,12 @@ class _HomeAppointmentCalendarScreenState
   @override
   Widget build(BuildContext context) {
     final provider = _watchProvider<AppointmentProvider>();
-    final appointments = provider?.appointments ?? const <AppointmentModel>[];
     final userId = _currentUserId();
+    final appointments = userId == null
+        ? const <AppointmentModel>[]
+        : (provider?.appointments ?? const <AppointmentModel>[])
+              .where((appointment) => appointment.userId == userId)
+              .toList(growable: false);
     _applyAutomaticFocusWhenReady(
       appointments,
       isLoading: provider?.isLoading ?? false,

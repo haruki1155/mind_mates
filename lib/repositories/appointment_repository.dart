@@ -25,6 +25,7 @@ class AppointmentRepository {
         )
         .then(
           (docs) => docs
+              .where((doc) => doc['userId']?.toString() == userId)
               .map(
                 (doc) =>
                     AppointmentModel.fromJson(doc, id: doc['id']?.toString()),
