@@ -241,6 +241,10 @@ function normalizedEmployeeId(value: unknown): string {
 
 const STAFF_ACCESS_ROLES = ["portalStaff", "counselor"] as const;
 const STAFF_ACCOUNT_STATUSES = ["pending", "approved", "rejected", "disabled"] as const;
+const BUNDLED_STAFF_DEPARTMENTS = [
+  "Administration", "Registrar", "Finance", "Library", "Guidance/PACC",
+  "Health Services", "IT/MIS", "Maintenance/Facilities", "Security", "Other",
+] as const;
 
 export const registerStaffAccount = onCall(async (request) => {
   const userId = requireAuthenticatedUser(request);
@@ -252,23 +256,31 @@ export const registerStaffAccount = onCall(async (request) => {
   const firstName = requiredText(request.data?.firstName, "First name", 1, 80);
   const lastName = requiredText(request.data?.lastName, "Last name", 1, 80);
   const position = requiredText(request.data?.position, "Position", 2, 100);
-  const departmentId = requiredText(request.data?.departmentId, "Department", 1, 128);
+  const department = requiredText(request.data?.department, "Department", 2, 120);
+  const departmentId = typeof request.data?.departmentId === "string" ? request.data.departmentId.trim() : "";
+  if (!departmentId && !BUNDLED_STAFF_DEPARTMENTS.includes(
+    department as typeof BUNDLED_STAFF_DEPARTMENTS[number],
+  )) {
+    throw new HttpsError("invalid-argument", "Choose a valid staff department.");
+  }
   const collegeId = typeof request.data?.collegeId === "string" ? request.data.collegeId.trim() : "";
   const courseId = typeof request.data?.courseId === "string" ? request.data.courseId.trim() : "";
   const userRef = db.collection("users").doc(userId);
   const reservationRef = db.collection("employee_id_reservations").doc(employeeIdKey);
-  const departmentRef = db.collection("departments").doc(departmentId);
 
   await db.runTransaction(async (transaction) => {
-    const [existing, reservation, department] = await Promise.all([
-      transaction.get(userRef), transaction.get(reservationRef), transaction.get(departmentRef),
+    const [existing, reservation] = await Promise.all([
+      transaction.get(userRef), transaction.get(reservationRef),
     ]);
     if (existing.exists) throw new HttpsError("already-exists", "An account profile already exists.");
     if (reservation.exists && reservation.data()?.userId !== userId) {
       throw new HttpsError("already-exists", "That employee ID is already registered.");
     }
-    if (!department.exists || department.data()?.active !== true) {
-      throw new HttpsError("failed-precondition", "Choose an active department.");
+    if (departmentId) {
+      const canonicalDepartment = await transaction.get(db.collection("departments").doc(departmentId));
+      if (!canonicalDepartment.exists || canonicalDepartment.data()?.active !== true) {
+        throw new HttpsError("failed-precondition", "Choose an active department.");
+      }
     }
     if (courseId) {
       const course = await transaction.get(db.collection("courses").doc(courseId));
@@ -279,7 +291,7 @@ export const registerStaffAccount = onCall(async (request) => {
     transaction.create(reservationRef, {userId, employeeId, createdAt: FieldValue.serverTimestamp()});
     transaction.create(userRef, {
       id: userId, email, firstName, lastName, name: `${firstName} ${lastName}`,
-      employeeId, employeeIdKey, position, departmentId, collegeId, courseId,
+      employeeId, employeeIdKey, position, department, departmentId, collegeId, courseId,
       populationRole: "nonTeaching", declaredRole: "nonTeaching", role: "staff",
       accessRole: "appUser", staffAccountStatus: "pending", verificationStatus: "pending",
       profileVersion: 3, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),

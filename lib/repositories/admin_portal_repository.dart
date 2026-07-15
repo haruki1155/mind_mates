@@ -167,7 +167,8 @@ class AdminPortalRepository {
     required String lastName,
     required String employeeId,
     required String position,
-    required String departmentId,
+    required String department,
+    String departmentId = '',
     String collegeId = '',
     String courseId = '',
   }) async {
@@ -184,6 +185,7 @@ class AdminPortalRepository {
             'lastName': lastName.trim(),
             'employeeId': employeeId.trim(),
             'position': position.trim(),
+            'department': department.trim(),
             'departmentId': departmentId,
             'collegeId': collegeId,
             'courseId': courseId,

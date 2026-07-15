@@ -9,6 +9,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../repositories/auth_repository.dart';
 import '../auth_flow_routes.dart';
+import '../data/registration_organization_catalog.dart';
 
 class SignupScreen extends StatelessWidget {
   const SignupScreen({super.key});
@@ -333,7 +334,9 @@ class _SignupFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedCourses = _coursesForDepartment(selectedDepartment);
+    final selectedCourses = registrationCoursesForDepartment(
+      selectedDepartment,
+    );
     final usesSector = role == AssessmentRole.staff;
     final isStudent = role == AssessmentRole.student;
 
@@ -394,7 +397,7 @@ class _SignupFormCard extends StatelessWidget {
                 label: 'Sector',
                 icon: Icons.business_center_outlined,
                 value: selectedSector,
-                items: _sectorOptions,
+                items: staffDepartmentOptions,
                 onChanged: onSectorChanged,
                 validator: (value) => requiredValidator(value, 'Sector'),
               ),
@@ -403,7 +406,7 @@ class _SignupFormCard extends StatelessWidget {
                 label: 'College or Department',
                 icon: Icons.account_balance_outlined,
                 value: selectedDepartment,
-                items: _collegeCourseOptions
+                items: registrationCollegeCourseOptions
                     .map((option) => option.department)
                     .toList(growable: false),
                 onChanged: onDepartmentChanged,
@@ -867,119 +870,6 @@ class _BubbleSpec {
   final double size;
   final Color color;
 }
-
-class _CollegeCourseOption {
-  const _CollegeCourseOption({required this.department, required this.courses});
-
-  final String department;
-  final List<String> courses;
-}
-
-List<String> _coursesForDepartment(String? department) {
-  if (department == null) return const [];
-  for (final option in _collegeCourseOptions) {
-    if (option.department == department) return option.courses;
-  }
-  return const [];
-}
-
-const _sectorOptions = [
-  'Administration',
-  'Registrar',
-  'Finance',
-  'Library',
-  'Guidance/PACC',
-  'Health Services',
-  'IT/MIS',
-  'Maintenance/Facilities',
-  'Security',
-  'Other',
-];
-
-const _collegeCourseOptions = [
-  _CollegeCourseOption(
-    department: 'College of Accountancy and Business Administration',
-    courses: ['BS Accountancy', 'BS Business Administration', 'BS Management'],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Arts and Sciences / College of Arts and Languages',
-    courses: [
-      'BA Communication / Mass Communication',
-      'BA English',
-      'BA Filipino',
-      'BA Political Science',
-      'BA Psychology',
-    ],
-  ),
-  _CollegeCourseOption(
-    department:
-        'College of Information and Technology Education / College of Computer Studies',
-    courses: [
-      'BS Information Technology',
-      'Bachelor of Library and Information Science',
-      'Associate in Computer Technology',
-    ],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Criminology',
-    courses: ['BS Criminology'],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Education / College of Teacher Education',
-    courses: [
-      'Bachelor of Elementary Education - Preschool Ed, Primary Ed',
-      'Bachelor of Secondary Education - English, Filipino, Mathematics, Science, Social Studies',
-      'Bachelor in Physical Education',
-      'Bachelor in Music',
-      'Bachelor in Fine Arts',
-    ],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Engineering and Architecture',
-    courses: [
-      'BS Architecture',
-      'BS Civil Engineering',
-      'BS Computer Engineering',
-      'BS Electrical Engineering / Electronic Engineering',
-      'BS Mechanical Engineering',
-    ],
-  ),
-  _CollegeCourseOption(department: 'College of Law', courses: ['Juris Doctor']),
-  _CollegeCourseOption(
-    department: 'College of Nursing',
-    courses: ['BS Nursing'],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Pharmacy',
-    courses: ['BS Pharmacy'],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Science and Mathematics',
-    courses: ['BS Mathematics', 'BS Biology / Natural Sciences'],
-  ),
-  _CollegeCourseOption(
-    department: 'College of Social Work',
-    courses: ['BS Social Work'],
-  ),
-  _CollegeCourseOption(
-    department: 'Graduate School / Institute of Graduate and Advanced Studies',
-    courses: [
-      'Doctor of Education',
-      'Master of Arts in Education - all major fields',
-      'Master in Business Administration',
-      'Master of Arts in Nursing',
-    ],
-  ),
-  _CollegeCourseOption(
-    department:
-        'School of Hotel and Restaurant Services and Tourism Management',
-    courses: ['BS Hotel and Restaurant Management', 'BS Tourism Management'],
-  ),
-  _CollegeCourseOption(
-    department: 'School of Midwifery',
-    courses: ['Midwifery Program'],
-  ),
-];
 
 class _SignupColors {
   const _SignupColors._();
