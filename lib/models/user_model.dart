@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../features/quick_assessment/models/quick_assessment_models.dart';
 import 'profile_roles.dart';
+import '../features/admin/domain/admin_management_models.dart';
 
 class UserModel {
   const UserModel({
@@ -14,6 +15,9 @@ class UserModel {
     this.schoolId,
     this.employeeId,
     this.department,
+    this.departmentId,
+    this.collegeId,
+    this.courseId,
     this.course,
     this.yearLevel,
     this.sector,
@@ -23,6 +27,7 @@ class UserModel {
     this.declaredRole,
     this.accessRole = AccessRole.appUser,
     this.verificationStatus = VerificationStatus.pending,
+    this.staffAccountStatus,
     this.verifiedAt,
     this.verifiedBy,
     this.profileVersion = 2,
@@ -46,6 +51,9 @@ class UserModel {
   final String? schoolId;
   final String? employeeId;
   final String? department;
+  final String? departmentId;
+  final String? collegeId;
+  final String? courseId;
   final String? course;
   final String? yearLevel;
   final String? sector;
@@ -57,6 +65,7 @@ class UserModel {
   final PopulationRole? declaredRole;
   final AccessRole accessRole;
   final VerificationStatus verificationStatus;
+  final StaffAccountStatus? staffAccountStatus;
   final DateTime? verifiedAt;
   final String? verifiedBy;
   final int profileVersion;
@@ -133,6 +142,9 @@ class UserModel {
     String? schoolId,
     String? employeeId,
     String? department,
+    String? departmentId,
+    String? collegeId,
+    String? courseId,
     String? course,
     String? yearLevel,
     String? sector,
@@ -142,6 +154,7 @@ class UserModel {
     PopulationRole? declaredRole,
     AccessRole? accessRole,
     VerificationStatus? verificationStatus,
+    StaffAccountStatus? staffAccountStatus,
     DateTime? verifiedAt,
     String? verifiedBy,
     int? profileVersion,
@@ -165,6 +178,9 @@ class UserModel {
       schoolId: schoolId ?? this.schoolId,
       employeeId: employeeId ?? this.employeeId,
       department: department ?? this.department,
+      departmentId: departmentId ?? this.departmentId,
+      collegeId: collegeId ?? this.collegeId,
+      courseId: courseId ?? this.courseId,
       course: course ?? this.course,
       yearLevel: yearLevel ?? this.yearLevel,
       sector: sector ?? this.sector,
@@ -174,6 +190,7 @@ class UserModel {
       declaredRole: declaredRole ?? this.declaredRole,
       accessRole: accessRole ?? this.accessRole,
       verificationStatus: verificationStatus ?? this.verificationStatus,
+      staffAccountStatus: staffAccountStatus ?? this.staffAccountStatus,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       verifiedBy: verifiedBy ?? this.verifiedBy,
       profileVersion: profileVersion ?? this.profileVersion,
@@ -206,6 +223,9 @@ class UserModel {
       schoolId: _stringOrNull(json['schoolId']),
       employeeId: _stringOrNull(json['employeeId']),
       department: _stringOrNull(json['department']),
+      departmentId: _stringOrNull(json['departmentId']),
+      collegeId: _stringOrNull(json['collegeId']),
+      courseId: _stringOrNull(json['courseId']),
       course: _stringOrNull(json['course']),
       yearLevel: _stringOrNull(json['yearLevel']),
       sector: _stringOrNull(json['sector']),
@@ -218,6 +238,7 @@ class UserModel {
         json['verificationStatus'],
         legacy: !json.containsKey('profileVersion'),
       ),
+      staffAccountStatus: StaffAccountStatus.parse(json['staffAccountStatus']),
       verifiedAt: _dateOrNull(json['verifiedAt']),
       verifiedBy: _stringOrNull(json['verifiedBy']),
       profileVersion: _intOrDefault(json['profileVersion'], 1),
@@ -246,6 +267,9 @@ class UserModel {
       'schoolId': schoolId ?? '',
       'employeeId': employeeId ?? '',
       'department': department ?? '',
+      'departmentId': departmentId ?? '',
+      'collegeId': collegeId ?? '',
+      'courseId': courseId ?? '',
       'course': course ?? '',
       'yearLevel': yearLevel ?? '',
       'sector': sector ?? '',
@@ -255,6 +279,8 @@ class UserModel {
       'declaredRole': declaredRole?.storedValue ?? '',
       'accessRole': accessRole.storedValue,
       'verificationStatus': verificationStatus.storedValue,
+      if (staffAccountStatus != null)
+        'staffAccountStatus': staffAccountStatus!.name,
       'verifiedAt': verifiedAt?.toIso8601String(),
       'verifiedBy': verifiedBy ?? '',
       'profileVersion': profileVersion,

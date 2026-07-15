@@ -7,8 +7,10 @@ import '../../../models/admin_mind_aid_analytics_model.dart';
 import '../../../models/appointment_model.dart';
 import '../../../models/user_model.dart';
 import '../../../models/profile_roles.dart';
+import '../domain/admin_management_models.dart';
 import '../../../repositories/admin_portal_repository.dart';
 import 'admin_status_dashboard_screen.dart';
+import 'staff_registration_screen.dart';
 
 const _yellow = Color(0xFFF6B900);
 const _orange = Color(0xFFFF9700);
@@ -48,7 +50,8 @@ extension on AdminPortalPage {
 }
 
 class AdminLoginScreen extends StatefulWidget {
-  const AdminLoginScreen({super.key});
+  const AdminLoginScreen({super.key, this.repository});
+  final AdminPortalRepository? repository;
 
   @override
   State<AdminLoginScreen> createState() => _AdminLoginScreenState();
@@ -75,7 +78,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
     setState(() => _submitting = true);
     try {
-      final repository = AdminPortalRepository();
+      final repository = widget.repository ?? AdminPortalRepository();
       await repository.signInStaff(
         schoolId: _schoolId.text,
         password: _password.text,
@@ -136,8 +139,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 ),
                 const SizedBox(height: 34),
                 _LoginField(
-                  label: 'School ID',
-                  hint: 'Enter your School ID',
+                  label: 'Email',
+                  hint: 'Enter your email address',
                   controller: _schoolId,
                 ),
                 const SizedBox(height: 14),
@@ -163,6 +166,24 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: _submitting ? null : _resetPassword,
+                  child: const Text('Forgot password?'),
+                ),
+                TextButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => StaffRegistrationScreen(
+                              repository:
+                                  widget.repository ?? AdminPortalRepository(),
+                            ),
+                          ),
+                        ),
+                  child: const Text('Register Staff Account'),
+                ),
               ],
             ),
           ),
@@ -170,6 +191,23 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       ),
     ),
   );
+
+  Future<void> _resetPassword() async {
+    if (_schoolId.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your email address first.')),
+      );
+      return;
+    }
+    await (widget.repository ?? AdminPortalRepository()).sendPasswordReset(
+      _schoolId.text,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset email sent.')),
+      );
+    }
+  }
 }
 
 class _LoginField extends StatelessWidget {
@@ -247,7 +285,11 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
               child: Column(
                 children: [
                   Container(height: 20, color: _yellow),
-                  _PortalHeader(compact: compact, page: _page),
+                  _PortalHeader(
+                    compact: compact,
+                    page: _page,
+                    repository: _repository,
+                  ),
                   Expanded(child: _buildPage()),
                 ],
               ),
@@ -338,9 +380,14 @@ class _Nav extends StatelessWidget {
 }
 
 class _PortalHeader extends StatelessWidget {
-  const _PortalHeader({required this.compact, required this.page});
+  const _PortalHeader({
+    required this.compact,
+    required this.page,
+    required this.repository,
+  });
   final bool compact;
   final AdminPortalPage page;
+  final AdminPortalRepository repository;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(24, 16, 28, 12),
@@ -354,22 +401,29 @@ class _PortalHeader extends StatelessWidget {
             ),
           ),
         const Spacer(),
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'Dr. Jane Smith',
-              style: TextStyle(fontWeight: FontWeight.w900),
+              repository.currentAuthUser?.displayName?.trim().isNotEmpty == true
+                  ? repository.currentAuthUser!.displayName!
+                  : repository.currentAuthUser?.email ?? 'Staff member',
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Head Counselor',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                  repository.currentAccessRole.storedValue,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
-                SizedBox(width: 6),
-                _Tag(label: 'Admin', color: _yellow),
+                const SizedBox(width: 6),
+                _Tag(
+                  label: repository.currentAccessRole == AccessRole.admin
+                      ? 'Admin'
+                      : 'Staff',
+                  color: _yellow,
+                ),
               ],
             ),
           ],
@@ -378,6 +432,21 @@ class _PortalHeader extends StatelessWidget {
         const CircleAvatar(
           backgroundColor: _yellow,
           child: Icon(Icons.account_circle, color: Colors.white, size: 32),
+        ),
+        IconButton(
+          tooltip: 'Sign out',
+          onPressed: () async {
+            await repository.signOut();
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => AdminLoginScreen(repository: repository),
+                ),
+                (_) => false,
+              );
+            }
+          },
+          icon: const Icon(Icons.logout),
         ),
       ],
     ),
@@ -939,6 +1008,8 @@ class _UsersPageState extends State<_UsersPage> {
             children: [
               if (widget.repository.currentAccessRole.canManageAccess)
                 _RoleCorrectionQueue(repository: widget.repository),
+              if (widget.repository.currentAccessRole.canManageAccess)
+                _OrganizationDirectoryPanel(repository: widget.repository),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -977,6 +1048,9 @@ class _UsersPageState extends State<_UsersPage> {
                   'Name',
                   'Contact',
                   'Role',
+                  'Account',
+                  'Department',
+                  'College / Course',
                   'Status',
                   'Last Active',
                   'Join Date',
@@ -988,6 +1062,25 @@ class _UsersPageState extends State<_UsersPage> {
                         u.displayName,
                         u.email,
                         _Tag(label: u.roleLabel, color: _purple),
+                        _Tag(
+                          label: u.staffAccountStatus?.label ?? 'App user',
+                          color:
+                              u.staffAccountStatus ==
+                                  StaffAccountStatus.approved
+                              ? const Color(0xFF8DD78B)
+                              : Colors.orange.shade200,
+                        ),
+                        u.departmentId ?? u.department ?? '—',
+                        [u.collegeId, u.courseId]
+                                .whereType<String>()
+                                .where((e) => e.isNotEmpty)
+                                .join(' / ')
+                                .isEmpty
+                            ? '—'
+                            : [u.collegeId, u.courseId]
+                                  .whereType<String>()
+                                  .where((e) => e.isNotEmpty)
+                                  .join(' / '),
                         _Tag(
                           label: u.verificationStatus.label,
                           color:
@@ -1009,6 +1102,43 @@ class _UsersPageState extends State<_UsersPage> {
                                 color: _yellow,
                               ),
                             ),
+                            if (u.staffAccountStatus ==
+                                    StaffAccountStatus.pending &&
+                                widget
+                                    .repository
+                                    .currentAccessRole
+                                    .canManageAccess)
+                              IconButton(
+                                tooltip: 'Review staff registration',
+                                onPressed: () => _reviewStaff(u),
+                                icon: const Icon(
+                                  Icons.how_to_reg,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            if ((u.staffAccountStatus ==
+                                        StaffAccountStatus.approved ||
+                                    u.staffAccountStatus ==
+                                        StaffAccountStatus.disabled) &&
+                                widget
+                                    .repository
+                                    .currentAccessRole
+                                    .canManageAccess)
+                              IconButton(
+                                tooltip:
+                                    u.staffAccountStatus ==
+                                        StaffAccountStatus.disabled
+                                    ? 'Enable account'
+                                    : 'Disable account',
+                                onPressed: () => _toggleStaff(u),
+                                icon: Icon(
+                                  u.staffAccountStatus ==
+                                          StaffAccountStatus.disabled
+                                      ? Icons.lock_open
+                                      : Icons.block,
+                                  color: Colors.red,
+                                ),
+                              ),
                             if (widget
                                 .repository
                                 .currentAccessRole
@@ -1019,6 +1149,16 @@ class _UsersPageState extends State<_UsersPage> {
                                 icon: const Icon(
                                   Icons.admin_panel_settings_outlined,
                                 ),
+                              ),
+                            if (u.staffAccountStatus != null &&
+                                widget
+                                    .repository
+                                    .currentAccessRole
+                                    .canManageAccess)
+                              IconButton(
+                                tooltip: 'View audit history',
+                                onPressed: () => _showAudit(u),
+                                icon: const Icon(Icons.history),
                               ),
                           ],
                         ),
@@ -1106,14 +1246,19 @@ class _UsersPageState extends State<_UsersPage> {
             children: [
               DropdownButtonFormField<AccessRole>(
                 initialValue: access,
-                items: AccessRole.values
-                    .map(
-                      (role) => DropdownMenuItem(
-                        value: role,
-                        child: Text(role.storedValue),
-                      ),
-                    )
-                    .toList(),
+                items:
+                    const [
+                          AccessRole.appUser,
+                          AccessRole.portalStaff,
+                          AccessRole.counselor,
+                        ]
+                        .map(
+                          (role) => DropdownMenuItem(
+                            value: role,
+                            child: Text(role.storedValue),
+                          ),
+                        )
+                        .toList(),
                 onChanged: (value) {
                   if (value != null) setDialogState(() => access = value);
                 },
@@ -1145,6 +1290,308 @@ class _UsersPageState extends State<_UsersPage> {
       );
     }
     reason.dispose();
+  }
+
+  Future<void> _reviewStaff(UserModel user) async {
+    var role = AccessRole.portalStaff;
+    var approve = true;
+    final reason = TextEditingController(text: 'Staff registration reviewed');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Review ${user.displayName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                value: approve,
+                onChanged: (v) => setState(() => approve = v),
+                title: Text(approve ? 'Approve' : 'Reject'),
+              ),
+              if (approve)
+                DropdownButtonFormField<AccessRole>(
+                  initialValue: role,
+                  items: const [
+                    DropdownMenuItem(
+                      value: AccessRole.portalStaff,
+                      child: Text('Portal Staff'),
+                    ),
+                    DropdownMenuItem(
+                      value: AccessRole.counselor,
+                      child: Text('Counselor'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => role = v);
+                  },
+                ),
+              TextField(
+                controller: reason,
+                decoration: const InputDecoration(labelText: 'Reason'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      await widget.repository.reviewStaffRegistration(
+        userId: user.id,
+        approve: approve,
+        accessRole: role,
+        reason: reason.text,
+      );
+    }
+    reason.dispose();
+  }
+
+  Future<void> _toggleStaff(UserModel user) async {
+    final enable = user.staffAccountStatus == StaffAccountStatus.disabled;
+    final reason = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${enable ? 'Enable' : 'Disable'} ${user.displayName}?'),
+        content: TextField(
+          controller: reason,
+          decoration: const InputDecoration(labelText: 'Reason'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && reason.text.trim().length >= 3) {
+      await widget.repository.setStaffAccountEnabled(
+        userId: user.id,
+        enabled: enable,
+        reason: reason.text,
+      );
+    }
+    reason.dispose();
+  }
+
+  Future<void> _showAudit(UserModel user) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Audit history — ${user.displayName}'),
+      content: SizedBox(
+        width: 560,
+        child: StreamBuilder<List<AdminAuditEvent>>(
+          stream: widget.repository.watchAdminAudit(user.id),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Text('Unable to load audit history.');
+            }
+            final events = snapshot.data ?? const [];
+            if (events.isEmpty) {
+              return const Text('No privileged changes recorded.');
+            }
+            return ListView.builder(
+              shrinkWrap: true,
+              itemCount: events.length,
+              itemBuilder: (_, index) {
+                final event = events[index];
+                return ListTile(
+                  title: Text(event.action),
+                  subtitle: Text('${event.reason}\nActor: ${event.actorId}'),
+                  trailing: Text(_date(event.createdAt)),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _OrganizationDirectoryPanel extends StatelessWidget {
+  const _OrganizationDirectoryPanel({required this.repository});
+  final AdminPortalRepository repository;
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    title: const Text(
+      'Colleges, Departments & Courses',
+      style: TextStyle(fontWeight: FontWeight.w800),
+    ),
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<List<College>>(
+          stream: repository.watchColleges(),
+          builder: (context, colleges) => StreamBuilder<List<Department>>(
+            stream: repository.watchDepartments(),
+            builder: (context, departments) => StreamBuilder<List<Course>>(
+              stream: repository.watchCourses(),
+              builder: (context, courses) => Column(
+                children: [
+                  _directoryRow(
+                    context,
+                    'college',
+                    'Colleges',
+                    colleges.data ?? const [],
+                  ),
+                  _directoryRow(
+                    context,
+                    'department',
+                    'Departments',
+                    departments.data ?? const [],
+                  ),
+                  _directoryRow(
+                    context,
+                    'course',
+                    'Courses',
+                    courses.data ?? const [],
+                    colleges: colleges.data ?? const [],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _directoryRow(
+    BuildContext context,
+    String kind,
+    String label,
+    List<OrganizationRecord> records, {
+    List<College> colleges = const [],
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      ListTile(
+        title: Text(label),
+        trailing: IconButton(
+          icon: const Icon(Icons.add),
+          onPressed: () => _edit(context, kind, colleges),
+        ),
+      ),
+      if (records.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text('No records'),
+        ),
+      Wrap(
+        spacing: 8,
+        children: records
+            .map(
+              (record) => ActionChip(
+                avatar: Icon(
+                  record.active ? Icons.check_circle : Icons.pause_circle,
+                  size: 18,
+                ),
+                label: Text('${record.code}: ${record.name}'),
+                onPressed: () => _edit(context, kind, colleges, record: record),
+              ),
+            )
+            .toList(),
+      ),
+      const SizedBox(height: 12),
+    ],
+  );
+
+  Future<void> _edit(
+    BuildContext context,
+    String kind,
+    List<College> colleges, {
+    OrganizationRecord? record,
+  }) async {
+    final name = TextEditingController(text: record?.name);
+    final code = TextEditingController(text: record?.code);
+    String? collegeId = record is Course ? record.collegeId : null;
+    var active = record?.active ?? true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('${record == null ? 'Add' : 'Edit'} $kind'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextField(
+                controller: code,
+                decoration: const InputDecoration(labelText: 'Code'),
+              ),
+              if (kind == 'course')
+                DropdownButtonFormField<String>(
+                  initialValue: collegeId,
+                  decoration: const InputDecoration(labelText: 'College'),
+                  items: colleges
+                      .where((e) => e.active)
+                      .map(
+                        (e) =>
+                            DropdownMenuItem(value: e.id, child: Text(e.name)),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => collegeId = v),
+                ),
+              SwitchListTile(
+                value: active,
+                onChanged: (v) => setState(() => active = v),
+                title: const Text('Active'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true &&
+        name.text.trim().length >= 2 &&
+        code.text.trim().isNotEmpty &&
+        (kind != 'course' || collegeId != null)) {
+      await repository.saveOrganizationRecord(
+        kind: kind,
+        id: record?.id,
+        name: name.text,
+        code: code.text,
+        active: active,
+        collegeId: collegeId ?? '',
+      );
+    }
+    name.dispose();
+    code.dispose();
   }
 }
 

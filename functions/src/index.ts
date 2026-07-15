@@ -1,14 +1,17 @@
 import {getApps, initializeApp} from "firebase-admin/app";
 import {FieldValue, getFirestore, Timestamp} from "firebase-admin/firestore";
 import {getMessaging} from "firebase-admin/messaging";
+import {getAuth} from "firebase-admin/auth";
 import {getDownloadURL, getStorage} from "firebase-admin/storage";
 import {onDocumentCreated, onDocumentDeleted, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {defineString} from "firebase-functions/params";
 export {aggregateMindAidFeedback, sendMindAidMessage} from "./mind_aid";
 
 if (!getApps().length) initializeApp();
 
 const db = getFirestore();
+const superAdminUid = defineString("SUPER_ADMIN_UID");
 const posts = db.collection("secret_chats");
 const stats = db.collection("secret_chat_profile_stats");
 const events = db.collection("_secret_chat_events");
@@ -210,6 +213,144 @@ async function requireStaff(uid: string): Promise<FirebaseFirestore.DocumentData
   return {...(user.data() ?? {}), accessRole};
 }
 
+function configuredSuperAdminUid(): string {
+  const value = superAdminUid.value().trim();
+  if (!value) throw new HttpsError("failed-precondition", "SUPER_ADMIN_UID is not configured.");
+  return value;
+}
+
+async function requireSuperAdmin(uid: string): Promise<FirebaseFirestore.DocumentData> {
+  if (uid !== configuredSuperAdminUid()) {
+    throw new HttpsError("permission-denied", "Super-administrator access is required.");
+  }
+  const actor = await requireStaff(uid);
+  if (actor.accessRole !== "admin") {
+    throw new HttpsError("permission-denied", "The configured account is not an administrator.");
+  }
+  await db.collection("system_config").doc("security").set(
+    {superAdminUid: uid, updatedAt: FieldValue.serverTimestamp()}, {merge: true},
+  );
+  return actor;
+}
+
+function normalizedEmployeeId(value: unknown): string {
+  const employeeId = requiredText(value, "Employee ID", 3, 40).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (employeeId.length < 3) throw new HttpsError("invalid-argument", "Enter a valid employee ID.");
+  return employeeId;
+}
+
+const STAFF_ACCESS_ROLES = ["portalStaff", "counselor"] as const;
+const STAFF_ACCOUNT_STATUSES = ["pending", "approved", "rejected", "disabled"] as const;
+
+export const registerStaffAccount = onCall(async (request) => {
+  const userId = requireAuthenticatedUser(request);
+  const authUser = await getAuth().getUser(userId);
+  const email = String(authUser.email ?? "").trim().toLowerCase();
+  if (!email) throw new HttpsError("failed-precondition", "An email address is required.");
+  const employeeId = requiredText(request.data?.employeeId, "Employee ID", 3, 40);
+  const employeeIdKey = normalizedEmployeeId(employeeId);
+  const firstName = requiredText(request.data?.firstName, "First name", 1, 80);
+  const lastName = requiredText(request.data?.lastName, "Last name", 1, 80);
+  const position = requiredText(request.data?.position, "Position", 2, 100);
+  const departmentId = requiredText(request.data?.departmentId, "Department", 1, 128);
+  const collegeId = typeof request.data?.collegeId === "string" ? request.data.collegeId.trim() : "";
+  const courseId = typeof request.data?.courseId === "string" ? request.data.courseId.trim() : "";
+  const userRef = db.collection("users").doc(userId);
+  const reservationRef = db.collection("employee_id_reservations").doc(employeeIdKey);
+  const departmentRef = db.collection("departments").doc(departmentId);
+
+  await db.runTransaction(async (transaction) => {
+    const [existing, reservation, department] = await Promise.all([
+      transaction.get(userRef), transaction.get(reservationRef), transaction.get(departmentRef),
+    ]);
+    if (existing.exists) throw new HttpsError("already-exists", "An account profile already exists.");
+    if (reservation.exists && reservation.data()?.userId !== userId) {
+      throw new HttpsError("already-exists", "That employee ID is already registered.");
+    }
+    if (!department.exists || department.data()?.active !== true) {
+      throw new HttpsError("failed-precondition", "Choose an active department.");
+    }
+    if (courseId) {
+      const course = await transaction.get(db.collection("courses").doc(courseId));
+      if (!course.exists || course.data()?.active !== true || course.data()?.collegeId !== collegeId) {
+        throw new HttpsError("failed-precondition", "Choose a course belonging to the selected college.");
+      }
+    }
+    transaction.create(reservationRef, {userId, employeeId, createdAt: FieldValue.serverTimestamp()});
+    transaction.create(userRef, {
+      id: userId, email, firstName, lastName, name: `${firstName} ${lastName}`,
+      employeeId, employeeIdKey, position, departmentId, collegeId, courseId,
+      populationRole: "nonTeaching", declaredRole: "nonTeaching", role: "staff",
+      accessRole: "appUser", staffAccountStatus: "pending", verificationStatus: "pending",
+      profileVersion: 3, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {ok: true};
+});
+
+export const reviewStaffRegistration = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  const actor = await requireSuperAdmin(actorId);
+  const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
+  const approve = request.data?.approve === true;
+  const accessRole = String(request.data?.accessRole ?? "portalStaff");
+  const reason = requiredText(request.data?.reason, "Reason", 3, 500);
+  if (targetUserId === actorId) throw new HttpsError("permission-denied", "You cannot review yourself.");
+  if (approve && !STAFF_ACCESS_ROLES.includes(accessRole as typeof STAFF_ACCESS_ROLES[number])) {
+    throw new HttpsError("invalid-argument", "Choose Portal Staff or Counselor.");
+  }
+  const target = db.collection("users").doc(targetUserId);
+  const audit = db.collection("admin_audit_logs").doc();
+  await db.runTransaction(async (transaction) => {
+    const before = await transaction.get(target);
+    if (!before.exists || before.data()?.staffAccountStatus !== "pending") {
+      throw new HttpsError("failed-precondition", "This registration is no longer pending.");
+    }
+    const status = approve ? "approved" : "rejected";
+    transaction.update(target, {staffAccountStatus: status, accessRole: approve ? accessRole : "appUser",
+      verificationStatus: approve ? "verified" : "rejected", verifiedBy: actorId,
+      verifiedAt: approve ? FieldValue.serverTimestamp() : null, updatedAt: FieldValue.serverTimestamp()});
+    transaction.create(audit, {actorId, actorAccessRole: actor.accessRole, targetUserId,
+      action: approve ? "staffRegistrationApproved" : "staffRegistrationRejected", reason,
+      before: {staffAccountStatus: "pending", accessRole: "appUser"},
+      after: {staffAccountStatus: status, accessRole: approve ? accessRole : "appUser"},
+      createdAt: FieldValue.serverTimestamp()});
+  });
+  if (!approve) await getAuth().revokeRefreshTokens(targetUserId);
+  return {ok: true};
+});
+
+export const setStaffAccountEnabled = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  const actor = await requireSuperAdmin(actorId);
+  const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
+  const enabled = request.data?.enabled === true;
+  const reason = requiredText(request.data?.reason, "Reason", 3, 500);
+  if (targetUserId === actorId || targetUserId === configuredSuperAdminUid()) {
+    throw new HttpsError("permission-denied", "The super-administrator cannot be modified.");
+  }
+  const target = db.collection("users").doc(targetUserId);
+  const audit = db.collection("admin_audit_logs").doc();
+  await db.runTransaction(async (transaction) => {
+    const before = await transaction.get(target);
+    if (!before.exists) throw new HttpsError("not-found", "Staff profile not found.");
+    const previous = String(before.data()?.staffAccountStatus ?? "pending");
+    if (!STAFF_ACCOUNT_STATUSES.includes(previous as typeof STAFF_ACCOUNT_STATUSES[number])) {
+      throw new HttpsError("failed-precondition", "This is not a staff account.");
+    }
+    const status = enabled ? "approved" : "disabled";
+    transaction.update(target, {staffAccountStatus: status, accessRole: enabled ? before.data()?.previousAccessRole ?? "portalStaff" : "appUser",
+      previousAccessRole: enabled ? FieldValue.delete() : before.data()?.accessRole ?? "portalStaff", updatedAt: FieldValue.serverTimestamp()});
+    transaction.create(audit, {actorId, actorAccessRole: actor.accessRole, targetUserId,
+      action: enabled ? "staffAccountEnabled" : "staffAccountDisabled", reason,
+      before: {staffAccountStatus: previous, accessRole: before.data()?.accessRole},
+      after: {staffAccountStatus: status}, createdAt: FieldValue.serverTimestamp()});
+  });
+  await getAuth().updateUser(targetUserId, {disabled: !enabled});
+  if (!enabled) await getAuth().revokeRefreshTokens(targetUserId);
+  return {ok: true};
+});
+
 const POPULATION_ROLES = ["student", "teaching", "nonTeaching"] as const;
 const ACCESS_ROLES = ["appUser", "portalStaff", "counselor", "admin"] as const;
 export type AccessRoleValue = typeof ACCESS_ROLES[number];
@@ -353,18 +494,15 @@ export const reviewRoleCorrection = onCall(async (request) => {
 
 export const assignAccessRole = onCall(async (request) => {
   const actorId = requireAuthenticatedUser(request);
-  const actor = await requireStaff(actorId);
-  if (actor.accessRole !== "admin") {
-    throw new HttpsError("permission-denied", "Administrator access is required.");
-  }
+  const actor = await requireSuperAdmin(actorId);
   const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
   const accessRole = String(request.data?.accessRole ?? "");
   const reason = requiredText(request.data?.reason, "Reason", 3, 500);
-  if (!ACCESS_ROLES.includes(accessRole as typeof ACCESS_ROLES[number])) {
-    throw new HttpsError("invalid-argument", "Choose a valid access role.");
+  if (![...STAFF_ACCESS_ROLES, "appUser"].includes(accessRole as "portalStaff" | "counselor" | "appUser")) {
+    throw new HttpsError("invalid-argument", "Choose Portal Staff, Counselor, or revoke access.");
   }
-  if (targetUserId === actorId) {
-    throw new HttpsError("permission-denied", "You cannot change your own access.");
+  if (targetUserId === actorId || targetUserId === configuredSuperAdminUid()) {
+    throw new HttpsError("permission-denied", "The super-administrator cannot be modified.");
   }
   const target = db.collection("users").doc(targetUserId);
   const audit = db.collection("role_audit_logs").doc();
@@ -382,6 +520,61 @@ export const assignAccessRole = onCall(async (request) => {
       after: {accessRole},
       createdAt: FieldValue.serverTimestamp(),
     });
+  });
+  return {ok: true};
+});
+
+export const saveOrganizationRecord = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  await requireSuperAdmin(actorId);
+  const kind = String(request.data?.kind ?? "");
+  const collection = ({college: "colleges", department: "departments", course: "courses"} as const)[kind as "college" | "department" | "course"];
+  if (!collection) throw new HttpsError("invalid-argument", "Choose a valid directory type.");
+  const recordId = typeof request.data?.id === "string" && request.data.id.trim() ? request.data.id.trim() : db.collection(collection).doc().id;
+  const name = requiredText(request.data?.name, "Name", 2, 120);
+  const code = requiredText(request.data?.code, "Code", 1, 30).toUpperCase();
+  const active = request.data?.active !== false;
+  const collegeId = kind === "course" ? requiredText(request.data?.collegeId, "College", 1, 128) : "";
+  if (kind === "course") {
+    const college = await db.collection("colleges").doc(collegeId).get();
+    if (!college.exists || college.data()?.active !== true) {
+      throw new HttpsError("failed-precondition", "Choose an active college.");
+    }
+  }
+  const duplicate = await db.collection(collection).where("normalizedName", "==", name.toLowerCase()).limit(1).get();
+  if (duplicate.docs.some((doc) => doc.id !== recordId)) {
+    throw new HttpsError("already-exists", `A ${kind} with that name already exists.`);
+  }
+  await db.collection(collection).doc(recordId).set({name, code, normalizedName: name.toLowerCase(), active,
+    ...(kind === "course" ? {collegeId} : {}), updatedBy: actorId, updatedAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp()}, {merge: true});
+  return {ok: true, id: recordId};
+});
+
+export const updateStaffOrganization = onCall(async (request) => {
+  const actorId = requireAuthenticatedUser(request);
+  const actor = await requireSuperAdmin(actorId);
+  const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
+  const departmentId = requiredText(request.data?.departmentId, "Department", 1, 128);
+  const collegeId = typeof request.data?.collegeId === "string" ? request.data.collegeId.trim() : "";
+  const courseId = typeof request.data?.courseId === "string" ? request.data.courseId.trim() : "";
+  const reason = requiredText(request.data?.reason, "Reason", 3, 500);
+  const [department, course, target] = await Promise.all([
+    db.collection("departments").doc(departmentId).get(),
+    courseId ? db.collection("courses").doc(courseId).get() : Promise.resolve(null),
+    db.collection("users").doc(targetUserId).get(),
+  ]);
+  if (!target.exists || !("staffAccountStatus" in (target.data() ?? {}))) throw new HttpsError("failed-precondition", "Only staff accounts can be updated.");
+  if (!department.exists || department.data()?.active !== true) throw new HttpsError("failed-precondition", "Choose an active department.");
+  if (course && (!course.exists || course.data()?.active !== true || course.data()?.collegeId !== collegeId)) {
+    throw new HttpsError("failed-precondition", "Choose a course belonging to the selected college.");
+  }
+  await db.runTransaction(async (transaction) => {
+    transaction.update(target.ref, {departmentId, collegeId, courseId, updatedAt: FieldValue.serverTimestamp()});
+    transaction.create(db.collection("admin_audit_logs").doc(), {actorId, actorAccessRole: actor.accessRole,
+      targetUserId, action: "staffOrganizationUpdated", reason,
+      before: {departmentId: target.data()?.departmentId ?? "", collegeId: target.data()?.collegeId ?? "", courseId: target.data()?.courseId ?? ""},
+      after: {departmentId, collegeId, courseId}, createdAt: FieldValue.serverTimestamp()});
   });
   return {ok: true};
 });

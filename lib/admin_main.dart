@@ -2,7 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_colors.dart';
-import 'features/admin/screens/admin_portal.dart';
+import 'features/admin/screens/admin_auth_gate.dart';
 import 'firebase_options.dart';
 import 'services/firebase/firebase_app_check_service.dart';
 
@@ -35,7 +35,7 @@ class MindMateAdminApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      home: const AdminLoginScreen(),
+      home: const AdminAuthGate(),
     );
   }
 }

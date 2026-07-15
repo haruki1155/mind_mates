@@ -1,0 +1,126 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum StaffAccountStatus {
+  pending,
+  approved,
+  rejected,
+  disabled;
+
+  String get label => switch (this) {
+    pending => 'Pending',
+    approved => 'Approved',
+    rejected => 'Rejected',
+    disabled => 'Disabled',
+  };
+
+  static StaffAccountStatus? parse(Object? value) =>
+      switch (value?.toString()) {
+        'pending' => pending,
+        'approved' => approved,
+        'rejected' => rejected,
+        'disabled' => disabled,
+        _ => null,
+      };
+}
+
+class StaffRegistration {
+  const StaffRegistration({
+    required this.userId,
+    required this.email,
+    required this.employeeId,
+    required this.status,
+  });
+  final String userId;
+  final String email;
+  final String employeeId;
+  final StaffAccountStatus status;
+}
+
+class OrganizationRecord {
+  const OrganizationRecord({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.active,
+  });
+  final String id;
+  final String name;
+  final String code;
+  final bool active;
+}
+
+class College extends OrganizationRecord {
+  const College({
+    required super.id,
+    required super.name,
+    required super.code,
+    required super.active,
+  });
+  factory College.fromJson(Map<String, dynamic> json) => College(
+    id: '${json['id'] ?? ''}',
+    name: '${json['name'] ?? ''}',
+    code: '${json['code'] ?? ''}',
+    active: json['active'] == true,
+  );
+}
+
+class Department extends OrganizationRecord {
+  const Department({
+    required super.id,
+    required super.name,
+    required super.code,
+    required super.active,
+  });
+  factory Department.fromJson(Map<String, dynamic> json) => Department(
+    id: '${json['id'] ?? ''}',
+    name: '${json['name'] ?? ''}',
+    code: '${json['code'] ?? ''}',
+    active: json['active'] == true,
+  );
+}
+
+class Course extends OrganizationRecord {
+  const Course({
+    required super.id,
+    required super.name,
+    required super.code,
+    required super.active,
+    required this.collegeId,
+  });
+  final String collegeId;
+  factory Course.fromJson(Map<String, dynamic> json) => Course(
+    id: '${json['id'] ?? ''}',
+    name: '${json['name'] ?? ''}',
+    code: '${json['code'] ?? ''}',
+    active: json['active'] == true,
+    collegeId: '${json['collegeId'] ?? ''}',
+  );
+}
+
+class AdminAuditEvent {
+  const AdminAuditEvent({
+    required this.id,
+    required this.action,
+    required this.actorId,
+    required this.targetUserId,
+    required this.reason,
+    this.createdAt,
+  });
+  final String id;
+  final String action;
+  final String actorId;
+  final String targetUserId;
+  final String reason;
+  final DateTime? createdAt;
+  factory AdminAuditEvent.fromJson(Map<String, dynamic> json) =>
+      AdminAuditEvent(
+        id: '${json['id'] ?? ''}',
+        action: '${json['action'] ?? ''}',
+        actorId: '${json['actorId'] ?? ''}',
+        targetUserId: '${json['targetUserId'] ?? ''}',
+        reason: '${json['reason'] ?? ''}',
+        createdAt: json['createdAt'] is Timestamp
+            ? (json['createdAt'] as Timestamp).toDate()
+            : null,
+      );
+}

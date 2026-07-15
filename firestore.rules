@@ -31,7 +31,10 @@ service cloud.firestore {
     }
 
     function isSystemAdmin() {
-      return currentAccessRole() == 'admin';
+      return signedIn()
+        && exists(/databases/$(database)/documents/system_config/security)
+        && request.auth.uid == get(/databases/$(database)/documents/system_config/security).data.superAdminUid
+        && currentAccessRole() == 'admin';
     }
 
     function validSelfProfileCreate(userId) {
@@ -65,6 +68,35 @@ service cloud.firestore {
       allow read: if isOwner(userId) || hasPortalAccess() || isLegacyPrivileged();
       allow update: if (isOwner(userId) && validSelfProfileUpdate());
       allow delete: if isSystemAdmin();
+    }
+
+    match /system_config/{documentId} {
+      allow read: if signedIn() && documentId == 'security';
+      allow write: if false;
+    }
+
+    match /colleges/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /departments/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /courses/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /employee_id_reservations/{recordId} {
+      allow read, write: if false;
+    }
+
+    match /admin_audit_logs/{auditId} {
+      allow read: if isSystemAdmin();
+      allow write: if false;
     }
 
     match /assessments/{assessmentId} {

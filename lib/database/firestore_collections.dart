@@ -4,6 +4,10 @@ class FirestoreCollections {
   static const users = 'users';
   static const roleCorrectionRequests = 'role_correction_requests';
   static const roleAuditLogs = 'role_audit_logs';
+  static const adminAuditLogs = 'admin_audit_logs';
+  static const colleges = 'colleges';
+  static const departments = 'departments';
+  static const courses = 'courses';
   static const assessments = 'assessments';
   static const assessmentFeedback = 'assessment_feedback';
   static const moods = 'moods';

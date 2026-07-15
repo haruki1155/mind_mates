@@ -20,12 +20,28 @@ measure, but deployment automation uses the explicit admin target.
 
 ## Deploy
 
+Configure the immutable administrator when prompted by Firebase Functions. Use
+the Firebase Authentication UID of the single super-administrator:
+
+```powershell
+firebase deploy --only functions --project mind-mates-cd2cf
+# Prompt value: SUPER_ADMIN_UID=<the existing administrator UID>
+firebase deploy --only firestore:rules,firestore:indexes --project mind-mates-cd2cf
+```
+
+The configured user must already have `accessRole: admin` in `users/{uid}`.
+The first successful privileged operation mirrors this UID into the locked
+`system_config/security` document used by Firestore Rules. Never assign
+`accessRole: admin` to another profile.
+
 ```powershell
 firebase deploy --only hosting --project mind-mates-cd2cf
 ```
 
 After deployment, open `https://mind-mates-cd2cf.web.app/` in a private browser
-window and confirm it displays `MindMate Admin`. Only Firebase users whose
-`users/{uid}.role` is `admin` or `counselor` may enter the portal.
+window and confirm it displays `MindMate Admin`. Approved `portalStaff` and
+`counselor` profiles may enter; only the configured super-administrator can
+approve registrations, change access, disable accounts, or maintain the
+organization directory.
 
 Do not deploy a generic mobile web bundle to this Hosting site.
