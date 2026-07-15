@@ -39,6 +39,17 @@ void main() {
     );
   });
 
+  test('next active appointment ignores past and inactive records', () {
+    final result = nextActiveAppointment([
+      _appointment('past', DateTime(2026, 4, 9, 9)),
+      _appointment('cancelled', DateTime(2026, 4, 11, 9), status: 'Cancelled'),
+      _appointment('later', DateTime(2026, 5, 1, 9), status: 'Confirmed'),
+      _appointment('next', DateTime(2026, 4, 20, 9), status: 'Pending'),
+    ], now: now);
+
+    expect(result?.id, 'next');
+  });
+
   testWidgets('Home shows earliest future upcoming appointment', (
     tester,
   ) async {
@@ -128,6 +139,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Appointment Details'), findsOneWidget);
     expect(find.text('I would like support.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'calendar auto-focuses next active appointment and dates are read-only',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 1100));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final provider = AppointmentProvider(
+        _FakeAppointmentRepository([
+          _appointment(
+            'cancelled',
+            DateTime(2026, 4, 12, 9),
+            status: 'Cancelled',
+          ),
+          _appointment('next', DateTime(2026, 5, 6, 10), status: 'Confirmed'),
+          _appointment('later', DateTime(2026, 5, 20, 10), status: 'Upcoming'),
+        ]),
+      );
+      await provider.loadAppointments('user_1');
+
+      await tester.pumpWidget(
+        _app(provider, HomeAppointmentCalendarScreen(nowProvider: () => now)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('May 2026'), findsOneWidget);
+      expect(find.text('Highlighted appointment'), findsOneWidget);
+      expect(find.text('May 6, 2026'), findsOneWidget);
+      expect(find.text('Confirmed'), findsWidgets);
+      final day = find.byKey(
+        const ValueKey('appointment-calendar-day-2026-5-20'),
+      );
+      expect(day, findsOneWidget);
+      expect(
+        find.ancestor(of: day, matching: find.byType(InkWell)),
+        findsNothing,
+      );
+
+      await tester.tap(find.byTooltip('Previous month'));
+      await tester.pumpAndSettle();
+      expect(find.text('April 2026'), findsOneWidget);
+      expect(find.text('May 6, 2026'), findsOneWidget);
+    },
+  );
+
+  testWidgets('explicit initial date takes precedence over automatic focus', (
+    tester,
+  ) async {
+    final provider = AppointmentProvider(
+      _FakeAppointmentRepository([
+        _appointment('next', DateTime(2026, 4, 15, 9)),
+        _appointment('chosen', DateTime(2026, 6, 3, 9), status: 'Completed'),
+      ]),
+    );
+    await provider.loadAppointments('user_1');
+
+    await tester.pumpWidget(
+      _app(
+        provider,
+        HomeAppointmentCalendarScreen(
+          initialDate: DateTime(2026, 6, 3),
+          nowProvider: () => now,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('June 2026'), findsOneWidget);
+    expect(find.text('June 3, 2026'), findsOneWidget);
+    expect(find.text('Completed'), findsWidgets);
   });
 }
 

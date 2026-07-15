@@ -28,6 +28,7 @@ class _HomeAppointmentCalendarScreenState
     extends State<HomeAppointmentCalendarScreen> {
   late DateTime _selectedDate;
   late DateTime _visibleMonth;
+  late bool _automaticFocusApplied;
   String? _loadedUserId;
 
   @override
@@ -37,6 +38,7 @@ class _HomeAppointmentCalendarScreenState
       widget.initialDate ?? widget._nowProvider(),
     );
     _visibleMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    _automaticFocusApplied = widget.initialDate != null;
   }
 
   @override
@@ -46,9 +48,7 @@ class _HomeAppointmentCalendarScreenState
     final provider = _readProvider<AppointmentProvider>();
     if (userId == null || provider == null || _loadedUserId == userId) return;
     _loadedUserId = userId;
-    if (provider.loadedUserId == userId && provider.appointments.isNotEmpty) {
-      return;
-    }
+    if (provider.loadedUserId == userId) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) provider.loadAppointments(userId);
     });
@@ -58,6 +58,12 @@ class _HomeAppointmentCalendarScreenState
   Widget build(BuildContext context) {
     final provider = _watchProvider<AppointmentProvider>();
     final appointments = provider?.appointments ?? const <AppointmentModel>[];
+    final userId = _currentUserId();
+    _applyAutomaticFocusWhenReady(
+      appointments,
+      isLoading: provider?.isLoading ?? false,
+      isReady: userId != null && provider?.loadedUserId == userId,
+    );
     final selectedAppointments =
         appointments
             .where(
@@ -65,7 +71,6 @@ class _HomeAppointmentCalendarScreenState
             )
             .toList()
           ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-    final userId = _currentUserId();
 
     return Scaffold(
       backgroundColor: HomePalette.background,
@@ -90,7 +95,6 @@ class _HomeAppointmentCalendarScreenState
               visibleMonth: _visibleMonth,
               selectedDate: _selectedDate,
               appointments: appointments,
-              onDateSelected: (date) => setState(() => _selectedDate = date),
               onPrevious: () => setState(() {
                 _visibleMonth = DateTime(
                   _visibleMonth.year,
@@ -143,8 +147,29 @@ class _HomeAppointmentCalendarScreenState
   void _goToToday() {
     final today = DateUtils.dateOnly(widget._nowProvider());
     setState(() {
-      _selectedDate = today;
       _visibleMonth = DateTime(today.year, today.month);
+    });
+  }
+
+  void _applyAutomaticFocusWhenReady(
+    List<AppointmentModel> appointments, {
+    required bool isLoading,
+    required bool isReady,
+  }) {
+    if (_automaticFocusApplied || isLoading || !isReady) return;
+    _automaticFocusApplied = true;
+    final focus = nextActiveAppointment(
+      appointments,
+      now: widget._nowProvider(),
+    );
+    if (focus == null) return;
+    final date = DateUtils.dateOnly(focus.scheduledAt);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _selectedDate = date;
+        _visibleMonth = DateTime(date.year, date.month);
+      });
     });
   }
 
@@ -186,7 +211,6 @@ class _MonthCalendar extends StatelessWidget {
     required this.visibleMonth,
     required this.selectedDate,
     required this.appointments,
-    required this.onDateSelected,
     required this.onPrevious,
     required this.onNext,
     required this.onToday,
@@ -195,7 +219,6 @@ class _MonthCalendar extends StatelessWidget {
   final DateTime visibleMonth;
   final DateTime selectedDate;
   final List<AppointmentModel> appointments;
-  final ValueChanged<DateTime> onDateSelected;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onToday;
@@ -284,10 +307,13 @@ class _MonthCalendar extends StatelessWidget {
                 date: date,
                 selected: isSameAppointmentDate(date, selectedDate),
                 appointments: dayAppointments,
-                onTap: () => onDateSelected(date),
               );
             },
           ),
+          if (appointments.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _StatusLegend(appointments: appointments),
+          ],
         ],
       ),
     );
@@ -299,12 +325,10 @@ class _CalendarDay extends StatelessWidget {
     required this.date,
     required this.selected,
     required this.appointments,
-    required this.onTap,
   });
   final DateTime date;
   final bool selected;
   final List<AppointmentModel> appointments;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -312,15 +336,29 @@ class _CalendarDay extends StatelessWidget {
         .map((item) => appointmentDisplayStatus(item.status))
         .toSet()
         .take(3);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+    final primaryStatus = statuses.firstOrNull;
+    final statusColor = primaryStatus == null
+        ? null
+        : appointmentStatusColor(primaryStatus);
+    return Semantics(
+      label: appointments.isEmpty
+          ? '${date.day}'
+          : '${date.day}, ${appointments.length} appointment${appointments.length == 1 ? '' : 's'}',
       child: Container(
+        key: ValueKey(
+          'appointment-calendar-day-${date.year}-${date.month}-${date.day}',
+        ),
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: selected ? HomePalette.softGold : Colors.transparent,
+          color: selected
+              ? HomePalette.softGold
+              : statusColor?.withValues(alpha: .10) ?? Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: selected ? Border.all(color: HomePalette.gold) : null,
+          border: selected
+              ? Border.all(color: statusColor ?? HomePalette.gold, width: 2)
+              : statusColor == null
+              ? null
+              : Border.all(color: statusColor.withValues(alpha: .45)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -362,6 +400,42 @@ class _CalendarDay extends StatelessWidget {
   }
 }
 
+class _StatusLegend extends StatelessWidget {
+  const _StatusLegend({required this.appointments});
+
+  final List<AppointmentModel> appointments;
+
+  @override
+  Widget build(BuildContext context) {
+    final statuses = appointments
+        .map((item) => appointmentDisplayStatus(item.status))
+        .toSet();
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 6,
+      children: [
+        for (final status in statuses)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: appointmentStatusColor(status),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(_statusLabel(status), style: HomeTextStyles.caption),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
 class _SelectedDayAgenda extends StatelessWidget {
   const _SelectedDayAgenda({
     required this.date,
@@ -379,7 +453,12 @@ class _SelectedDayAgenda extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(formatAppointmentDate(date), style: HomeTextStyles.sectionTitle),
+        const Text(
+          'Highlighted appointment',
+          style: HomeTextStyles.sectionTitle,
+        ),
+        const SizedBox(height: 4),
+        Text(formatAppointmentDate(date), style: HomeTextStyles.bodyMuted),
         const SizedBox(height: 12),
         if (appointments.isEmpty)
           _CalendarMessage(
@@ -439,6 +518,11 @@ class _AgendaCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(appointment.location, style: HomeTextStyles.bodyMuted),
+                    if ((appointment.counselorName ?? '').trim().isNotEmpty)
+                      Text(
+                        'Counselor: ${appointment.counselorName!.trim()}',
+                        style: HomeTextStyles.bodyMuted,
+                      ),
                     Text(
                       appointment.status,
                       style: TextStyle(
@@ -461,6 +545,38 @@ class _AgendaCard extends StatelessWidget {
     );
   }
 }
+
+AppointmentModel? nextActiveAppointment(
+  List<AppointmentModel> appointments, {
+  required DateTime now,
+}) {
+  final candidates =
+      appointments
+          .where(
+            (item) =>
+                !item.scheduledAt.isBefore(now) &&
+                const {
+                  AppointmentDisplayStatus.pending,
+                  AppointmentDisplayStatus.upcoming,
+                  AppointmentDisplayStatus.confirmed,
+                  AppointmentDisplayStatus.rescheduleProposed,
+                }.contains(appointmentDisplayStatus(item.status)),
+          )
+          .toList()
+        ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+  return candidates.firstOrNull;
+}
+
+String _statusLabel(AppointmentDisplayStatus status) => switch (status) {
+  AppointmentDisplayStatus.pending => 'Pending',
+  AppointmentDisplayStatus.upcoming => 'Upcoming',
+  AppointmentDisplayStatus.confirmed => 'Confirmed',
+  AppointmentDisplayStatus.rescheduleProposed => 'Reschedule proposed',
+  AppointmentDisplayStatus.declined => 'Declined',
+  AppointmentDisplayStatus.completed => 'Completed',
+  AppointmentDisplayStatus.cancelled => 'Cancelled',
+  AppointmentDisplayStatus.other => 'Other',
+};
 
 class _CalendarMessage extends StatelessWidget {
   const _CalendarMessage({
