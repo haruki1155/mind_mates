@@ -48,6 +48,25 @@ function hashSubmission(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function assessmentRequestSummary(
+  functionName: string,
+  correlationId: string,
+  submissionId: string,
+  answers: FullAnswer[],
+  role?: AssessmentRole,
+): void {
+  const ids = answers.map((answer) => answer.questionId);
+  console.info("assessment_submission_received", {
+    functionName,
+    correlationId,
+    submissionId,
+    role: role ?? "unknown",
+    answerCount: answers.length,
+    firstQuestionId: ids[0] ?? "",
+    lastQuestionId: ids[ids.length - 1] ?? "",
+  });
+}
+
 function parseQuickAnswers(value: unknown): QuickAnswer[] {
   if (!Array.isArray(value) || value.length > 20) throw new HttpsError("invalid-argument", "Quick responses are required and must be within the payload limit.");
   return value.map((item) => {
@@ -159,11 +178,13 @@ export const submitFullAssessment = onCall({enforceAppCheck: true}, async (reque
   const data = objectData(request.data);
   const submissionId = submissionIdFrom(data.submissionId);
   const answers = parseFullAnswers(data.answers);
+  assessmentRequestSummary("submitFullAssessment", correlationId, submissionId, answers);
   const ref = assessments.doc(fullDocumentId(uid, submissionId));
   const existing = await ref.get();
   if (existing.exists) return responsePayload(existing);
   const profile = await db.collection("users").doc(uid).get();
   const role = profileRole(profile.data() ?? {});
+  assessmentRequestSummary("submitFullAssessment", correlationId, submissionId, answers, role);
   try {
     validateFullAnswers(role, answers);
     const result = calculateFull(role, answers);
