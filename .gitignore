@@ -38,6 +38,15 @@ migrate_working_dir/
 service-account*.json
 *-firebase-adminsdk-*.json
 
+# Local credentials and environment configuration
+**/key.properties
+.env
+.env.*
+!.env.example
+
+# Local editor configuration
+.vscode/
+
 # Symbolication related
 app.*.symbols
 

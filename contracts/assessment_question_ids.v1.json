@@ -1,0 +1,29 @@
+{
+  "version": "experimental_role_based_v1",
+  "roles": {
+    "student": [
+      { "prefix": "academic_core_", "count": 10 },
+      { "prefix": "academic_deeper_", "count": 10 },
+      { "prefix": "financial_", "count": 5 },
+      { "prefix": "social_", "count": 5 },
+      { "prefix": "sleep_", "count": 10 },
+      { "prefix": "emotional_", "count": 10 }
+    ],
+    "teaching": [
+      { "prefix": "faculty_workplace_core_", "count": 10 },
+      { "prefix": "faculty_workplace_deeper_", "count": 10 },
+      { "prefix": "faculty_support_", "count": 5 },
+      { "prefix": "faculty_wellbeing_", "count": 5 },
+      { "prefix": "common_sleep_", "count": 10 },
+      { "prefix": "common_emotional_", "count": 10 }
+    ],
+    "nonTeaching": [
+      { "prefix": "staff_responsibility_core_", "count": 10 },
+      { "prefix": "staff_responsibility_deeper_", "count": 10 },
+      { "prefix": "staff_support_", "count": 5 },
+      { "prefix": "staff_wellbeing_", "count": 5 },
+      { "prefix": "common_sleep_", "count": 10 },
+      { "prefix": "common_emotional_", "count": 10 }
+    ]
+  }
+}
