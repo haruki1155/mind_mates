@@ -1,32 +1,103 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../features/quick_assessment/models/quick_assessment_models.dart';
 import '../repositories/auth_repository.dart';
+import '../services/firebase/firebase_error_message.dart';
+
+enum SignupState {
+  idle,
+  complete,
+  appCheckRejected,
+  profileSetupPending,
+  profileLookupPending,
+  duplicateSchoolId,
+  networkFailed,
+  authenticationFailed,
+}
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider(this._repository);
+  AuthProvider(this._repository, {this.onSessionCleared});
 
   final AuthRepository _repository;
+  final VoidCallback? onSessionCleared;
 
   bool _isAuthenticated = false;
   bool _isLoading = false;
   String? _userId;
   String? _errorMessage;
+  SignupState _signupState = SignupState.idle;
+  StreamSubscription<String?>? _authSubscription;
 
   bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
   String? get userId => _userId ?? _repository.currentUserId;
+
+  /// The current Firebase user ID, excluding any cached provider state.
+  String? get authenticatedUserId => _repository.currentUserId;
   String? get currentUserEmail => _repository.currentUserEmail;
   String? get errorMessage => _errorMessage;
+  SignupState get signupState => _signupState;
+  bool get hasPendingProfileSetup =>
+      _signupState == SignupState.profileSetupPending;
+  bool get hasPendingProfileLookup =>
+      _signupState == SignupState.profileLookupPending;
+
+  void monitorAuthState() {
+    _authSubscription ??= _repository.watchAuthenticatedUserIds().listen((id) {
+      if (id == null || id.isEmpty) {
+        _clearSession();
+        return;
+      }
+      if (_userId == id && _isAuthenticated) return;
+      _userId = id;
+      _isAuthenticated = true;
+      notifyListeners();
+    });
+  }
 
   String? hydrateCurrentUser() {
     final id = _repository.currentUserId;
-    if (id == null || id.isEmpty) return null;
+    if (id == null || id.isEmpty) {
+      _clearSession();
+      return null;
+    }
 
     _userId = id;
     _isAuthenticated = true;
     notifyListeners();
     return id;
+  }
+
+  Future<String?> restoreCurrentUser() async {
+    String? id = _repository.currentUserId;
+    if (id == null) {
+      try {
+        id = await _repository.restoreCurrentUser();
+      } catch (error, stackTrace) {
+        FirebaseErrorMessage.log(
+          error,
+          stackTrace,
+          area: 'Restoring Firebase Auth session failed.',
+        );
+        return null;
+      }
+    }
+    if (id == null || id.isEmpty) {
+      _clearSession();
+      return null;
+    }
+    _userId = id;
+    _isAuthenticated = true;
+    notifyListeners();
+    return id;
+  }
+
+  Future<String?> resolveAuthenticatedUserId() async {
+    final liveId = authenticatedUserId;
+    if (liveId != null && liveId.isNotEmpty) return liveId;
+    return restoreCurrentUser();
   }
 
   void setAuthenticated(bool value) {
@@ -44,7 +115,7 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       return credential.user?.uid ?? _repository.currentUserId;
-    });
+    }, signOutOnFailure: true);
   }
 
   Future<String?> signUp({
@@ -61,33 +132,155 @@ class AuthProvider extends ChangeNotifier {
     String? middleName,
     AssessmentRole? role,
   }) async {
-    return _runAuthAction(() async {
-      final credential = await _repository.signUp(
-        password: password,
-        firstName: firstName,
-        lastName: lastName,
-        schoolId: schoolId,
-        department: department,
-        course: course,
-        sector: sector,
-        employeeId: employeeId,
-        yearLevel: yearLevel,
-        position: position,
-        middleName: middleName,
-        role: role,
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final String? id;
+      if (hasPendingProfileSetup && _repository.currentUserId != null) {
+        id = await _repository.completeProfileSetup(
+          firstName: firstName,
+          lastName: lastName,
+          schoolId: schoolId,
+          department: department,
+          course: course,
+          sector: sector,
+          employeeId: employeeId,
+          yearLevel: yearLevel,
+          position: position,
+          middleName: middleName,
+          role: role,
+        );
+      } else {
+        final credential = await _repository.signUp(
+          password: password,
+          firstName: firstName,
+          lastName: lastName,
+          schoolId: schoolId,
+          department: department,
+          course: course,
+          sector: sector,
+          employeeId: employeeId,
+          yearLevel: yearLevel,
+          position: position,
+          middleName: middleName,
+          role: role,
+        );
+        id = credential.user?.uid ?? _repository.currentUserId;
+      }
+      if (id == null || id.isEmpty) {
+        throw StateError('Unable to identify authenticated user.');
+      }
+
+      _userId = id;
+      _isAuthenticated = true;
+      _signupState = SignupState.complete;
+      return id;
+    } on SignupAppCheckException catch (error, stackTrace) {
+      _clearSession(notify: false);
+      _signupState = SignupState.appCheckRejected;
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Signup App Check preflight failed.',
       );
-      return credential.user?.uid ?? _repository.currentUserId;
-    });
+      try {
+        await _repository.signOut();
+      } catch (signOutError, signOutStackTrace) {
+        FirebaseErrorMessage.log(
+          signOutError,
+          signOutStackTrace,
+          area: 'Cleanup sign-out failed.',
+        );
+      }
+      _errorMessage = FirebaseErrorMessage.appCheckMessage();
+      return null;
+    } on SignupProfileProvisioningException catch (error, stackTrace) {
+      _userId = error.userId;
+      _isAuthenticated = _repository.currentUserId == error.userId;
+      _signupState = SignupState.profileSetupPending;
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Signup profile provisioning failed.',
+      );
+      _errorMessage =
+          '${FirebaseErrorMessage.describe(error.cause, fallback: 'Your account was created, but profile setup is incomplete.')} Your account is signed in; tap Retry profile setup.';
+      return null;
+    } on SignupProfileLookupException catch (error, stackTrace) {
+      _userId = error.userId;
+      _isAuthenticated = _repository.currentUserId == error.userId;
+      _signupState = SignupState.profileLookupPending;
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Existing signup profile lookup failed.',
+      );
+      _errorMessage =
+          '${FirebaseErrorMessage.describe(error.cause, fallback: 'Your account is signed in, but its profile could not be checked.')} Tap Retry account check.';
+      return null;
+    } catch (error, stackTrace) {
+      _clearSession(notify: false);
+      _signupState = _failedSignupState(error);
+      FirebaseErrorMessage.log(error, stackTrace, area: 'Signup failed.');
+      try {
+        await _repository.signOut();
+      } catch (signOutError, signOutStackTrace) {
+        FirebaseErrorMessage.log(
+          signOutError,
+          signOutStackTrace,
+          area: 'Cleanup sign-out failed.',
+        );
+      }
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to create account. Please try again.',
+      );
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  SignupState _failedSignupState(Object error) {
+    if (FirebaseErrorMessage.isAppCheckFailure(error)) {
+      return SignupState.appCheckRejected;
+    }
+    if (FirebaseErrorMessage.codeOf(error) == 'email-already-in-use') {
+      return SignupState.duplicateSchoolId;
+    }
+    if (FirebaseErrorMessage.isNetworkFailure(error)) {
+      return SignupState.networkFailed;
+    }
+    return SignupState.authenticationFailed;
   }
 
   Future<void> signOut() async {
     await _repository.signOut();
-    _isAuthenticated = false;
-    _userId = null;
+    _clearSession(notify: false);
     notifyListeners();
   }
 
-  Future<String?> _runAuthAction(Future<String?> Function() action) async {
+  void _clearSession({bool notify = true}) {
+    _isAuthenticated = false;
+    _userId = null;
+    _signupState = SignupState.idle;
+    onSessionCleared?.call();
+    if (notify) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<String?> _runAuthAction(
+    Future<String?> Function() action, {
+    bool signOutOnFailure = false,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -101,33 +294,33 @@ class AuthProvider extends ChangeNotifier {
       _userId = id;
       _isAuthenticated = true;
       return id;
-    } catch (error) {
+    } catch (error, stackTrace) {
       _isAuthenticated = false;
       _userId = null;
-      _errorMessage = _friendlyError(error);
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Authentication action failed.',
+      );
+      if (signOutOnFailure) {
+        try {
+          await _repository.signOut();
+        } catch (signOutError, signOutStackTrace) {
+          FirebaseErrorMessage.log(
+            signOutError,
+            signOutStackTrace,
+            area: 'Cleanup sign-out failed.',
+          );
+        }
+      }
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Something went wrong. Please try again.',
+      );
       return null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  String _friendlyError(Object error) {
-    final message = error.toString();
-    if (message.contains('invalid-credential') ||
-        message.contains('wrong-password') ||
-        message.contains('user-not-found')) {
-      return 'School ID or password is incorrect.';
-    }
-    if (message.contains('email-already-in-use')) {
-      return 'An account already exists for this School ID.';
-    }
-    if (message.contains('weak-password')) {
-      return 'Password should be at least 6 characters.';
-    }
-    if (message.contains('invalid-email')) {
-      return 'Enter a valid School ID.';
-    }
-    return 'Something went wrong. Please try again.';
   }
 }

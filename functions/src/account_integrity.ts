@@ -1,0 +1,187 @@
+import {randomUUID} from "node:crypto";
+import {getAuth} from "firebase-admin/auth";
+import {FieldValue, Timestamp, getFirestore} from "firebase-admin/firestore";
+import {HttpsError, onCall} from "firebase-functions/v2/https";
+
+const db = getFirestore();
+const POPULATION_ROLES = ["student", "teaching", "nonTeaching"] as const;
+type PopulationRole = typeof POPULATION_ROLES[number];
+
+function safeErrorCode(error: unknown): string {
+  if (error instanceof HttpsError) return error.code;
+  if (error instanceof Error) return error.name || "unknown";
+  return "unknown";
+}
+
+function requireUid(request: {auth?: {uid?: string}}): string {
+  const uid = request.auth?.uid?.trim();
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in is required.");
+  return uid;
+}
+
+function objectData(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "A valid profile is required.");
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredText(data: Record<string, unknown>, key: string, label: string, max = 120): string {
+  const value = typeof data[key] === "string" ? data[key].trim() : "";
+  if (!value || value.length > max) {
+    throw new HttpsError("invalid-argument", `${label} is required and must be at most ${max} characters.`);
+  }
+  return value;
+}
+
+function optionalText(data: Record<string, unknown>, key: string, max = 120): string {
+  const value = typeof data[key] === "string" ? data[key].trim() : "";
+  if (value.length > max) throw new HttpsError("invalid-argument", `${key} is too long.`);
+  return value;
+}
+
+function populationRole(value: unknown): PopulationRole {
+  if (!POPULATION_ROLES.includes(value as PopulationRole)) {
+    throw new HttpsError("invalid-argument", "Choose a valid population role.");
+  }
+  return value as PopulationRole;
+}
+
+function schoolIdFromAuthEmail(email: string | undefined): string {
+  const normalized = String(email ?? "").trim().toLowerCase();
+  if (!normalized.endsWith("@mindmate.local")) {
+    throw new HttpsError("failed-precondition", "This account is not a School-ID account.");
+  }
+  const schoolId = normalized.slice(0, -"@mindmate.local".length);
+  if (!schoolId) throw new HttpsError("failed-precondition", "The School ID is unavailable.");
+  return schoolId;
+}
+
+export function validatedProfileInput(raw: unknown): Record<string, string> {
+  const data = objectData(raw);
+  const role = populationRole(data.populationRole);
+  const firstName = requiredText(data, "firstName", "First name", 80);
+  const lastName = requiredText(data, "lastName", "Last name", 80);
+  const middleName = optionalText(data, "middleName", 80);
+  const department = optionalText(data, "department");
+  const course = optionalText(data, "course");
+  const yearLevel = optionalText(data, "yearLevel", 40);
+  const sector = optionalText(data, "sector");
+  const position = optionalText(data, "position");
+  const employeeId = optionalText(data, "employeeId", 40);
+
+  if (role === "student" && (!department || !course || !yearLevel)) {
+    throw new HttpsError("invalid-argument", "Students must provide college, course, and year level.");
+  }
+  if (role === "teaching" && (!employeeId || !department || !position)) {
+    throw new HttpsError("invalid-argument", "Faculty must provide employee ID, department, and position.");
+  }
+  if (role === "nonTeaching" && (!employeeId || !sector || !position)) {
+    throw new HttpsError("invalid-argument", "Staff must provide employee ID, sector, and position.");
+  }
+  return {firstName, middleName, lastName, populationRole: role, department, course,
+    yearLevel, sector, position, employeeId};
+}
+
+function legacyRole(role: PopulationRole): string {
+  return role === "teaching" ? "faculty" : role === "nonTeaching" ? "staff" : "student";
+}
+
+function profileIsReady(profile: FirebaseFirestore.DocumentData): boolean {
+  const role = profile.populationRole as PopulationRole;
+  const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  if (!present(profile.firstName) || !present(profile.lastName) || !POPULATION_ROLES.includes(role)) return false;
+  if (role === "student") return present(profile.schoolId) && present(profile.department) && present(profile.course) && present(profile.yearLevel);
+  if (role === "teaching") return present(profile.employeeId) && present(profile.department) && present(profile.position);
+  return present(profile.employeeId) && present(profile.sector) && present(profile.position);
+}
+
+export const provisionAppUserProfile = onCall({enforceAppCheck: true}, async (request) => {
+  const correlationId = randomUUID();
+  const uid = requireUid(request);
+  try {
+    const authUser = await getAuth().getUser(uid);
+    const input = validatedProfileInput(request.data);
+    const schoolId = schoolIdFromAuthEmail(authUser.email);
+    const profileRef = db.collection("users").doc(uid);
+    let created = false;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(profileRef);
+      if (existing.exists) {
+        const existingRole = existing.data()?.populationRole ?? existing.data()?.declaredRole;
+        if (existingRole && existingRole !== input.populationRole) {
+          throw new HttpsError("already-exists", "An account profile already exists with a different role.");
+        }
+        return;
+      }
+      created = true;
+      transaction.create(profileRef, {
+        id: uid, email: authUser.email ?? "", schoolId,
+        ...input,
+        name: [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" "),
+        role: legacyRole(input.populationRole as PopulationRole),
+        declaredRole: input.populationRole,
+        accessRole: "appUser", verificationStatus: "pending", profileVersion: 3,
+        verifiedAt: null, verifiedBy: "", dayStreak: 0, longestStreak: 0,
+        lastActivityDateKey: "", activeDateKeys: [], avatarAssetName: "",
+        quickAssessmentCompleted: false, quickAssessmentCompletedAt: null,
+        lastActiveAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+    console.info("profile_provisioned", {correlationId, created});
+    return {ok: true, created, profileReady: true, correlationId};
+  } catch (error) {
+    console.error("profile_provision_failed", {correlationId, code: safeErrorCode(error)});
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", "Profile setup could not be completed.", {correlationId});
+  }
+});
+
+function isVerifiedQuick(data: FirebaseFirestore.DocumentData | undefined, uid: string): boolean {
+  return data?.userId === uid && data?.type === "quick" &&
+    data?.calculationAuthority === "server" && data?.verificationStatus === "verified";
+}
+
+export const getAssessmentStatus = onCall({enforceAppCheck: true}, async (request) => {
+  const correlationId = randomUUID();
+  const uid = requireUid(request);
+  try {
+    const profileRef = db.collection("users").doc(uid);
+    const deterministicRef = db.collection("assessments").doc(`quick_${uid}`);
+    const [profile, deterministic] = await Promise.all([profileRef.get(), deterministicRef.get()]);
+    if (!profile.exists) {
+      throw new HttpsError("failed-precondition", "Your account profile needs to be recovered.", {reason: "profile-missing", correlationId});
+    }
+
+    let assessment = isVerifiedQuick(deterministic.data(), uid) ? deterministic : null;
+    if (!assessment) {
+      const legacy = await db.collection("assessments")
+        .where("userId", "==", uid).where("type", "==", "quick").limit(10).get();
+      assessment = legacy.docs.find((doc) => isVerifiedQuick(doc.data(), uid)) ?? null;
+    }
+    const completed = assessment !== null;
+    const completedAt = assessment?.data()?.submittedAt ?? assessment?.data()?.createdAt ?? null;
+    await db.runTransaction(async (transaction) => {
+      const currentProfile = await transaction.get(profileRef);
+      if (!currentProfile.exists) throw new HttpsError("failed-precondition", "Your account profile needs to be recovered.");
+      transaction.update(profileRef, {
+        quickAssessmentCompleted: completed,
+        quickAssessmentCompletedAt: completed ? completedAt ?? FieldValue.serverTimestamp() : null,
+        assessmentStatusCheckedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+    const data = assessment?.data() ?? {};
+    return {completed, profileReady: profileIsReady(profile.data() ?? {}),
+      assessmentId: assessment?.id ?? null,
+      algorithmVersion: completed ? String(data.algorithmVersion ?? "legacy") : null,
+      questionSetVersion: completed ? String(data.questionSetVersion ?? "legacy") : null,
+      completedAt: completedAt instanceof Timestamp ? completedAt.toDate().toISOString() : null,
+      correlationId};
+  } catch (error) {
+    console.error("assessment_status_failed", {correlationId, code: safeErrorCode(error)});
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("unavailable", "Assessment status is temporarily unavailable.", {correlationId});
+  }
+});

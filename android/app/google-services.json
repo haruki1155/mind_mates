@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:842251480963:android:ed62272c31f74f2beb50b6",
+        "mobilesdk_app_id": "1:842251480963:android:4c05d169dbacf125eb50b6",
         "android_client_info": {
-          "package_name": "com.example.mind_mates"
+          "package_name": "ph.edu.ucu.mindmates"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "842251480963-66qdnfoc22jg8dc8n3h6nvshjl239ne0.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.mind_mates",
-            "certificate_hash": "462e0608a040042796d0145c5d2a3c758750ed98"
-          }
-        },
         {
           "client_id": "842251480963-csirkeh4ah6a02sg89id6qfkr41rrk91.apps.googleusercontent.com",
           "client_type": 3

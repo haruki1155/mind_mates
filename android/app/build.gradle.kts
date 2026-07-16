@@ -14,18 +14,34 @@ val signingProperties = Properties()
 if (signingPropertiesFile.exists()) {
     signingPropertiesFile.inputStream().use(signingProperties::load)
 }
-val configuredApplicationId = providers.gradleProperty("androidApplicationId").orNull
+val productionApplicationId = "ph.edu.ucu.mindmates"
+val productionFirebaseAppId = "1:842251480963:android:4c05d169dbacf125eb50b6"
+val googleServicesFile = file("google-services.json")
+val googleServicesConfigurationError = when {
+    !googleServicesFile.isFile ->
+        "android/app/google-services.json is required for $productionApplicationId."
+    !googleServicesFile.readText().contains("\"package_name\": \"$productionApplicationId\"") ->
+        "google-services.json does not match Android package $productionApplicationId."
+    !googleServicesFile.readText().contains("\"mobilesdk_app_id\": \"$productionFirebaseAppId\"") ->
+        "google-services.json does not match Firebase Android app $productionFirebaseAppId."
+    else -> null
+}
+if (googleServicesConfigurationError != null) {
+    throw GradleException(googleServicesConfigurationError)
+}
+val requiredSigningKeys = listOf("keyAlias", "storeFile", "storePassword", "keyPassword")
+val missingSigningKeys = requiredSigningKeys.filter { signingProperties.getProperty(it).isNullOrBlank() }
+val configuredStoreFile = signingProperties.getProperty("storeFile")
 val releaseConfigurationError = when {
-    configuredApplicationId.isNullOrBlank() || configuredApplicationId == "com.example.mind_mates" ->
-        "Release builds require -PandroidApplicationId with the production package name."
-    listOf("keyAlias", "storeFile", "storePassword", "keyPassword")
-        .any { signingProperties.getProperty(it).isNullOrBlank() } ->
-        "Release builds require android/key.properties with a production keystore."
+    missingSigningKeys.isNotEmpty() ->
+        "Release builds require android/key.properties with keyAlias, storeFile, storePassword, and keyPassword."
+    configuredStoreFile == null || !rootProject.file(configuredStoreFile).isFile ->
+        "Release signing keystore not found at android/${configuredStoreFile ?: "<missing storeFile>"}."
     else -> null
 }
 
 tasks.configureEach {
-    if (name == "assembleRelease" || name == "bundleRelease") {
+    if (name == "preReleaseBuild" || name == "assembleRelease" || name == "bundleRelease") {
         doFirst {
             if (releaseConfigurationError != null) {
                 throw GradleException(releaseConfigurationError)
@@ -35,7 +51,7 @@ tasks.configureEach {
 }
 
 android {
-    namespace = "com.example.mind_mates"
+    namespace = productionApplicationId
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -45,8 +61,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = configuredApplicationId ?: "com.example.mind_mates"
+        applicationId = productionApplicationId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -57,11 +72,7 @@ android {
 
     buildTypes {
         release {
-            val requiredSigningKeys = listOf("keyAlias", "storeFile", "storePassword", "keyPassword")
-            val missingSigningKeys = requiredSigningKeys.filter { signingProperties.getProperty(it).isNullOrBlank() }
-            if (configuredApplicationId != null &&
-                configuredApplicationId != "com.example.mind_mates" &&
-                missingSigningKeys.isEmpty()) {
+            if (releaseConfigurationError == null) {
                 signingConfig = signingConfigs.create("release") {
                     keyAlias = signingProperties.getProperty("keyAlias")
                     storeFile = rootProject.file(signingProperties.getProperty("storeFile"))

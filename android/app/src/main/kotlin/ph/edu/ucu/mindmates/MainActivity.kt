@@ -1,4 +1,4 @@
-package com.example.mind_mates
+package ph.edu.ucu.mindmates
 
 import io.flutter.embedding.android.FlutterActivity
 

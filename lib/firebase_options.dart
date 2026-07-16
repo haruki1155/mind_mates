@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAS2NzGcr6UsuaA06GSdVg_4Cm3GDR1YnA',
-    appId: '1:842251480963:android:ed62272c31f74f2beb50b6',
+    appId: '1:842251480963:android:4c05d169dbacf125eb50b6',
     messagingSenderId: '842251480963',
     projectId: 'mind-mates-cd2cf',
     storageBucket: 'mind-mates-cd2cf.firebasestorage.app',
@@ -63,8 +63,10 @@ class DefaultFirebaseOptions {
     messagingSenderId: '842251480963',
     projectId: 'mind-mates-cd2cf',
     storageBucket: 'mind-mates-cd2cf.firebasestorage.app',
-    androidClientId: '842251480963-66qdnfoc22jg8dc8n3h6nvshjl239ne0.apps.googleusercontent.com',
-    iosClientId: '842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com',
+    androidClientId:
+        '842251480963-66qdnfoc22jg8dc8n3h6nvshjl239ne0.apps.googleusercontent.com',
+    iosClientId:
+        '842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com',
     iosBundleId: 'com.example.mindMates',
   );
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,8 +75,10 @@ class DefaultFirebaseOptions {
     messagingSenderId: '842251480963',
     projectId: 'mind-mates-cd2cf',
     storageBucket: 'mind-mates-cd2cf.firebasestorage.app',
-    androidClientId: '842251480963-66qdnfoc22jg8dc8n3h6nvshjl239ne0.apps.googleusercontent.com',
-    iosClientId: '842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com',
+    androidClientId:
+        '842251480963-66qdnfoc22jg8dc8n3h6nvshjl239ne0.apps.googleusercontent.com',
+    iosClientId:
+        '842251480963-dk3mb671q9c6dbqh1b236nvcaqbcvi03.apps.googleusercontent.com',
     iosBundleId: 'com.example.mindMates',
   );
 

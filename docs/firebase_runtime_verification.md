@@ -14,11 +14,10 @@ catalog validation failure is now returned as `invalid-argument` instead of an
 internal HTTP 500, and automated tests verify that the Flutter and Functions
 catalogs match the same contract.
 
-The corrected functions were deployed successfully to `mind-mates-cd2cf` at
-2026-07-16 14:10 UTC. `submitFullAssessment` is active on revision
-`submitfullassessment-00005-zek`; the only `Invalid full-assessment answer`
-entries visible immediately after deployment were the historical pre-deploy
-requests from 13:52-13:53 UTC.
+The corrected functions were deployed successfully to `mind-mates-cd2cf`.
+The current assessment callable revisions are `submitquickassessment-00007-com`
+and `submitfullassessment-00007-siw`. The deployed functions retain App Check
+enforcement and return a correlation ID with a verified response.
 
 Automated verification completed for this revision:
 
@@ -44,6 +43,28 @@ not mark them complete from automated tests or deployment status alone.
 The Android app uses the Firebase project `mind-mates-cd2cf` and the
 registered Android application ID `ph.edu.ucu.mindmates`.
 
+## Android identity stabilization
+
+`ph.edu.ucu.mindmates` is the permanent Android package for development and
+future production builds. Gradle, the Android manifest, `MainActivity`,
+`google-services.json`, and the Android `FirebaseOptions` must all reference
+Firebase app ID `1:842251480963:android:4c05d169dbacf125eb50b6`.
+
+Gradle now stops the build when `google-services.json` identifies another
+package or Firebase Android app. The Flutter identity contract test also checks
+all Android entrypoints and fails if the legacy `com.example.mind_mates`
+activity returns:
+
+```powershell
+flutter test test/config/android_firebase_identity_test.dart
+```
+
+The legacy Firebase Android app remains in the same Firebase project only as a
+temporary rollback reference. No current Android build uses it, and removing
+it is deferred until both emulator and physical-phone smoke tests pass. This
+does not require deleting or migrating existing Firebase Auth or Firestore
+data.
+
 ## Local Android debug setup
 
 1. Run the app once in debug mode:
@@ -63,8 +84,66 @@ signup cannot create `users/{uid}`, the account is signed out and the Firebase
 error is logged instead of allowing a partially initialized session into the
 user app.
 
+Use a separate registered token for every installation. Label the emulator
+token `pixel-6a-emulator` and the phone token `physical-phone-debug`. Install an
+updated build with `adb install -r` so the registered installation token is
+preserved. Do not clear app data or uninstall after registering a token unless
+you intend to capture and register the replacement token.
+
+Debug tokens cannot be supplied through Dart defines. They must never appear
+in source, documentation, shell scripts, logs shared as evidence, or Git.
+Debug-only Firebase diagnostics record only the expected package, Firebase app
+ID, build/provider mode, Firebase error code, and callable correlation ID. They
+do not record account fields, credentials, tokens, or assessment answers.
+
+### Current emulator blocker (2026-07-17)
+
+The rebuilt debug APK was installed with `adb install -r` on `Pixel_6a` and
+verified as package `ph.edu.ucu.mindmates`, a debuggable build, and Firebase app
+ID `1:842251480963:android:4c05d169dbacf125eb50b6`. The current installation's
+debug credential exchange returned HTTP 403 before Auth account creation. This
+proves the credential currently saved in that AVD is not registered under the
+matching Firebase Android app; a previously registered emulator credential
+belongs to another installation or Firebase app.
+
+The current CLI identity also receives HTTP 403 when attempting to create the
+debug-token registration, so an account with Firebase App Check administration
+permission must register the credential printed by this exact AVD installation.
+Do not clear its app data afterward. Positive signup, Quick Assessment, and
+Full Assessment device smoke tests remain pending until that Console-only
+registration is corrected.
+
 The release build must use Play Integrity. Do not disable App Check enforcement
 on the deployed assessment or MindAid functions.
+
+For the current pre-publish development phase, use a debug APK or `flutter run`
+with `AndroidDebugProvider`. No Android SHA-256 or Google Play Console account
+is needed for this path. The generated debug token must still be registered
+manually in Firebase Console by an account with App Check administration
+permission; a Firebase CLI identity without that permission will receive HTTP
+403 from the App Check management API.
+
+The release signing certificate for `ph.edu.ucu.mindmates` is registered in
+Firebase. A debug emulator is a separate trust path: it must use
+`AndroidDebugProvider`, and its generated token must be registered under the
+same Android app before protected callables can be exercised.
+
+For an APK installed from Google Play, verify the certificate independently:
+
+1. In Google Play Console, open **Test and release > App integrity** and copy
+   the **App signing key certificate SHA-256** for `ph.edu.ucu.mindmates`.
+2. In Firebase Console, open **Project settings > Your apps > Android** for
+   the same package and add that exact SHA-256. The upload-key SHA is not a
+   substitute for the Play App Signing SHA.
+3. In **App Check**, select the same Android app, enable **Play Integrity**,
+   and keep enforcement enabled for protected callable functions.
+4. Install the Play-distributed build (or its testing-track build), then retry
+   signup. A sideloaded APK signed by a different key is not production
+   evidence.
+
+The Firebase app currently has more than one SHA-256 entry, so the Play
+Console value must be compared directly rather than assuming the local
+`android/key.properties` certificate is the one used by Google Play.
 
 ## Local web setup
 

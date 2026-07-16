@@ -6,6 +6,7 @@ import {getDownloadURL, getStorage} from "firebase-admin/storage";
 import {onDocumentCreated, onDocumentDeleted, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 export {submitQuickAssessment, submitFullAssessment} from "./assessment/submissions";
+export {provisionAppUserProfile, getAssessmentStatus} from "./account_integrity";
 import {defineString} from "firebase-functions/params";
 import {randomBytes} from "node:crypto";
 export {aggregateMindAidFeedback, sendMindAidMessage} from "./mind_aid";
