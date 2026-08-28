@@ -1,36 +1,84 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/student_assessment/screens/student_assessment_complete_screen.dart';
 import 'package:mind_mates/features/student_assessment/screens/student_assessment_screen.dart';
 import 'package:mind_mates/features/quick_assessment/models/quick_assessment_models.dart';
-import 'package:mind_mates/features/quick_assessment/widgets/quick_assessment_widgets.dart';
 import 'package:mind_mates/features/student_assessment/data/student_assessment_questions.dart';
 import 'package:mind_mates/features/student_assessment/models/student_assessment_models.dart';
 import 'package:mind_mates/features/student_assessment/services/student_assessment_calculator.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
+import 'package:mind_mates/providers/auth_provider.dart';
 import 'package:mind_mates/providers/report_provider.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/assessment_repository.dart';
+import 'package:mind_mates/repositories/auth_repository.dart';
 import 'package:mind_mates/repositories/report_repository.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
 import 'package:mind_mates/services/firebase/firestore_service.dart';
+import 'package:mind_mates/services/auth/auth_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  test(
+    'Flutter question catalogs match the shared agreement-scale role contract',
+    () {
+      final contract =
+          jsonDecode(
+                File(
+                  'contracts/assessment_question_ids.v2.json',
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      final roles = contract['roles'] as Map<String, dynamic>;
+
+      expect(contract['version'], 'experimental_role_based_v2_agreement');
+      expect(
+        StudentAssessmentQuestions.questions.map((question) => question.id),
+        _contractIds(roles['student'] as List<dynamic>),
+      );
+      expect(
+        StudentAssessmentQuestions.facultyQuestions.map(
+          (question) => question.id,
+        ),
+        _contractIds(roles['teaching'] as List<dynamic>),
+      );
+      expect(
+        StudentAssessmentQuestions.staffQuestions.map(
+          (question) => question.id,
+        ),
+        _contractIds(roles['nonTeaching'] as List<dynamic>),
+      );
+    },
+  );
+
   group('StudentAssessmentCalculator', () {
+    test('serializes the approved agreement response semantics', () {
+      const answer = StudentAssessmentAnswer(
+        questionId: 'academic_core_1',
+        answer: LikertAnswer.stronglyAgree,
+      );
+
+      expect(LikertAnswer.stronglyAgree.label, 'Strongly Agree');
+      expect(answer.toJson()['answer'], 'stronglyAgree');
+      expect(answer.toJson()['value'], 5);
+    });
+
     test('scores risk and protective answers correctly', () {
       expect(
         StudentAssessmentCalculator.riskScore(
-          answer: LikertAnswer.always,
+          answer: LikertAnswer.stronglyAgree,
           direction: AssessmentDirection.risk,
         ),
         100,
       );
       expect(
         StudentAssessmentCalculator.riskScore(
-          answer: LikertAnswer.always,
+          answer: LikertAnswer.stronglyAgree,
           direction: AssessmentDirection.protective,
         ),
         0,
@@ -41,7 +89,7 @@ void main() {
       final answers = [
         const StudentAssessmentAnswer(
           questionId: 'academic_core_1',
-          answer: LikertAnswer.always,
+          answer: LikertAnswer.stronglyAgree,
         ),
       ];
 
@@ -141,7 +189,7 @@ void main() {
       expect(result.subscaleScores['Sleep and Rest'], 50);
       expect(
         result.interpretation.algorithmVersion,
-        'wellness_interpretation_v3',
+        'internal_wellness_policy_v2_agreement',
       );
       expect(result.interpretation.responseQuality.completionPercent, 100);
     });
@@ -183,7 +231,7 @@ void main() {
         answers: [
           StudentAssessmentAnswer(
             questionId: question.id,
-            answer: LikertAnswer.always,
+            answer: LikertAnswer.stronglyAgree,
           ),
         ],
       );
@@ -263,8 +311,30 @@ void main() {
           withFollowUps.subscaleScores['Academic Stress'],
           withoutFollowUps.subscaleScores['Academic Stress'],
         );
+        expect(
+          withFollowUps.interpretation.priorityRationale,
+          contains('explicit follow-up or impact indicator'),
+        );
       },
     );
+
+    test('ranks main concern areas deterministically', () {
+      expect(
+        StudentAssessmentCalculator.getMainConcernAreas({
+          'Sleep and Rest': 82,
+          'Academic Stress': 91,
+          'Social Connection': 91,
+        }),
+        ['Academic Stress', 'Social Connection', 'Sleep and Rest'],
+      );
+      expect(
+        StudentAssessmentCalculator.getMainConcernAreas(
+          {'Lower Weight': 81, 'Higher Weight': 81},
+          weights: {'Lower Weight': 0.2, 'Higher Weight': 0.8},
+        ),
+        ['Higher Weight', 'Lower Weight'],
+      );
+    });
 
     test('uses consistent concern-band boundaries', () {
       expect(StudentAssessmentCalculator.getStatus(0), 'Low Concern');
@@ -282,12 +352,12 @@ void main() {
       () {
         const answer = StudentAssessmentAnswer(
           questionId: 'q1',
-          answer: LikertAnswer.often,
+          answer: LikertAnswer.agree,
           isSkipped: true,
         );
         expect(answer.toJson(), {
           'questionId': 'q1',
-          'answer': 'often',
+          'answer': 'agree',
           'value': 4,
           'isSkipped': true,
         });
@@ -310,7 +380,7 @@ void main() {
         const answers = [
           StudentAssessmentAnswer(
             questionId: 'faculty_workplace_core_1',
-            answer: LikertAnswer.always,
+            answer: LikertAnswer.stronglyAgree,
           ),
         ];
 
@@ -393,6 +463,9 @@ void main() {
         provider.currentStudentQuestion?.section,
         AssessmentSection.academicDeeper,
       );
+      expect(provider.studentSectionCount, 5);
+      expect(provider.studentSectionProgressLabel, 'Section 1 of 5');
+      expect(provider.studentCategoryProgressLabel, 'Follow-up 1 of 10');
     });
 
     test('goes back and allows a previous answer to be changed', () {
@@ -557,31 +630,99 @@ void main() {
   });
 
   group('StudentAssessmentScreen UI', () {
-    testWidgets('neutral option is not preselected', (tester) async {
+    testWidgets(
+      'selection waits for Continue and persists when navigating back',
+      (tester) async {
+        final provider = AssessmentProvider(AssessmentRepository())
+          ..startStudentAssessment();
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<AssessmentProvider>.value(
+            value: provider,
+            child: const MaterialApp(home: StudentAssessmentScreen()),
+          ),
+        );
+        await tester.pump();
+
+        FilledButton continueButton() => tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Continue'),
+        );
+
+        expect(provider.currentStudentAnswer, isNull);
+        expect(continueButton().onPressed, isNull);
+
+        await tester.tap(find.text('Neutral'));
+        await tester.pump();
+
+        expect(provider.studentQuestionIndex, 0);
+        expect(provider.currentStudentAnswer, LikertAnswer.neutral);
+        expect(continueButton().onPressed, isNotNull);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+        await tester.pumpAndSettle();
+
+        expect(provider.studentQuestionIndex, 1);
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+
+        expect(provider.studentQuestionIndex, 0);
+        expect(provider.currentStudentAnswer, LikertAnswer.neutral);
+        expect(continueButton().onPressed, isNotNull);
+        expect(find.text('Skip'), findsNothing);
+      },
+    );
+
+    testWidgets('core controls support large text and reduced motion', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final provider = AssessmentProvider(AssessmentRepository())
         ..startStudentAssessment();
 
       await tester.pumpWidget(
         ChangeNotifierProvider<AssessmentProvider>.value(
           value: provider,
-          child: const MaterialApp(home: StudentAssessmentScreen()),
+          child: const MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(430, 900),
+                textScaler: TextScaler.linear(1.8),
+                disableAnimations: true,
+              ),
+              child: StudentAssessmentScreen(),
+            ),
+          ),
         ),
       );
       await tester.pump();
 
-      final neutralMaterial = tester.widget<Material>(
-        find
-            .ancestor(of: find.text('Neutral'), matching: find.byType(Material))
-            .first,
-      );
-
-      expect(neutralMaterial.color, QuickAssessmentPalette.card);
-      expect(find.text('Back'), findsOneWidget);
-      expect(find.text('Skip'), findsNothing);
+      expect(find.text('Strongly Disagree'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 
   group('StudentAssessmentCompleteScreen', () {
+    test('full-assessment retry reuses the original submission ID', () async {
+      final repository = _FakeAssessmentRepository(failuresBeforeSuccess: 1);
+      final provider = AssessmentProvider(repository)..startStudentAssessment();
+      _completeAssessment(provider);
+
+      await expectLater(
+        provider.saveStudentAssessmentForUser('user_1'),
+        throwsA(isA<StateError>()),
+      );
+      expect(provider.hasVerifiedStudentResult, isFalse);
+
+      final payload = await provider.saveStudentAssessmentForUser('user_1');
+
+      expect(payload, isNotNull);
+      expect(provider.hasVerifiedStudentResult, isTrue);
+      expect(repository.submissionIds, hasLength(2));
+      expect(repository.submissionIds.toSet(), hasLength(1));
+    });
+
     testWidgets('saving full assessment refreshes weekly report', (
       tester,
     ) async {
@@ -603,6 +744,10 @@ void main() {
             ChangeNotifierProvider<AssessmentProvider>.value(
               value: assessmentProvider,
             ),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) =>
+                  AuthProvider(_FakeAuthRepository(currentUserId: 'user_1')),
+            ),
             ChangeNotifierProvider<UserProvider>.value(value: userProvider),
             ChangeNotifierProvider<ReportProvider>.value(value: reportProvider),
           ],
@@ -618,8 +763,25 @@ void main() {
         reportProvider.latestReport?.latestAssessmentSource,
         'fullAssessment',
       );
+      expect(
+        find.text(
+          assessmentProvider.studentResult!.interpretation.counselorSummary,
+        ),
+        findsNothing,
+      );
     });
   });
+}
+
+List<String> _contractIds(List<dynamic> groups) {
+  return groups
+      .expand((rawGroup) {
+        final group = rawGroup as Map<String, dynamic>;
+        final prefix = group['prefix'] as String;
+        final count = group['count'] as int;
+        return List.generate(count, (index) => '$prefix${index + 1}');
+      })
+      .toList(growable: false);
 }
 
 void _completeAssessment(AssessmentProvider provider) {
@@ -631,21 +793,38 @@ void _completeAssessment(AssessmentProvider provider) {
 }
 
 class _FakeAssessmentRepository extends AssessmentRepository {
+  _FakeAssessmentRepository({this.failuresBeforeSuccess = 0});
+
   String? savedFullAssessmentUserId;
+  int failuresBeforeSuccess;
+  final submissionIds = <String>[];
 
   @override
   Future<Map<String, Object>> saveStudentAssessment({
     required String userId,
     required StudentAssessmentResult result,
     List<StudentAssessmentAnswer> answers = const [],
+    String? submissionId,
   }) async {
     savedFullAssessmentUserId = userId;
+    submissionIds.add(submissionId!);
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess -= 1;
+      throw StateError('temporary submission failure');
+    }
     return {
       'userId': userId,
       'type': result.userType.toLowerCase(),
       ...result.toJson(),
     };
   }
+}
+
+class _FakeAuthRepository extends AuthRepository {
+  _FakeAuthRepository({this.currentUserId}) : super(AuthService());
+
+  @override
+  String? currentUserId;
 }
 
 class _EligibilityFirestoreService extends FirestoreService {
@@ -664,6 +843,7 @@ class _EligibilityFirestoreService extends FirestoreService {
     String? orderBy,
     bool descending = true,
     int? limit,
+    bool requiresAuthentication = true,
   }) async {
     this.collection = collection;
     this.whereEquals = whereEquals;
@@ -673,21 +853,7 @@ class _EligibilityFirestoreService extends FirestoreService {
   }
 }
 
-class _FakeUserRepository extends UserRepository {
-  @override
-  Future<UserModel?> recordActivity(
-    String uid,
-    UserActivityType type, {
-    DateTime? occurredAt,
-  }) async {
-    return UserModel(
-      id: uid,
-      email: 'leo@example.com',
-      dayStreak: 1,
-      activeDateKeys: const ['2026-07-03'],
-    );
-  }
-}
+class _FakeUserRepository extends UserRepository {}
 
 class _FakeReportRepository extends ReportRepository {
   String? generatedForUserId;

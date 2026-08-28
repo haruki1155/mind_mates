@@ -4,6 +4,7 @@ import '../domain/mind_aid_dataset_models.dart';
 import '../domain/mind_aid_model_provider.dart';
 import '../domain/mind_aid_safety.dart';
 import 'mind_aid_dialogue_manager.dart';
+import 'mind_aid_small_talk.dart';
 import 'response_builder.dart';
 
 class MindAidResponseComposer {
@@ -23,6 +24,13 @@ class MindAidResponseComposer {
     required MindAidContext context,
     required MindAidSafetyLevel safetyLevel,
   }) async {
+    if (action == MindAidDialogueAction.smallTalk) {
+      final kind = MindAidSmallTalk.classify(normalizedInput);
+      return MindAidSmallTalk.responseFor(
+        kind ?? MindAidSmallTalkKind.greeting,
+      );
+    }
+
     if (action != MindAidDialogueAction.escalate &&
         _isAssessmentReviewRequest(normalizedInput) &&
         context.hasAssessment) {
@@ -65,6 +73,11 @@ class MindAidResponseComposer {
           context: context,
         );
       case MindAidDialogueAction.escalate:
+        if (matches.isEmpty) {
+          return safetyLevel == MindAidSafetyLevel.crisisOrImmediateRisk
+              ? 'I\'m concerned about your immediate safety. Please move near a trusted person now and contact a locally verified emergency service or appropriate emergency facility. If you can, tell me whether you are in immediate danger right now.'
+              : 'This sounds like a high-distress moment. Please move near a trusted person or safe place, and contact PACC or another trusted support person now. Are you in immediate danger?';
+        }
         return ResponseBuilder.build(
           record: matches.first.record,
           dataset: dataset,
@@ -76,6 +89,10 @@ class MindAidResponseComposer {
           normalizedInput: normalizedInput,
           matches: matches,
           context: context,
+        );
+      case MindAidDialogueAction.smallTalk:
+        throw StateError(
+          'Small-talk responses must be handled before generation.',
         );
     }
   }

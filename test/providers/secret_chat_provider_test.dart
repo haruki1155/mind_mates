@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/models/secret_chat_model.dart';
@@ -210,6 +211,51 @@ void main() {
     expect(repository.activityLoads, 1);
   });
 
+  test(
+    'duplicate alias keeps the confirmed profile and exposes the collision',
+    () async {
+      final repository = _FakeSecretChatRepository(
+        profile: _profile('Calm Owl'),
+        profileSaveError: const SecretChatAliasTakenException(),
+      );
+      final provider = SecretChatProvider(repository);
+      await provider.loadProfile();
+
+      await expectLater(
+        provider.saveProfile('Taken Owl'),
+        throwsA(isA<SecretChatAliasTakenException>()),
+      );
+
+      expect(provider.profile?.alias, 'Calm Owl');
+      expect(provider.profileSaveError, contains('already taken'));
+    },
+  );
+
+  test(
+    'photo upload keeps the server-finalized profile after reload',
+    () async {
+      final repository = _FakeSecretChatRepository(
+        profile: _profile('Calm Owl'),
+      );
+      final provider = SecretChatProvider(repository);
+      await provider.loadProfile();
+
+      await provider.uploadProfilePhoto(
+        Uint8List.fromList([1, 2, 3]),
+        'image/jpeg',
+      );
+      await provider.loadProfile();
+
+      expect(repository.uploadedContentType, 'image/jpeg');
+      expect(repository.uploadedByteCount, 3);
+      expect(
+        provider.profile?.photoPath,
+        'secret_chat_profiles/user_1/avatar_123.jpg',
+      );
+      expect(provider.profile?.photoUrl, 'https://example.test/avatar_123.jpg');
+    },
+  );
+
   test('post owner delete removes the post from the local feed', () async {
     final repository = _FakeSecretChatRepository();
     final provider = SecretChatProvider(repository);
@@ -266,6 +312,7 @@ class _FakeSecretChatRepository extends SecretChatRepository {
     this.stats = SecretChatProfileStats.empty,
     List<SecretChatModel>? recentPosts,
     this.deleteError,
+    this.profileSaveError,
   }) : recentPosts = recentPosts ?? [];
 
   final Object? commentError;
@@ -277,6 +324,9 @@ class _FakeSecretChatRepository extends SecretChatRepository {
   final SecretChatProfileStats stats;
   List<SecretChatModel> recentPosts;
   final Object? deleteError;
+  final Object? profileSaveError;
+  String? uploadedContentType;
+  int? uploadedByteCount;
   int activityLoads = 0;
   final deletedPostIds = <String>[];
   final createdMessages = <String>[];
@@ -312,7 +362,25 @@ class _FakeSecretChatRepository extends SecretChatRepository {
 
   @override
   Future<SecretChatProfile> saveProfile({required String alias}) async {
+    if (profileSaveError != null) throw profileSaveError!;
     profile = _profile(SecretChatProfile.normalizeAlias(alias));
+    return profile!;
+  }
+
+  @override
+  Future<SecretChatProfile> uploadProfilePhoto(
+    Uint8List bytes, {
+    required String contentType,
+  }) async {
+    uploadedContentType = contentType;
+    uploadedByteCount = bytes.length;
+    profile = SecretChatProfile(
+      userId: 'user_1',
+      alias: profile?.alias ?? 'Anonymous',
+      aliasKey: profile?.aliasKey ?? '',
+      photoPath: 'secret_chat_profiles/user_1/avatar_123.jpg',
+      photoUrl: 'https://example.test/avatar_123.jpg',
+    );
     return profile!;
   }
 

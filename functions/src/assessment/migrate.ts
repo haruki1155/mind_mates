@@ -1,7 +1,7 @@
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {getApps, initializeApp} from "firebase-admin/app";
 import {calculateFull, calculateQuick, FullAnswer, QuickAnswer, validateFullAnswers, validateQuickAnswers} from "./calculator";
-import {roleFromPopulation} from "./catalog";
+import {LEGACY_FULL_RESPONSE_SCALE_VERSION, roleFromPopulation} from "./catalog";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -52,9 +52,12 @@ export function migrateAssessmentData(data: Record<string, unknown>): Record<str
     const value = item as Record<string, unknown>;
     return {questionId: String(value.questionId), answer: String(value.answer), isSkipped: value.isSkipped === true};
   });
-  validateFullAnswers(role, answers);
+  // Historical full-assessment records stored frequency-named values. They
+  // must remain on their original scale when recomputed; never reinterpret
+  // them as the agreement-scale values introduced for new submissions.
+  validateFullAnswers(role, answers, LEGACY_FULL_RESPONSE_SCALE_VERSION);
   return {
-    ...calculateFull(role, answers),
+    ...calculateFull(role, answers, LEGACY_FULL_RESPONSE_SCALE_VERSION),
     role,
     populationRole: role,
     calculationAuthority: "server_migration",

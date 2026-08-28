@@ -171,6 +171,55 @@ class QuickAssessmentResult {
   final DateTime createdAt;
   final AssessmentInterpretation interpretation;
 
+  factory QuickAssessmentResult.fromJson(Map<String, dynamic> json) {
+    final rawResponses = json['responses'];
+    final responses = rawResponses is List
+        ? rawResponses
+              .whereType<Map>()
+              .map(
+                (item) => QuickAssessmentResponse(
+                  questionId: item['questionId']?.toString() ?? '',
+                  optionId: item['optionId']?.toString() ?? '',
+                  value: _intValue(item['value']),
+                  concernScore: _doubleValue(item['concernScore']),
+                ),
+              )
+              .toList(growable: false)
+        : const <QuickAssessmentResponse>[];
+    final rawRole = json['role']?.toString().toLowerCase();
+    final role = AssessmentRole.values.firstWhere(
+      (item) => item.name == rawRole,
+      orElse: () => AssessmentRole.student,
+    );
+    final rawInterpretation = json['interpretation'];
+    final generatedAt = _dateValue(json['signalGeneratedAt']) ?? DateTime.now();
+    return QuickAssessmentResult(
+      role: role,
+      name: json['name']?.toString() ?? '',
+      responses: responses,
+      concernScore: _doubleValue(json['concernScore']),
+      overallLevel: QuickAssessmentLevel.values.firstWhere(
+        (item) => item.name == json['overallLevel']?.toString(),
+        orElse: () => QuickAssessmentLevel.low,
+      ),
+      summary: json['summary']?.toString() ?? '',
+      topConcernAreas: _stringList(json['topConcernAreas']),
+      recommendedNextStep: json['recommendedNextStep']?.toString() ?? '',
+      mentalStatusSignal: QuickAssessmentSignal.values.firstWhere(
+        (item) => item.name == json['mentalStatusSignal']?.toString(),
+        orElse: () => QuickAssessmentSignal.stable,
+      ),
+      signalSource: json['signalSource']?.toString() ?? 'quickAssessment',
+      signalGeneratedAt: generatedAt,
+      createdAt: _dateValue(json['createdAt']) ?? generatedAt,
+      interpretation: AssessmentInterpretation.fromJson(
+        rawInterpretation is Map
+            ? Map<String, dynamic>.from(rawInterpretation)
+            : json,
+      ),
+    );
+  }
+
   Map<String, Object> toJson() {
     return {
       'role': role.name,
@@ -191,4 +240,24 @@ class QuickAssessmentResult {
       'interpretation': interpretation.toJson(),
     };
   }
+}
+
+int _intValue(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double _doubleValue(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+DateTime? _dateValue(Object? value) {
+  if (value is DateTime) return value;
+  return DateTime.tryParse(value?.toString() ?? '');
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) return const [];
+  return value.map((item) => item.toString()).toList(growable: false);
 }

@@ -4,7 +4,8 @@ import {SessionsClient, protos} from "@google-cloud/dialogflow-cx";
 import {getApps, initializeApp} from "firebase-admin/app";
 import {FieldValue, getFirestore, Timestamp} from "firebase-admin/firestore";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
+import {warn} from "firebase-functions/logger";
 
 if (!getApps().length) initializeApp();
 
@@ -41,13 +42,16 @@ interface MindAidResponse {
 const crisisPhrases = [
   "kill myself", "end my life", "suicide", "self harm", "hurt myself",
   "i want to die", "do not want to live", "ayoko nang mabuhay",
-  "gusto kong mamatay", "magpakamatay",
+  "gusto kong mamatay", "magpakamatay", "magpapakamatay",
 ];
 
 const highDistressPhrases = [
-  "panic attack", "cant breathe", "cannot breathe", "i am unsafe",
+  "panic attack", "cant breathe", "can t breathe", "cannot breathe", "i am unsafe",
   "not safe right now", "someone might hurt me", "i might hurt someone",
   "breaking down", "out of control", "hindi ako safe", "sasaktan ako",
+  "immediate danger", "emergency help", "nasa panganib ako", "may sasakit sa akin",
+  "abusing me", "being harassed", "unsafe at home", "relationship is violent",
+  "nananakit sa akin", "hina harass ako",
 ];
 
 const blockedOutputPhrases = [
@@ -73,52 +77,80 @@ export function classifyMindAidSafety(text: string): SafetyLevel {
   return "safeSupport";
 }
 
+export function classifyMindAidCxSafety(intent: string, confidence: number): SafetyLevel | null {
+  if (!Number.isFinite(confidence) || confidence < 0.55) return null;
+  if (intent === "safety.self_harm_or_suicide_concern") return "crisisOrImmediateRisk";
+  if (intent === "safety.immediate_safety_concern" ||
+      intent === "safety.abuse_harassment_or_violence" ||
+      intent === "safety.severe_panic_or_distress") return "highDistress";
+  return null;
+}
+
 export function isSafeMindAidOutput(text: string): boolean {
   const value = normalize(text);
   return Boolean(value) && !blockedOutputPhrases.some((phrase) => value.includes(phrase));
 }
 
-interface SupportContacts {
-  paccName: string;
-  paccPhone: string;
-  campusSecurityPhone: string;
-  emergencyLabel: string;
-  emergencyPhone: string;
+interface SupportContact {
+  value: string;
+  type: "emergency" | "crisis" | "counseling" | "generalInformation";
+  displayName: string;
+  availability: string;
+  verificationStatus: "verified";
+  verifiedAt: string;
+  approvingAuthority: string;
+  enabled: true;
 }
 
-async function loadSupportContacts(): Promise<SupportContacts> {
+async function loadSupportContacts(): Promise<SupportContact[]> {
   const data = (await db.collection("mind_aid_config").doc("support_contacts").get()).data() ?? {};
-  const phone = (value: unknown): string => {
-    const text = String(value ?? "").trim();
-    return /^[+0-9() -]{7,24}$/.test(text) ? text : "";
-  };
-  return {
-    paccName: String(data.paccName ?? "PACC").trim().slice(0, 80) || "PACC",
-    paccPhone: phone(data.paccPhone),
-    campusSecurityPhone: phone(data.campusSecurityPhone),
-    emergencyLabel: String(data.emergencyLabel ?? "local emergency services").trim().slice(0, 80) || "local emergency services",
-    emergencyPhone: phone(data.emergencyPhone),
-  };
+  if (!Array.isArray(data.contacts)) {
+    warn("Support contacts are unavailable or use the deprecated unverified schema.");
+    return [];
+  }
+  return parseSupportContacts(data.contacts);
 }
 
-function safetyResponse(level: SafetyLevel, contacts: SupportContacts): {text: string; actions: MindAidAction[]} {
-  const verified = [
-    contacts.paccPhone ? `${contacts.paccName}: ${contacts.paccPhone}` : "",
-    contacts.campusSecurityPhone ? `Campus security: ${contacts.campusSecurityPhone}` : "",
-    contacts.emergencyPhone ? `${contacts.emergencyLabel}: ${contacts.emergencyPhone}` : "",
-  ].filter(Boolean);
-  const contactLine = verified.length ? `\n\nVerified contacts: ${verified.join(" • ")}` : "";
+export function parseSupportContacts(contacts: unknown): SupportContact[] {
+  if (!Array.isArray(contacts)) return [];
+  return contacts.flatMap((raw: unknown) => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    const type = String(item.type ?? "");
+    const value = String(item.value ?? "").trim();
+    const displayName = String(item.displayName ?? "").trim();
+    const verifiedAt = String(item.verifiedAt ?? "").trim();
+    const approvingAuthority = String(item.approvingAuthority ?? "").trim();
+    if (item.enabled !== true || item.verificationStatus !== "verified" ||
+      !["emergency", "crisis", "counseling", "generalInformation"].includes(type) ||
+      !value || !displayName || !approvingAuthority || !verifiedAt || Number.isNaN(Date.parse(verifiedAt))) return [];
+    return [{
+      value: value.slice(0, 120), type, displayName: displayName.slice(0, 80),
+      availability: String(item.availability ?? "").trim().slice(0, 80),
+      verificationStatus: "verified", verifiedAt,
+      approvingAuthority: approvingAuthority.slice(0, 120), enabled: true,
+    } as SupportContact];
+  });
+}
+
+function safetyResponse(level: SafetyLevel, contacts: SupportContact[]): {text: string; actions: MindAidAction[]} {
+  const verified = contacts.map((contact) =>
+    `${contact.displayName}: ${contact.value}${contact.availability ? ` (${contact.availability})` : ""}`
+  );
+  const contactLine = verified.length
+    ? `\n\nVerified contacts: ${verified.join(" | ")}`
+    : "\n\nVerified direct contact details are not currently configured in MindMate. Use a locally verified emergency service or appropriate emergency facility.";
   if (level === "crisisOrImmediateRisk") {
     return {
-      text: `I’m really sorry you’re carrying this much pain. Your safety matters right now. Please move near a trusted person and contact local emergency services, campus security, ${contacts.paccName}, or the nearest emergency room. If you can, tell someone clearly: “I may not be safe alone right now.”${contactLine}`,
+      text: `I’m really sorry you’re carrying this much pain. Your safety matters right now. Please move near a trusted person and contact a locally verified emergency service or appropriate emergency facility. If you can, tell someone clearly: “I may not be safe alone right now.”${contactLine}`,
       actions: [
         {type: "openCounselingServices", label: "View support services"},
-        {type: "bookAppointment", label: "Contact PACC"},
+        {type: "bookAppointment", label: "View counseling options"},
       ],
     };
   }
   return {
-    text: `This sounds very intense, and you do not have to manage it alone. Please pause and move toward a trusted person or safe place. If you may be in immediate danger, contact local emergency services, campus security, ${contacts.paccName}, or the nearest emergency room now.${contactLine}`,
+    text: `This sounds very intense, and you do not have to manage it alone. Please pause and move toward a trusted person or safe place. If you may be in immediate danger, contact a locally verified emergency service or appropriate emergency facility now.${contactLine}`,
     actions: [
       {type: "startBreathing", label: "Start a grounding exercise"},
       {type: "openCounselingServices", label: "View support services"},
@@ -293,12 +325,7 @@ async function persistTurn(uid: string, requestId: string, conversationId: strin
   });
 }
 
-export const sendMindAidMessage = onCall({
-  region: REGION,
-  timeoutSeconds: 15,
-  memory: "256MiB",
-  enforceAppCheck: true,
-}, async (request) => {
+async function sendMindAidMessageHandler(request: CallableRequest) {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in is required.");
   const input = request.data as Record<string, unknown>;
@@ -343,7 +370,7 @@ export const sendMindAidMessage = onCall({
     const client = new SessionsClient({apiEndpoint: `${location}-dialogflow.googleapis.com`});
     const session = client.projectLocationAgentSessionPath(projectId, location, agentId, sessionId);
     const context = personalizationEnabled ? await derivedContext(uid) : {};
-    const allowedLaunchContexts = new Set(["direct", "home", "mood", "journal", "assessment", "insights", "breathing", "counseling", "appointments"]);
+    const allowedLaunchContexts = new Set(["direct", "home", "mood", "assessment", "insights", "breathing", "counseling", "appointments"]);
     const requestedLaunchContext = String(input.launchContext ?? "direct");
     const launchContext = allowedLaunchContexts.has(requestedLaunchContext) ? requestedLaunchContext : "direct";
     const [detected] = await client.detectIntent({
@@ -352,16 +379,40 @@ export const sendMindAidMessage = onCall({
       queryParams: {parameters: toStruct({...context, launchContext, supportContacts})},
     });
     const parsed = extractDialogflowResponse(detected);
-    if (!isSafeMindAidOutput(parsed.text)) throw new HttpsError("internal", "Dialogflow returned an unusable response.");
-    response = {
-      messageId: `${uid}_${requestId}_assistant`, text: parsed.text, intent: parsed.intent,
-      confidence: parsed.confidence, safetyLevel, source: "dialogflow", suggestions: parsed.suggestions,
-      actions: parsed.actions, requiresEscalation: false, fallbackReason: "",
-    };
+    const cxSafetyLevel = classifyMindAidCxSafety(parsed.intent, parsed.confidence);
+    if (cxSafetyLevel) {
+      const controlled = safetyResponse(cxSafetyLevel, supportContacts);
+      response = {
+        messageId: `${uid}_${requestId}_assistant`, text: controlled.text, intent: "crisis_support",
+        confidence: parsed.confidence, safetyLevel: cxSafetyLevel, source: "controlled_safety",
+        suggestions: [], actions: controlled.actions, requiresEscalation: true,
+        fallbackReason: "safety_intent_intercept",
+      };
+    } else {
+      if (!isSafeMindAidOutput(parsed.text)) throw new HttpsError("internal", "Dialogflow returned an unusable response.");
+      response = {
+        messageId: `${uid}_${requestId}_assistant`, text: parsed.text, intent: parsed.intent,
+        confidence: parsed.confidence, safetyLevel, source: "dialogflow", suggestions: parsed.suggestions,
+        actions: parsed.actions, requiresEscalation: false, fallbackReason: "",
+      };
+    }
   }
   await persistTurn(uid, requestId, conversationId, text, response, Date.now() - startedAt);
   return response;
-});
+}
+
+export const sendMindAidMessage = onCall({
+  region: REGION,
+  timeoutSeconds: 15,
+  memory: "256MiB",
+  enforceAppCheck: true,
+}, sendMindAidMessageHandler);
+export const sendMindAidMessageDev = onCall({
+  region: REGION,
+  timeoutSeconds: 15,
+  memory: "256MiB",
+  enforceAppCheck: false,
+}, sendMindAidMessageHandler);
 
 export const aggregateMindAidFeedback = onDocumentWritten(
   {region: REGION, document: "mind_aid_feedback/{feedbackId}", retry: true},

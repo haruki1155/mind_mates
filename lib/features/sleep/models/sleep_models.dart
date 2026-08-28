@@ -6,6 +6,64 @@ enum SleepConsentChoice { cloud, localOnly }
 
 enum SleepSyncState { idle, syncing, pending, error }
 
+enum SleepSaveStatus {
+  savedLocallyAndSynced,
+  savedLocallySyncPending,
+  localSaveFailed,
+  conflict,
+}
+
+class SleepSaveResult {
+  const SleepSaveResult({
+    required this.status,
+    this.message,
+    this.conflictingEntry,
+    this.savedEntry,
+  });
+
+  final SleepSaveStatus status;
+  final String? message;
+  final SleepEntry? conflictingEntry;
+  final SleepEntry? savedEntry;
+
+  bool get localSaved =>
+      status == SleepSaveStatus.savedLocallyAndSynced ||
+      status == SleepSaveStatus.savedLocallySyncPending;
+  bool get syncPending => status == SleepSaveStatus.savedLocallySyncPending;
+}
+
+class SleepShareGrant {
+  const SleepShareGrant({
+    required this.id,
+    required this.summaryWindowDays,
+    required this.accessExpiresAt,
+    required this.revoked,
+  });
+
+  final String id;
+  final int summaryWindowDays;
+  final DateTime accessExpiresAt;
+  final bool revoked;
+
+  factory SleepShareGrant.fromJson(Map<String, dynamic> json) =>
+      SleepShareGrant(
+        id: json['id']?.toString() ?? '',
+        summaryWindowDays: intFromFirestore(json['summaryWindowDays']),
+        accessExpiresAt:
+            dateTimeFromFirestore(json['expiresAt']) ?? DateTime(2000),
+        revoked: json['revokedAt'] != null,
+      );
+}
+
+class SleepInsightPolicy {
+  const SleepInsightPolicy._();
+
+  static const minEntriesForRegularity = 3;
+  static const minEntriesPerComparisonWindow = 3;
+  static const minContributorOccurrences = 3;
+  static const insightAlgorithmVersion = 1;
+}
+
 class SleepConsent {
   const SleepConsent({
     required this.choice,
@@ -54,6 +112,51 @@ class SleepTags {
     'schedule_change': 'Schedule change',
     'illness_pain': 'Illness or pain',
     'medication': 'Medication',
+    'schedule_early_class': 'Early class',
+    'schedule_late_class': 'Late class',
+    'schedule_night_shift': 'Night shift',
+    'schedule_overtime': 'Overtime',
+    'academic_exam': 'Exam',
+    'academic_deadline': 'Deadline',
+    'academic_heavy_workload': 'Heavy workload',
+    'academic_late_study': 'Late study',
+    'environment_noise': 'Noise',
+    'environment_temperature': 'Temperature',
+    'wellness_unwell': 'Feeling unwell',
+  };
+
+  static const groups = <String, List<String>>{
+    'Schedule': [
+      'schedule_early_class',
+      'schedule_late_class',
+      'schedule_night_shift',
+      'schedule_overtime',
+      'schedule_change',
+    ],
+    'Academic or work': [
+      'academic_exam',
+      'academic_deadline',
+      'academic_heavy_workload',
+      'academic_late_study',
+    ],
+    'Habits': [
+      'late_caffeine',
+      'naps',
+      'exercise',
+      'late_screens',
+      'late_meal',
+      'alcohol',
+      'nicotine',
+    ],
+    'Environment and wellness': [
+      'environment',
+      'environment_noise',
+      'environment_temperature',
+      'stress',
+      'illness_pain',
+      'wellness_unwell',
+      'medication',
+    ],
   };
 
   static const concerns = <String, String>{
@@ -85,8 +188,15 @@ class SleepEntry {
     required this.concernTags,
     required this.createdAt,
     required this.clientUpdatedAt,
+    this.schemaVersion = currentSchemaVersion,
+    this.energy,
+    this.focus,
+    this.revision = 0,
+    this.serverUpdatedAt,
   });
 
+  static const legacySchemaVersion = 1;
+  static const currentSchemaVersion = 2;
   static const timezone = 'Asia/Manila';
   final String id;
   final String userId;
@@ -106,6 +216,11 @@ class SleepEntry {
   final Set<String> concernTags;
   final DateTime createdAt;
   final DateTime clientUpdatedAt;
+  final int schemaVersion;
+  final int? energy;
+  final int? focus;
+  final int revision;
+  final DateTime? serverUpdatedAt;
 
   static DateTime manilaNow([DateTime? now]) {
     final shifted = (now ?? DateTime.now()).toUtc().add(
@@ -157,6 +272,14 @@ class SleepEntry {
     DateTime? clientUpdatedAt,
     Set<String>? contributorTags,
     Set<String>? concernTags,
+    int? schemaVersion,
+    int? energy,
+    int? focus,
+    int? revision,
+    DateTime? serverUpdatedAt,
+    bool clearEnergy = false,
+    bool clearFocus = false,
+    bool clearServerUpdatedAt = false,
   }) => SleepEntry(
     id: id,
     userId: userId,
@@ -176,6 +299,13 @@ class SleepEntry {
     concernTags: concernTags ?? this.concernTags,
     createdAt: createdAt,
     clientUpdatedAt: clientUpdatedAt ?? this.clientUpdatedAt,
+    schemaVersion: schemaVersion ?? this.schemaVersion,
+    energy: clearEnergy ? null : energy ?? this.energy,
+    focus: clearFocus ? null : focus ?? this.focus,
+    revision: revision ?? this.revision,
+    serverUpdatedAt: clearServerUpdatedAt
+        ? null
+        : serverUpdatedAt ?? this.serverUpdatedAt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -198,6 +328,11 @@ class SleepEntry {
     'concernTags': concernTags.toList()..sort(),
     'createdAt': createdAt.toUtc().toIso8601String(),
     'clientUpdatedAt': clientUpdatedAt.toUtc().toIso8601String(),
+    'schemaVersion': schemaVersion,
+    'energy': energy,
+    'focus': focus,
+    'revision': revision,
+    'serverUpdatedAt': serverUpdatedAt?.toUtc().toIso8601String(),
   };
 
   factory SleepEntry.fromJson(Map<String, dynamic> json, {String? id}) {
@@ -238,7 +373,20 @@ class SleepEntry {
       concernTags: strings('concernTags'),
       createdAt: requiredInstant('createdAt'),
       clientUpdatedAt: requiredInstant('clientUpdatedAt'),
+      schemaVersion: intFromFirestore(json['schemaVersion']) == 0
+          ? legacySchemaVersion
+          : intFromFirestore(json['schemaVersion']),
+      energy: _optionalRating(json['energy']),
+      focus: _optionalRating(json['focus']),
+      revision: intFromFirestore(json['revision']),
+      serverUpdatedAt: dateTimeFromFirestore(json['serverUpdatedAt']),
     );
+  }
+
+  static int? _optionalRating(Object? value) {
+    if (value == null) return null;
+    final rating = intFromFirestore(value);
+    return rating == 0 ? null : rating;
   }
 }
 
@@ -271,6 +419,13 @@ class SleepWindowSummary {
     this.averageSleepiness,
     this.averageQuality,
     this.averageScheduleShiftMinutes,
+    this.averageEnergy,
+    this.averageFocus,
+    this.typicalBedtimeMinutes,
+    this.typicalWakeMinutes,
+    this.bedtimeVariationMinutes,
+    this.wakeVariationMinutes,
+    this.comparisonSleepMinutes,
   });
 
   final int windowDays;
@@ -282,6 +437,13 @@ class SleepWindowSummary {
   final double? averageSleepiness;
   final double? averageQuality;
   final double? averageScheduleShiftMinutes;
+  final double? averageEnergy;
+  final double? averageFocus;
+  final double? typicalBedtimeMinutes;
+  final double? typicalWakeMinutes;
+  final double? bedtimeVariationMinutes;
+  final double? wakeVariationMinutes;
+  final double? comparisonSleepMinutes;
 }
 
 class SleepContributorObservation {
@@ -289,11 +451,15 @@ class SleepContributorObservation {
     required this.tag,
     required this.message,
     required this.strength,
+    required this.taggedCount,
+    required this.comparisonCount,
   });
 
   final String tag;
   final String message;
   final double strength;
+  final int taggedCount;
+  final int comparisonCount;
 }
 
 class SleepCalculator {
@@ -327,6 +493,10 @@ class SleepCalculator {
   }
 
   static String? validate(SleepEntry entry, {DateTime? now}) {
+    if (entry.schemaVersion < SleepEntry.legacySchemaVersion ||
+        entry.schemaVersion > SleepEntry.currentSchemaVersion) {
+      return 'This sleep entry uses an unsupported format.';
+    }
     final today = manilaDate(now ?? DateTime.now());
     if (dateOnly(
       SleepEntry.dateFromWakeKey(entry.wakeDateKey),
@@ -359,6 +529,12 @@ class SleepCalculator {
       entry.perceivedQuality,
     ].every((rating) => rating >= 1 && rating <= 5)) {
       return 'Complete all ratings from 1 to 5.';
+    }
+    if (![
+      entry.energy,
+      entry.focus,
+    ].whereType<int>().every((rating) => rating >= 1 && rating <= 5)) {
+      return 'Optional daytime ratings must be from 1 to 5.';
     }
     if (!entry.contributorTags.every(SleepTags.contributors.containsKey) ||
         !entry.concernTags.every(SleepTags.concerns.containsKey)) {
@@ -443,7 +619,7 @@ class SleepCalculator {
     double avg(Iterable<num> values) =>
         values.fold<double>(0, (total, value) => total + value) / values.length;
     double? schedule;
-    if (sample.length >= 3) {
+    if (sample.length >= SleepInsightPolicy.minEntriesForRegularity) {
       final shifts = <int>[];
       for (var i = 1; i < sample.length; i++) {
         final onsetShift = _clockDifference(
@@ -470,6 +646,39 @@ class SleepCalculator {
       averageSleepiness: avg(sample.map((value) => value.daytimeSleepiness)),
       averageQuality: avg(sample.map((value) => value.perceivedQuality)),
       averageScheduleShiftMinutes: schedule,
+      averageEnergy: _averageOptional(sample.map((value) => value.energy)),
+      averageFocus: _averageOptional(sample.map((value) => value.focus)),
+      typicalBedtimeMinutes:
+          sample.length >= SleepInsightPolicy.minEntriesForRegularity
+          ? _average(
+              sample.map((entry) => _bedtimeMinute(entry.attemptedSleepAt)),
+            )
+          : null,
+      typicalWakeMinutes:
+          sample.length >= SleepInsightPolicy.minEntriesForRegularity
+          ? _average(
+              sample.map(
+                (entry) =>
+                    entry.finalWakeAt.hour * 60 + entry.finalWakeAt.minute,
+              ),
+            )
+          : null,
+      bedtimeVariationMinutes:
+          sample.length >= SleepInsightPolicy.minEntriesForRegularity
+          ? _meanAbsoluteDeviation(
+              sample.map((entry) => _bedtimeMinute(entry.attemptedSleepAt)),
+            )
+          : null,
+      wakeVariationMinutes:
+          sample.length >= SleepInsightPolicy.minEntriesForRegularity
+          ? _meanCircularDeviation(
+              sample.map(
+                (entry) =>
+                    entry.finalWakeAt.hour * 60 + entry.finalWakeAt.minute,
+              ),
+            )
+          : null,
+      comparisonSleepMinutes: _comparisonSleep(entries, days: days, now: end),
     );
   }
 
@@ -491,7 +700,10 @@ class SleepCalculator {
       final other = sample
           .where((entry) => !entry.contributorTags.contains(tag))
           .toList();
-      if (tagged.length < 3 || other.length < 3) continue;
+      if (tagged.length < SleepInsightPolicy.minContributorOccurrences ||
+          other.length < SleepInsightPolicy.minContributorOccurrences) {
+        continue;
+      }
       double avgQuality(List<SleepEntry> values) =>
           values.fold<double>(
             0,
@@ -570,8 +782,10 @@ class SleepCalculator {
           SleepContributorObservation(
             tag: tag,
             message:
-                'On nights when you recorded ${SleepTags.contributors[tag]!.toLowerCase()}, $detail. This is an observation, not proof of a cause.',
+                'Pattern noticed: on ${tagged.length} recorded nights when you noted ${SleepTags.contributors[tag]!.toLowerCase()}, $detail. This is an observation from your entries and does not show that the tag caused the change.',
             strength: strength,
+            taggedCount: tagged.length,
+            comparisonCount: other.length,
           ),
         );
       }
@@ -601,5 +815,60 @@ class SleepCalculator {
   static int _bedtimeMinute(DateTime value) {
     final minute = value.hour * 60 + value.minute;
     return minute < 12 * 60 ? minute + 1440 : minute;
+  }
+
+  static double _average(Iterable<num> values) {
+    final list = values.toList(growable: false);
+    return list.fold<double>(0, (total, value) => total + value) / list.length;
+  }
+
+  static double? _averageOptional(Iterable<int?> values) {
+    final present = values.whereType<int>().toList(growable: false);
+    return present.isEmpty ? null : _average(present);
+  }
+
+  static double _meanAbsoluteDeviation(Iterable<int> values) {
+    final list = values.toList(growable: false);
+    final center = _average(list);
+    return _average(list.map((value) => (value - center).abs()));
+  }
+
+  static double _meanCircularDeviation(Iterable<int> values) {
+    final list = values.toList(growable: false);
+    final center = _average(list);
+    return _average(
+      list.map((value) {
+        final raw = (value - center).abs();
+        return raw > 720 ? 1440 - raw : raw;
+      }),
+    );
+  }
+
+  static double? _comparisonSleep(
+    List<SleepEntry> entries, {
+    required int days,
+    required DateTime now,
+  }) {
+    final currentStart = now.subtract(Duration(days: days - 1));
+    final previousEnd = currentStart.subtract(const Duration(days: 1));
+    final previousStart = previousEnd.subtract(Duration(days: days - 1));
+    final current = entries.where((entry) {
+      final date = SleepEntry.dateFromWakeKey(entry.wakeDateKey);
+      return !date.isBefore(currentStart) && !date.isAfter(now);
+    }).toList();
+    final previous = entries.where((entry) {
+      final date = SleepEntry.dateFromWakeKey(entry.wakeDateKey);
+      return !date.isBefore(previousStart) && !date.isAfter(previousEnd);
+    }).toList();
+    if (current.length < SleepInsightPolicy.minEntriesPerComparisonWindow ||
+        previous.length < SleepInsightPolicy.minEntriesPerComparisonWindow) {
+      return null;
+    }
+    return _average(
+          current.map(measures).map((value) => value.totalSleepMinutes),
+        ) -
+        _average(
+          previous.map(measures).map((value) => value.totalSleepMinutes),
+        );
   }
 }

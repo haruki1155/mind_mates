@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
 
 import '../database/firestore_collections.dart';
 import '../models/admin_inquiry_model.dart';
@@ -9,7 +10,13 @@ import '../models/admin_mind_aid_analytics_model.dart';
 import '../models/appointment_model.dart';
 import '../models/user_model.dart';
 import '../models/profile_roles.dart';
+import '../features/admin/domain/admin_auth_failure.dart';
 import '../features/admin/domain/admin_management_models.dart';
+import '../features/admin/domain/admin_session_policy.dart';
+import '../features/admin/domain/service_monitoring_models.dart';
+import '../services/firebase/firebase_app_check_service.dart';
+import '../services/firebase/firebase_callable_router.dart';
+import '../services/firebase/firebase_runtime_diagnostics.dart';
 import '../services/firebase/firestore_service.dart';
 
 class AdminAssessmentRecord {
@@ -37,9 +44,9 @@ class AdminAssessmentRecord {
         userId: data['userId']?.toString() ?? '',
         type: data['type']?.toString() ?? 'Assessment',
         createdAt: _date(data['createdAt']),
-        score: data['score'] is num
-            ? data['score'] as num
-            : num.tryParse('${data['score']}'),
+        score: _number(
+          data['overallScore'] ?? data['concernScore'] ?? data['score'],
+        ),
         status: _text(data['status'] ?? data['overallLevel']),
         role: _text(data['populationRole'] ?? data['role']),
       );
@@ -54,37 +61,54 @@ class AdminAssessmentRecord {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
   }
+
+  static num? _number(Object? value) {
+    if (value is num) return value;
+    return num.tryParse('$value');
+  }
 }
 
-class AdminRoleCorrectionRequest {
-  const AdminRoleCorrectionRequest({
+class CounselorSleepSummaryRecord {
+  const CounselorSleepSummaryRecord({
     required this.id,
-    required this.userId,
-    required this.currentRole,
-    required this.requestedRole,
-    required this.reason,
-    required this.status,
-    required this.createdAt,
+    required this.loggedDays,
+    required this.windowDays,
+    required this.averageSleepMinutes,
+    required this.averageQuality,
+    required this.averageSleepiness,
+    required this.expiresAt,
+    required this.guidanceShown,
   });
 
   final String id;
-  final String userId;
-  final String currentRole;
-  final String requestedRole;
-  final String reason;
-  final String status;
-  final DateTime createdAt;
+  final int loggedDays;
+  final int windowDays;
+  final double? averageSleepMinutes;
+  final double? averageQuality;
+  final double? averageSleepiness;
+  final DateTime expiresAt;
+  final Map<String, dynamic> guidanceShown;
 
-  factory AdminRoleCorrectionRequest.fromJson(Map<String, dynamic> data) =>
-      AdminRoleCorrectionRequest(
-        id: data['id']?.toString() ?? '',
-        userId: data['userId']?.toString() ?? '',
-        currentRole: data['currentRole']?.toString() ?? '',
-        requestedRole: data['requestedRole']?.toString() ?? '',
-        reason: data['reason']?.toString() ?? '',
-        status: data['status']?.toString() ?? 'pending',
-        createdAt: AdminAssessmentRecord._date(data['createdAt']),
-      );
+  factory CounselorSleepSummaryRecord.fromJson(
+    Map<String, dynamic> data,
+  ) => CounselorSleepSummaryRecord(
+    id: data['id']?.toString() ?? '',
+    loggedDays: AdminAssessmentRecord._number(data['loggedDays'])?.toInt() ?? 0,
+    windowDays: AdminAssessmentRecord._number(data['windowDays'])?.toInt() ?? 0,
+    averageSleepMinutes: AdminAssessmentRecord._number(
+      data['averageEstimatedSleepMinutes'],
+    )?.toDouble(),
+    averageQuality: AdminAssessmentRecord._number(
+      data['averageQuality'],
+    )?.toDouble(),
+    averageSleepiness: AdminAssessmentRecord._number(
+      data['averageSleepiness'],
+    )?.toDouble(),
+    expiresAt: AdminAssessmentRecord._date(data['expiresAt']),
+    guidanceShown: Map<String, dynamic>.from(
+      data['guidanceShown'] as Map? ?? const {},
+    ),
+  );
 }
 
 class AdminPortalRepository {
@@ -99,49 +123,185 @@ class AdminPortalRepository {
   bool _mustChangePassword = false;
   bool get mustChangePassword => _mustChangePassword;
 
+  Stream<List<CounselorSleepSummaryRecord>> watchCounselorSleepSummaries(
+    String counselorId,
+  ) => _firestoreService
+      .watchDocuments(
+        FirestoreCollections.sleepSharedSummaries,
+        whereEquals: {'counselorId': counselorId},
+        orderBy: 'expiresAt',
+      )
+      .map(
+        (docs) => docs
+            .map(CounselorSleepSummaryRecord.fromJson)
+            .where((summary) => summary.expiresAt.isAfter(DateTime.now()))
+            .toList(growable: false),
+      );
+
+  Future<void> setCounselorSleepAssignment({
+    required String studentId,
+    required String counselorId,
+    required bool active,
+  }) async {
+    await FirebaseAppCheckService.requireToken();
+    await FirebaseFunctions.instance
+        .routedCallable('setCounselorAssignment')
+        .call({
+          'studentId': studentId,
+          'counselorId': counselorId,
+          'active': active,
+        });
+  }
+
   Future<void> signInStaff({
     required String schoolId,
     required String password,
   }) async {
-    final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: schoolId.trim(),
-      password: password,
-    );
+    UserCredential credential;
+    try {
+      credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: schoolId.trim(),
+        password: password,
+      );
+    } catch (error, stackTrace) {
+      _logAuthenticationFailure(error, stackTrace, 'admin_auth_credentials');
+      throw AdminAuthenticationException.fromFirebase(
+        error,
+        stage: AdminAuthenticationStage.credentials,
+        fallback: 'Unable to sign in to the Admin portal.',
+      );
+    }
     final user = credential.user;
-    if (user == null) throw StateError('Unable to identify staff account.');
-    final profile = await _firestoreService.getDocument(
-      FirestoreCollections.users,
-      user.uid,
-    );
+    if (user == null) {
+      throw const AdminAuthenticationException(
+        stage: AdminAuthenticationStage.credentials,
+        code: 'missing-user',
+        userMessage: 'Unable to identify the administrator account.',
+      );
+    }
+    await _establishStaffSession(user);
+  }
+
+  Future<void> _establishStaffSession(User user) async {
+    try {
+      await user.getIdToken(true);
+      await FirebaseAppCheckService.refreshToken();
+      await FirebaseAppCheckService.requireToken();
+    } catch (error, stackTrace) {
+      await _rejectSession();
+      _logAuthenticationFailure(error, stackTrace, 'admin_auth_app_check');
+      throw AdminAuthenticationException.fromFirebase(
+        error,
+        stage: AdminAuthenticationStage.appCheck,
+        fallback:
+            'This Admin web session could not be verified by Firebase App Check.',
+      );
+    }
+
+    await user.reload();
+    final refreshedUser = FirebaseAuth.instance.currentUser ?? user;
+    Map<String, dynamic>? profile;
+    try {
+      profile = await _firestoreService.getDocument(
+        FirestoreCollections.users,
+        refreshedUser.uid,
+      );
+    } catch (error, stackTrace) {
+      await _rejectSession();
+      _logAuthenticationFailure(error, stackTrace, 'admin_auth_profile');
+      throw AdminAuthenticationException.fromFirebase(
+        error,
+        stage: AdminAuthenticationStage.profile,
+        fallback: 'Unable to load the portal account profile.',
+      );
+    }
+    if (profile == null) {
+      await _rejectSession();
+      throw const AdminAuthenticationException(
+        stage: AdminAuthenticationStage.profile,
+        code: 'profile-not-found',
+        userMessage:
+            'Authentication succeeded, but the portal account profile is missing.',
+      );
+    }
     final role = AccessRole.parse(
-      profile?['accessRole'],
-      legacyRole: profile?['role'],
+      profile['accessRole'],
+      legacyRole: profile['role'],
     );
-    final status = StaffAccountStatus.parse(profile?['staffAccountStatus']);
-    _mustChangePassword = profile?['mustChangePassword'] == true;
-    if (status == StaffAccountStatus.pending) {
-      throw StateError(
-        'Your staff registration is awaiting administrator approval.',
-      );
-    }
-    if (status == StaffAccountStatus.rejected) {
-      await FirebaseAuth.instance.signOut();
-      throw StateError(
-        'Your staff registration was rejected. Contact the administrator.',
-      );
-    }
-    if (status == StaffAccountStatus.disabled) {
-      await FirebaseAuth.instance.signOut();
-      throw StateError('This staff account is disabled.');
-    }
-    if (!role.canUsePortal) {
-      await FirebaseAuth.instance.signOut();
-      throw StateError('This account does not have staff access.');
+    final status = StaffAccountStatus.parse(profile['staffAccountStatus']);
+    _mustChangePassword = profile['mustChangePassword'] == true;
+    final decision = evaluateAdminSession(
+      accessRole: role,
+      staffAccountStatus: status,
+      emailVerified: refreshedUser.emailVerified,
+    );
+    switch (decision) {
+      case AdminSessionDecision.pending:
+        await _rejectSession();
+        throw const AdminAuthenticationException(
+          stage: AdminAuthenticationStage.authorization,
+          code: 'staff-pending',
+          userMessage: 'This staff account is awaiting administrator approval.',
+        );
+      case AdminSessionDecision.rejected:
+        await _rejectSession();
+        throw const AdminAuthenticationException(
+          stage: AdminAuthenticationStage.authorization,
+          code: 'staff-rejected',
+          userMessage: 'This staff registration was rejected.',
+        );
+      case AdminSessionDecision.disabled:
+        await _rejectSession();
+        throw const AdminAuthenticationException(
+          stage: AdminAuthenticationStage.authorization,
+          code: 'staff-disabled',
+          userMessage: 'This staff account is disabled.',
+        );
+      case AdminSessionDecision.denied:
+        await _rejectSession();
+        throw const AdminAuthenticationException(
+          stage: AdminAuthenticationStage.authorization,
+          code: 'staff-access-required',
+          userMessage: 'This account does not have portal access.',
+        );
+      case AdminSessionDecision.requireSuperAdminEmailVerification:
+        try {
+          await refreshedUser.sendEmailVerification();
+        } catch (_) {
+          // Keep delivery-provider details off the authentication surface.
+        }
+        await _rejectSession();
+        throw const AdminAuthenticationException(
+          stage: AdminAuthenticationStage.emailVerification,
+          code: 'email-not-verified',
+          userMessage:
+              'Verify the super-administrator email address using the message Firebase sent, then sign in again.',
+        );
+      case AdminSessionDecision.allowSuperAdmin:
+        try {
+          await _confirmSuperAdmin();
+          _isSuperAdmin = true;
+        } catch (error, stackTrace) {
+          await _rejectSession();
+          _logAuthenticationFailure(
+            error,
+            stackTrace,
+            'admin_auth_super_admin_confirmation',
+          );
+          if (error is AdminAuthenticationException) rethrow;
+          throw AdminAuthenticationException.fromFirebase(
+            error,
+            stage: AdminAuthenticationStage.superAdminConfirmation,
+            fallback: 'Unable to confirm super-administrator access.',
+          );
+        }
+        break;
+      case AdminSessionDecision.allowPortalStaff:
+      case AdminSessionDecision.allowCounselor:
+        _isSuperAdmin = false;
+        break;
     }
     _currentAccessRole = role;
-    if (role == AccessRole.admin) {
-      _isSuperAdmin = await _confirmSuperAdmin();
-    }
   }
 
   User? get currentAuthUser => FirebaseAuth.instance.currentUser;
@@ -151,25 +311,13 @@ class AdminPortalRepository {
   Future<bool> restoreSession() async {
     final user = currentAuthUser;
     if (user == null) return false;
-    final profile = await _firestoreService.getDocument(
-      FirestoreCollections.users,
-      user.uid,
-    );
-    final status = StaffAccountStatus.parse(profile?['staffAccountStatus']);
-    _mustChangePassword = profile?['mustChangePassword'] == true;
-    final role = AccessRole.parse(
-      profile?['accessRole'],
-      legacyRole: profile?['role'],
-    );
-    if (status == StaffAccountStatus.approved ||
-        (status == null && role.canUsePortal)) {
-      _currentAccessRole = role;
-      if (role == AccessRole.admin) {
-        _isSuperAdmin = await _confirmSuperAdmin();
-      }
-      return role.canUsePortal;
+    try {
+      await _establishStaffSession(user);
+      return true;
+    } catch (error, stackTrace) {
+      _logAuthenticationFailure(error, stackTrace, 'admin_session_restore');
+      return false;
     }
-    return false;
   }
 
   Future<void> registerStaff({
@@ -191,7 +339,7 @@ class AdminPortalRepository {
         );
     try {
       await FirebaseFunctions.instance
-          .httpsCallable('registerStaffAccount')
+          .routedCallable('registerStaffAccount')
           .call({
             'firstName': firstName.trim(),
             'lastName': lastName.trim(),
@@ -217,15 +365,33 @@ class AdminPortalRepository {
     await FirebaseAuth.instance.signOut();
   }
 
-  Future<bool> _confirmSuperAdmin() async {
-    try {
-      final result = await FirebaseFunctions.instance
-          .httpsCallable('confirmSuperAdmin')
-          .call<Map<String, dynamic>>();
-      return result.data['isSuperAdmin'] == true;
-    } catch (_) {
-      return false;
+  Future<void> _confirmSuperAdmin() async {
+    final result = await FirebaseFunctions.instance
+        .routedCallable('confirmSuperAdmin')
+        .call<Map<String, dynamic>>();
+    if (result.data['isSuperAdmin'] != true) {
+      throw AdminAuthenticationException(
+        stage: AdminAuthenticationStage.superAdminConfirmation,
+        code: 'super-admin-not-confirmed',
+        userMessage: 'This account is not the configured super-administrator.',
+        correlationId: result.data['correlationId']?.toString(),
+      );
     }
+  }
+
+  Future<void> _rejectSession() async {
+    _currentAccessRole = AccessRole.appUser;
+    _isSuperAdmin = false;
+    _mustChangePassword = false;
+    await FirebaseAuth.instance.signOut();
+  }
+
+  void _logAuthenticationFailure(
+    Object error,
+    StackTrace stackTrace,
+    String event,
+  ) {
+    FirebaseRuntimeDiagnostics.log(event: event, error: error);
   }
 
   Future<void> completeMandatoryPasswordChange(String password) async {
@@ -233,7 +399,7 @@ class AdminPortalRepository {
     if (user == null) throw StateError('Administrator session is missing.');
     await user.updatePassword(password);
     await FirebaseFunctions.instance
-        .httpsCallable('completeAdminPasswordChange')
+        .routedCallable('completeAdminPasswordChange')
         .call();
     _mustChangePassword = false;
     await user.getIdToken(true);
@@ -277,26 +443,94 @@ class AdminPortalRepository {
           );
 
   Future<List<PublicAppUserRecord>> listPublicAppUsers() async {
+    return (await fetchPublicAppUsersPage()).users;
+  }
+
+  Future<PublicAppUserPage> fetchPublicAppUsersPage({
+    String? cursor,
+    int pageSize = 25,
+    String search = '',
+    String role = '',
+    String department = '',
+    String course = '',
+    String yearLevel = '',
+  }) async {
+    await FirebaseAppCheckService.requireToken();
     final result = await FirebaseFunctions.instance
-        .httpsCallable('listPublicAppUsers')
-        .call<Map<String, dynamic>>();
+        .routedCallable('listPublicAppUsers')
+        .call<Map<String, dynamic>>({
+          'pageSize': pageSize,
+          'cursor': cursor ?? '',
+          'search': search,
+          'role': role,
+          'department': department,
+          'course': course,
+          'yearLevel': yearLevel,
+        });
     final raw = result.data['users'];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map(
-          (item) =>
-              PublicAppUserRecord.fromJson(Map<String, dynamic>.from(item)),
-        )
-        .toList()
-      ..sort((a, b) => a.publicUserId.compareTo(b.publicUserId));
+    final users =
+        (raw is List ? raw : const [])
+            .whereType<Map>()
+            .map(
+              (item) =>
+                  PublicAppUserRecord.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList()
+          ..sort((a, b) => a.publicUserId.compareTo(b.publicUserId));
+    return PublicAppUserPage(
+      users: users,
+      totalAppUsers:
+          (result.data['totalAppUsers'] as num?)?.toInt() ?? users.length,
+      nextCursor: result.data['nextCursor']?.toString(),
+    );
+  }
+
+  Future<AdminDashboardSummary> getAppUserDashboardSummary() async {
+    await FirebaseAppCheckService.requireToken();
+    final result = await FirebaseFunctions.instance
+        .routedCallable('getAppUserDashboardSummary')
+        .call<Map<String, dynamic>>();
+    return AdminDashboardSummary.fromJson(result.data);
+  }
+
+  Future<AdminServiceMonitoringResponse> getAdminServiceMonitoring({
+    int days = 7,
+    String? serviceKey,
+  }) async {
+    if (![7, 30, 90].contains(days)) {
+      throw ArgumentError('Monitoring range must be 7, 30, or 90 days.');
+    }
+    await FirebaseAppCheckService.requireToken();
+    final result = await FirebaseFunctions.instance
+        .routedCallable('getAdminServiceMonitoring')
+        .call<Map<String, dynamic>>({
+          'days': days,
+          if (serviceKey != null && serviceKey.trim().isNotEmpty)
+            'serviceKey': serviceKey.trim(),
+        });
+    return AdminServiceMonitoringResponse.fromJson(result.data);
   }
 
   Future<int> backfillPublicAppUserIds() async {
     final result = await FirebaseFunctions.instance
-        .httpsCallable('backfillPublicAppUserIds')
+        .routedCallable('backfillPublicAppUserIds')
         .call<Map<String, dynamic>>();
     return (result.data['processed'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<PreviewInactiveAppUserDeletionResult>
+  previewInactiveAppUserDeletion() async {
+    final result = await FirebaseFunctions.instance
+        .routedCallable('previewInactiveAppUserDeletion')
+        .call<Map<String, dynamic>>();
+    return PreviewInactiveAppUserDeletionResult.fromJson(result.data);
+  }
+
+  Future<InactiveAppUserDeletionResult> deleteInactiveAppUsers() async {
+    final result = await FirebaseFunctions.instance
+        .routedCallable('deleteInactiveAppUsers')
+        .call<Map<String, dynamic>>({'confirmation': 'DELETE'});
+    return InactiveAppUserDeletionResult.fromJson(result.data);
   }
 
   Stream<List<UserModel>> watchUsers() => _firestoreService
@@ -312,18 +546,6 @@ class AdminPortalRepository {
               ..sort((a, b) => a.displayName.compareTo(b.displayName)),
       );
 
-  Stream<List<AdminRoleCorrectionRequest>> watchRoleCorrectionRequests() =>
-      _firestoreService
-          .watchDocuments(FirestoreCollections.roleCorrectionRequests)
-          .map(
-            (items) =>
-                items
-                    .map(AdminRoleCorrectionRequest.fromJson)
-                    .where((item) => item.status == 'pending')
-                    .toList()
-                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
-          );
-
   Stream<List<AppointmentModel>> watchAppointments() => _firestoreService
       .watchDocuments(FirestoreCollections.appointments)
       .map(
@@ -337,6 +559,30 @@ class AdminPortalRepository {
                 )
                 .toList()
               ..sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt)),
+      );
+
+  Stream<List<AppointmentHistoryEvent>> watchAppointmentHistory(
+    String appointmentId,
+  ) => _firestoreService.firestore
+      .collection(FirestoreCollections.appointments)
+      .doc(appointmentId)
+      .collection('history')
+      .snapshots()
+      .map(
+        (snapshot) =>
+            snapshot.docs
+                .map(
+                  (document) => AppointmentHistoryEvent.fromJson(
+                    document.data(),
+                    id: document.id,
+                  ),
+                )
+                .toList()
+              ..sort(
+                (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+                  a.createdAt ?? DateTime(1970),
+                ),
+              ),
       );
 
   Stream<List<AdminAssessmentRecord>> watchAssessments() => _firestoreService
@@ -386,11 +632,14 @@ class AdminPortalRepository {
     required String reply,
     DateTime? proposedScheduledAt,
     String? proposedScheduledTime,
+    String? operationId,
   }) async {
+    await FirebaseAppCheckService.requireToken();
     final data = <String, dynamic>{
       'appointmentId': appointmentId,
       'action': action,
       'reply': reply,
+      'operationId': operationId ?? newOperationId(),
       if (proposedScheduledAt != null)
         'proposedScheduledAt': proposedScheduledAt.millisecondsSinceEpoch,
     };
@@ -398,22 +647,37 @@ class AdminPortalRepository {
       data['proposedScheduledTime'] = proposedScheduledTime;
     }
     await FirebaseFunctions.instance
-        .httpsCallable('reviewAppointment')
+        .routedCallable('reviewAppointment')
         .call(data);
   }
 
-  Future<void> reviewProfileVerification({
-    required String userId,
-    required VerificationStatus decision,
-    required String reason,
+  Future<String> scheduleAppointmentFollowUp({
+    required String sourceAppointmentId,
+    required DateTime scheduledAt,
+    required String scheduledTime,
+    required String location,
+    required String reply,
   }) async {
-    await FirebaseFunctions.instance
-        .httpsCallable('reviewProfileVerification')
-        .call({
-          'userId': userId,
-          'decision': decision.storedValue,
-          'reason': reason.trim(),
+    await FirebaseAppCheckService.requireToken();
+    final result = await FirebaseFunctions.instance
+        .routedCallable('scheduleAppointmentFollowUp')
+        .call<Map<String, dynamic>>({
+          'sourceAppointmentId': sourceAppointmentId,
+          'scheduledAt': scheduledAt.millisecondsSinceEpoch,
+          'scheduledTime': scheduledTime.trim(),
+          'location': location.trim(),
+          'reply': reply.trim(),
         });
+    return '${result.data['appointmentId'] ?? ''}';
+  }
+
+  static String newOperationId() {
+    final random = Random.secure();
+    final suffix = List.generate(
+      12,
+      (_) => random.nextInt(36).toRadixString(36),
+    ).join();
+    return 'op_${DateTime.now().microsecondsSinceEpoch}_$suffix';
   }
 
   Future<void> assignAccessRole({
@@ -421,7 +685,7 @@ class AdminPortalRepository {
     required AccessRole accessRole,
     required String reason,
   }) async {
-    await FirebaseFunctions.instance.httpsCallable('assignAccessRole').call({
+    await FirebaseFunctions.instance.routedCallable('assignAccessRole').call({
       'userId': userId,
       'accessRole': accessRole.storedValue,
       'reason': reason.trim(),
@@ -433,8 +697,9 @@ class AdminPortalRepository {
     required bool approve,
     required AccessRole accessRole,
     required String reason,
-  }) =>
-      FirebaseFunctions.instance.httpsCallable('reviewStaffRegistration').call({
+  }) => FirebaseFunctions.instance
+      .routedCallable('reviewStaffRegistration')
+      .call({
         'userId': userId,
         'approve': approve,
         'accessRole': accessRole.storedValue,
@@ -445,9 +710,9 @@ class AdminPortalRepository {
     required String userId,
     required bool enabled,
     required String reason,
-  }) => FirebaseFunctions.instance.httpsCallable('setStaffAccountEnabled').call(
-    {'userId': userId, 'enabled': enabled, 'reason': reason.trim()},
-  );
+  }) => FirebaseFunctions.instance
+      .routedCallable('setStaffAccountEnabled')
+      .call({'userId': userId, 'enabled': enabled, 'reason': reason.trim()});
 
   Future<void> saveOrganizationRecord({
     required String kind,
@@ -457,7 +722,7 @@ class AdminPortalRepository {
     required bool active,
     String collegeId = '',
   }) =>
-      FirebaseFunctions.instance.httpsCallable('saveOrganizationRecord').call({
+      FirebaseFunctions.instance.routedCallable('saveOrganizationRecord').call({
         'kind': kind,
         'id': ?id,
         'name': name,
@@ -472,24 +737,15 @@ class AdminPortalRepository {
     required String collegeId,
     required String courseId,
     required String reason,
-  }) =>
-      FirebaseFunctions.instance.httpsCallable('updateStaffOrganization').call({
+  }) => FirebaseFunctions.instance
+      .routedCallable('updateStaffOrganization')
+      .call({
         'userId': userId,
         'departmentId': departmentId,
         'collegeId': collegeId,
         'courseId': courseId,
         'reason': reason,
       });
-
-  Future<void> reviewRoleCorrection({
-    required String requestId,
-    required bool approve,
-    required String reason,
-  }) async {
-    await FirebaseFunctions.instance.httpsCallable('reviewRoleCorrection').call(
-      {'requestId': requestId, 'approve': approve, 'reason': reason.trim()},
-    );
-  }
 
   Future<void> updateInquiryStatus(String id, InquiryStatus status) =>
       _firestoreService.updateDocument(FirestoreCollections.inquiries, id, {

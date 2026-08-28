@@ -14,12 +14,34 @@ class BreathingProvider extends ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get errorMessage => _errorMessage;
 
+  Future<bool> startSession({
+    required String userId,
+    required String sessionId,
+    required BreathingTechnique technique,
+  }) async {
+    _isSaving = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      if (userId.trim().isEmpty) throw StateError('Sign in is required.');
+      await _repository.startSession(
+        BreathingSessionRecord(sessionId: sessionId, technique: technique),
+      );
+      return true;
+    } catch (_) {
+      _errorMessage =
+          'Unable to start the breathing session. Check your connection and try again.';
+      return false;
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> completeSession({
     required String userId,
+    required String sessionId,
     required BreathingTechnique technique,
-    required int completedSeconds,
-    required DateTime startedAt,
-    DateTime? completedAt,
   }) async {
     _isSaving = true;
     _errorMessage = null;
@@ -27,13 +49,7 @@ class BreathingProvider extends ChangeNotifier {
 
     try {
       await _repository.completeSession(
-        BreathingSessionRecord(
-          userId: userId,
-          technique: technique,
-          completedSeconds: completedSeconds,
-          startedAt: startedAt,
-          completedAt: completedAt ?? DateTime.now(),
-        ),
+        BreathingSessionRecord(sessionId: sessionId, technique: technique),
       );
       return true;
     } catch (_) {

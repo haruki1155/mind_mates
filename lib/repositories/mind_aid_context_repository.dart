@@ -112,10 +112,14 @@ class MindAidContextRepository {
       FirestoreCollections.assessments,
       whereEquals: {'userId': userId},
       orderBy: 'createdAt',
-      limit: 1,
+      limit: 50,
     );
     if (docs.isEmpty) return null;
-    return docs.first;
+    final verified = docs.where((doc) {
+      final status = doc['verificationStatus']?.toString();
+      return status == 'verified' || status == 'verified_legacy_recomputed';
+    });
+    return (verified.isNotEmpty ? verified : docs).first;
   }
 
   Future<ReportModel?> _fetchLatestReport(String userId) async {

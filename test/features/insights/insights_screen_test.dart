@@ -480,7 +480,7 @@ void main() {
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -950));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Contact counselor'));
+    await tester.tap(find.text('View counseling options'));
     await tester.pumpAndSettle();
     expect(find.byType(ServicesScreen), findsOneWidget);
     expect(find.text('All Services'), findsOneWidget);

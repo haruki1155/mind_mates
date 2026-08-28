@@ -160,12 +160,6 @@ class HomeDashboardData {
           colors: [Color(0xFFFFB2D7), Color(0xFF8A3E82)],
         ),
         HomeToolkitData(
-          title: 'My Journal',
-          subtitle: 'Private guided reflection',
-          imageName: 'journal_icon.png',
-          colors: [Color(0xFFFFD86B), Color(0xFFE5AC00)],
-        ),
-        HomeToolkitData(
           title: 'Sleep Quality',
           subtitle: 'Track rest and patterns',
           imageName: '😴 Better sleep.png',

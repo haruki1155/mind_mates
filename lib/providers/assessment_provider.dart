@@ -18,22 +18,43 @@ class AssessmentProvider extends ChangeNotifier {
   int _currentQuestionIndex = 0;
   final Map<String, QuickAssessmentOption> _selectedOptions = {};
   QuickAssessmentResult? _quickResult;
+  bool _quickResultVerified = false;
   int _studentQuestionIndex = 0;
   List<StudentAssessmentQuestion> _studentQuestions = const [];
   final List<StudentAssessmentAnswer> _studentAnswers = [];
   StudentAssessmentResult? _studentResult;
+  bool _studentResultVerified = false;
   bool _isSavingQuickAssessment = false;
+  bool _quickCompletionLocked = false;
+  String? _quickSubmissionId;
+  String? _studentSubmissionId;
 
   AssessmentRole? get selectedRole => _selectedRole;
   String get name => _name;
   int get currentQuestionIndex => _currentQuestionIndex;
   QuickAssessmentResult? get quickResult => _quickResult;
+  bool get hasVerifiedQuickResult => _quickResultVerified;
   int get studentQuestionIndex => _studentQuestionIndex;
   List<StudentAssessmentQuestion> get studentQuestions => _studentQuestions;
   List<StudentAssessmentAnswer> get studentAnswers =>
       List.unmodifiable(_studentAnswers);
   StudentAssessmentResult? get studentResult => _studentResult;
-  bool get isSavingQuickAssessment => _isSavingQuickAssessment;
+  bool get hasVerifiedStudentResult => _studentResultVerified;
+  bool get isSavingQuickAssessment =>
+      _isSavingQuickAssessment || _quickCompletionLocked;
+
+  bool beginQuickCompletion() {
+    if (_quickCompletionLocked || _isSavingQuickAssessment) return false;
+    _quickCompletionLocked = true;
+    notifyListeners();
+    return true;
+  }
+
+  void endQuickCompletion() {
+    if (!_quickCompletionLocked) return;
+    _quickCompletionLocked = false;
+    notifyListeners();
+  }
 
   List<QuickAssessmentQuestion> get questions =>
       QuickAssessmentQuestions.questions;
@@ -110,8 +131,26 @@ class AssessmentProvider extends ChangeNotifier {
     final position = categoryQuestions.indexWhere(
       (question) => question.id == current.id,
     );
-    return 'Question ${position + 1} of ${categoryQuestions.length} in this category';
+    final prefix = current.isConditional ? 'Follow-up' : 'Question';
+    return '$prefix ${position + 1} of ${categoryQuestions.length}';
   }
+
+  List<String> get studentSectionLabels => _studentQuestions
+      .map((question) => question.section.label)
+      .toSet()
+      .toList(growable: false);
+
+  int get studentSectionIndex {
+    final current = currentStudentQuestion;
+    if (current == null) return 0;
+    final index = studentSectionLabels.indexOf(current.section.label);
+    return index < 0 ? 0 : index;
+  }
+
+  int get studentSectionCount => studentSectionLabels.length;
+
+  String get studentSectionProgressLabel =>
+      'Section ${studentSectionIndex + 1} of $studentSectionCount';
 
   StudentAssessmentQuestion? get currentStudentQuestion {
     if (_studentQuestions.isEmpty) return null;
@@ -136,18 +175,23 @@ class AssessmentProvider extends ChangeNotifier {
   void selectRole(AssessmentRole role) {
     _selectedRole = role;
     _quickResult = null;
+    _quickResultVerified = false;
+    _quickSubmissionId = null;
     notifyListeners();
   }
 
   void updateName(String value) {
     _name = value;
     _quickResult = null;
+    _quickResultVerified = false;
+    _quickSubmissionId = null;
     notifyListeners();
   }
 
   void selectAnswer(QuickAssessmentOption option) {
     _selectedOptions[currentQuestion.id] = option;
     _quickResult = null;
+    _quickResultVerified = false;
     notifyListeners();
   }
 
@@ -161,6 +205,7 @@ class AssessmentProvider extends ChangeNotifier {
     }
 
     _quickResult = calculateResult();
+    _quickResultVerified = false;
     notifyListeners();
     return true;
   }
@@ -169,6 +214,8 @@ class AssessmentProvider extends ChangeNotifier {
     _currentQuestionIndex = 0;
     _selectedOptions.clear();
     _quickResult = null;
+    _quickResultVerified = false;
+    _quickSubmissionId = null;
     notifyListeners();
   }
 
@@ -239,10 +286,17 @@ class AssessmentProvider extends ChangeNotifier {
     _isSavingQuickAssessment = true;
     notifyListeners();
     try {
-      return await _repository.saveQuickAssessment(
+      final payload = await _repository.saveQuickAssessment(
         userId: userId,
         result: result,
+        submissionId: _quickSubmissionId ??= _newSubmissionId('quick'),
       );
+      _quickResult = QuickAssessmentResult.fromJson(
+        Map<String, dynamic>.from(payload),
+      );
+      _quickResultVerified = true;
+      notifyListeners();
+      return payload;
     } finally {
       _isSavingQuickAssessment = false;
       notifyListeners();
@@ -257,6 +311,8 @@ class AssessmentProvider extends ChangeNotifier {
     _studentQuestionIndex = 0;
     _studentAnswers.clear();
     _studentResult = null;
+    _studentResultVerified = false;
+    _studentSubmissionId = _newSubmissionId('full');
     _studentQuestions = _questionsForActiveRole()
         .where((question) => !question.isConditional)
         .toList();
@@ -264,6 +320,14 @@ class AssessmentProvider extends ChangeNotifier {
   }
 
   void answerCurrentStudentQuestion(
+    LikertAnswer answer, {
+    bool isSkipped = false,
+  }) {
+    selectCurrentStudentAnswer(answer, isSkipped: isSkipped);
+    submitCurrentStudentAnswer();
+  }
+
+  void selectCurrentStudentAnswer(
     LikertAnswer answer, {
     bool isSkipped = false,
   }) {
@@ -281,6 +345,17 @@ class AssessmentProvider extends ChangeNotifier {
       ),
     );
 
+    _studentResult = null;
+    _studentResultVerified = false;
+    notifyListeners();
+  }
+
+  /// Confirms the selected response and moves forward. Returns true when the
+  /// final presented question has been completed and a review can be shown.
+  bool submitCurrentStudentAnswer() {
+    final question = currentStudentQuestion;
+    if (question == null || currentStudentAnswer == null) return false;
+
     if (_isDeeperTriggerPoint(question)) {
       _syncDeeperQuestionsAfterTrigger();
     }
@@ -291,31 +366,76 @@ class AssessmentProvider extends ChangeNotifier {
         answers: _studentAnswers,
         userType: activeAssessmentUserType,
       );
+      _studentResultVerified = false;
       notifyListeners();
-      return;
+      return true;
     }
 
     _studentQuestionIndex += 1;
     notifyListeners();
+    return false;
   }
 
   void goBackStudentQuestion() {
     if (!canGoBackStudentQuestion) return;
     _studentResult = null;
+    _studentResultVerified = false;
     _studentQuestionIndex -= 1;
     notifyListeners();
   }
 
-  Future<Map<String, Object>?> saveStudentAssessmentForUser(String userId) {
+  void goToStudentQuestion(int index) {
+    if (index < 0 || index >= _studentQuestions.length) return;
+    _studentQuestionIndex = index;
+    _studentResult = null;
+    _studentResultVerified = false;
+    notifyListeners();
+  }
+
+  void prepareStudentResultForReview() {
+    if (_studentQuestions.isEmpty ||
+        _studentAnswers.length < _studentQuestions.length) {
+      return;
+    }
+    _studentResult = StudentAssessmentCalculator.calculate(
+      questions: _studentQuestions,
+      answers: _studentAnswers,
+      userType: activeAssessmentUserType,
+    );
+    _studentResultVerified = false;
+    notifyListeners();
+  }
+
+  void goBackQuickQuestion() {
+    if (_currentQuestionIndex == 0) return;
+    _currentQuestionIndex -= 1;
+    _quickResult = null;
+    _quickResultVerified = false;
+    notifyListeners();
+  }
+
+  Future<Map<String, Object>?> saveStudentAssessmentForUser(
+    String userId,
+  ) async {
     final result = _studentResult;
     if (result == null) return Future.value();
 
-    return _repository.saveStudentAssessment(
+    final payload = await _repository.saveStudentAssessment(
       userId: userId,
       result: result,
       answers: _studentAnswers,
+      submissionId: _studentSubmissionId ??= _newSubmissionId('full'),
     );
+    _studentResult = StudentAssessmentResult.fromJson(
+      Map<String, dynamic>.from(payload),
+    );
+    _studentResultVerified = true;
+    notifyListeners();
+    return payload;
   }
+
+  String _newSubmissionId(String type) =>
+      '${type}_submission_${DateTime.now().microsecondsSinceEpoch}';
 
   Future<void> saveAssessmentClarityFeedback(String clarity) {
     final result = _studentResult;

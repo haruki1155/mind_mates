@@ -7,6 +7,7 @@ import '/features/mind_aid/domain/mind_aid_safety.dart';
 import '/models/mind_aid_message_model.dart';
 import '/models/mind_aid_suggestion_model.dart';
 import '/repositories/mind_aid_repository_screen.dart';
+import '/services/firebase/firebase_error_message.dart';
 
 class MindAidAnalyticsSnapshot {
   const MindAidAnalyticsSnapshot({
@@ -41,6 +42,8 @@ class MindAidProvider extends ChangeNotifier {
   int _selectedSuggestionCount = 0;
   int _highRiskTriggerCount = 0;
   int _fallbackCount = 0;
+  bool _dialogflowAvailable = false;
+  String _lastResponseSource = 'local';
   final Map<String, int> _commonIntentCounts = {};
 
   MindAidAnalyticsSnapshot get analytics => MindAidAnalyticsSnapshot(
@@ -52,7 +55,10 @@ class MindAidProvider extends ChangeNotifier {
   bool get lastUserMessagePersisted => _lastUserMessagePersisted;
   MindAidPreferences? get preferences => _preferences;
   bool get needsConsent => _preferences != null && !_preferences!.hasDecision;
-  bool get usesDialogflow => _preferences?.cloudConsent == true;
+  bool get usesDialogflow =>
+      _preferences?.cloudConsent == true && _dialogflowAvailable;
+  bool get dialogflowAvailable => _dialogflowAvailable;
+  String get lastResponseSource => _lastResponseSource;
   String? get lastFailedText => _lastFailedText;
 
   Future<void> loadChat(
@@ -67,6 +73,10 @@ class MindAidProvider extends ChangeNotifier {
 
     try {
       _preferences = await repository.loadPreferences(userId);
+      _dialogflowAvailable = await repository.isDialogflowAvailable(
+        userId: userId,
+        preferences: _preferences,
+      );
       final results = await Future.wait([
         repository.fetchMessages(
           userId,
@@ -91,6 +101,7 @@ class MindAidProvider extends ChangeNotifier {
               supportCards: const [],
               actions: e.actions,
               source: e.source,
+              primaryIntent: e.primaryIntent,
             ),
           )
           .toList();
@@ -116,8 +127,12 @@ class MindAidProvider extends ChangeNotifier {
           ...suggestions,
         ].take(5).toList(growable: false);
       }
-    } catch (e) {
-      errorMessage = e.toString();
+    } catch (e, stackTrace) {
+      FirebaseErrorMessage.log(e, stackTrace, area: 'Loading MindAid failed.');
+      errorMessage = FirebaseErrorMessage.describe(
+        e,
+        fallback: 'Unable to load MindAid.',
+      );
     }
 
     isLoading = false;
@@ -149,7 +164,9 @@ class MindAidProvider extends ChangeNotifier {
 
       final recentMessages = messages
           .map((message) {
-            return message.toModel(conversationId: userId);
+            return message.toModel(
+              conversationId: _preferences?.conversationId ?? userId,
+            );
           })
           .toList(growable: false);
       final result = await repository.sendMessage(
@@ -172,6 +189,7 @@ class MindAidProvider extends ChangeNotifier {
         supportCards: _supportCardsFor(result, context),
         actions: _actionsFor(result),
         source: result.chatResponse.source,
+        primaryIntent: bot.primaryIntent,
       );
 
       messages.add(botMessage);
@@ -188,13 +206,26 @@ class MindAidProvider extends ChangeNotifier {
         effectiveContext,
       );
       _trackChatResult(result);
+      _lastResponseSource = result.chatResponse.source;
+      if (result.chatResponse.fallbackReason == 'cloud_unavailable' ||
+          result.chatResponse.fallbackReason == 'cloud_disabled') {
+        _dialogflowAvailable = false;
+      }
       _lastUserMessagePersisted = result.userMessageSaved;
       _conversationSummary = _summarizeConversation();
       isSending = false;
       notifyListeners();
       return true;
-    } catch (e) {
-      errorMessage = e.toString();
+    } catch (e, stackTrace) {
+      FirebaseErrorMessage.log(
+        e,
+        stackTrace,
+        area: 'Sending MindAid message failed.',
+      );
+      errorMessage = FirebaseErrorMessage.describe(
+        e,
+        fallback: 'Unable to send your MindAid message.',
+      );
       _fallbackCount += 1;
       _lastFailedText = text;
       final index = messages.lastIndexWhere(
@@ -208,6 +239,8 @@ class MindAidProvider extends ChangeNotifier {
           text: failed.text,
           createdAt: failed.createdAt,
           status: 'failed',
+          source: failed.source,
+          primaryIntent: failed.primaryIntent,
         );
       }
     }
@@ -241,15 +274,27 @@ class MindAidProvider extends ChangeNotifier {
       personalizationEnabled: cloudConsent,
       conversationId: _preferences?.conversationId,
     );
+    _dialogflowAvailable = await repository.isDialogflowAvailable(
+      userId: userId,
+      preferences: _preferences,
+    );
     notifyListeners();
   }
 
   Future<void> clearHistory(String userId) async {
-    await repository.clearHistory(userId);
+    await repository.clearHistory(
+      userId,
+      conversationId: _preferences?.conversationId,
+    );
     messages = [];
     _conversationSummary = null;
     _lastFailedText = null;
+    _lastResponseSource = 'local';
     _preferences = await repository.loadPreferences(userId);
+    _dialogflowAvailable = await repository.isDialogflowAvailable(
+      userId: userId,
+      preferences: _preferences,
+    );
     notifyListeners();
   }
 
@@ -266,6 +311,7 @@ class MindAidProvider extends ChangeNotifier {
     messages = [];
     _conversationSummary = null;
     _lastFailedText = null;
+    _lastResponseSource = 'local';
     notifyListeners();
   }
 
@@ -302,7 +348,7 @@ class MindAidProvider extends ChangeNotifier {
     final intent = response.primaryIntent;
     _commonIntentCounts[intent] = (_commonIntentCounts[intent] ?? 0) + 1;
 
-    if (response.text.trim().isEmpty) {
+    if (response.text.trim().isEmpty || response.fallbackReason.isNotEmpty) {
       _fallbackCount += 1;
     }
   }
@@ -420,7 +466,7 @@ class MindAidProvider extends ChangeNotifier {
         const MindAidSupportCard(
           title: 'Immediate support',
           description:
-              'If there is immediate danger, contact emergency services, campus security, PACC, or a trusted person now.',
+              'If there is immediate danger, move near a trusted person and contact a locally verified emergency service or appropriate emergency facility now.',
           icon: Icons.health_and_safety_rounded,
         ),
       );
@@ -455,7 +501,7 @@ class MindAidProvider extends ChangeNotifier {
         ),
         MindAidAction(
           type: MindAidActionType.bookAppointment,
-          label: 'Contact PACC',
+          label: 'View counseling options',
         ),
       ];
     }
@@ -497,6 +543,7 @@ extension _MindAidMessageModelMapper on MindAidMessage {
       text: text,
       createdAt: createdAt,
       status: status ?? '',
+      primaryIntent: primaryIntent,
     );
   }
 }

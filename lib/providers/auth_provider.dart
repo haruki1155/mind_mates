@@ -28,6 +28,7 @@ class AuthProvider extends ChangeNotifier {
   String? _userId;
   String? _errorMessage;
   SignupState _signupState = SignupState.idle;
+  _PendingProfileSetup? _pendingProfileSetup;
   StreamSubscription<String?>? _authSubscription;
 
   bool get isAuthenticated => _isAuthenticated;
@@ -43,6 +44,76 @@ class AuthProvider extends ChangeNotifier {
       _signupState == SignupState.profileSetupPending;
   bool get hasPendingProfileLookup =>
       _signupState == SignupState.profileLookupPending;
+
+  Future<String?> retryPendingProfileSetup() {
+    final pending = _pendingProfileSetup;
+    if (pending == null) return Future<String?>.value(null);
+    return signUp(
+      password: '',
+      firstName: pending.firstName,
+      lastName: pending.lastName,
+      schoolId: pending.schoolId,
+      department: pending.department,
+      course: pending.course,
+      sector: pending.sector,
+      employeeId: pending.employeeId,
+      yearLevel: pending.yearLevel,
+      position: pending.position,
+      middleName: pending.middleName,
+      role: pending.role,
+    );
+  }
+
+  Future<String?> completeProfileSetup({
+    required String firstName,
+    required String lastName,
+    required String schoolId,
+    required String department,
+    required String course,
+    String? sector,
+    String? employeeId,
+    String? yearLevel,
+    String? position,
+    String? middleName,
+    AssessmentRole? role,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final id = await _repository.completeProfileSetup(
+        firstName: firstName,
+        lastName: lastName,
+        schoolId: schoolId,
+        department: department,
+        course: course,
+        sector: sector,
+        employeeId: employeeId,
+        yearLevel: yearLevel,
+        position: position,
+        middleName: middleName,
+        role: role,
+      );
+      _userId = id;
+      _isAuthenticated = true;
+      _signupState = SignupState.complete;
+      return id;
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Profile recovery failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Profile setup could not be completed.',
+      );
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   void monitorAuthState() {
     _authSubscription ??= _repository.watchAuthenticatedUserIds().listen((id) {
@@ -134,6 +205,19 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
+    _pendingProfileSetup = _PendingProfileSetup(
+      firstName: firstName,
+      lastName: lastName,
+      schoolId: schoolId,
+      department: department,
+      course: course,
+      sector: sector,
+      employeeId: employeeId,
+      yearLevel: yearLevel,
+      position: position,
+      middleName: middleName,
+      role: role,
+    );
     notifyListeners();
 
     try {
@@ -176,6 +260,7 @@ class AuthProvider extends ChangeNotifier {
       _userId = id;
       _isAuthenticated = true;
       _signupState = SignupState.complete;
+      _pendingProfileSetup = null;
       return id;
     } on SignupAppCheckException catch (error, stackTrace) {
       _clearSession(notify: false);
@@ -205,8 +290,11 @@ class AuthProvider extends ChangeNotifier {
         stackTrace,
         area: 'Signup profile provisioning failed.',
       );
-      _errorMessage =
-          '${FirebaseErrorMessage.describe(error.cause, fallback: 'Your account was created, but profile setup is incomplete.')} Your account is signed in; tap Retry profile setup.';
+      _errorMessage = FirebaseErrorMessage.describe(
+        error.cause,
+        fallback:
+            'Your account is signed in, but profile setup is incomplete. Tap Retry profile setup.',
+      );
       return null;
     } on SignupProfileLookupException catch (error, stackTrace) {
       _userId = error.userId;
@@ -217,8 +305,11 @@ class AuthProvider extends ChangeNotifier {
         stackTrace,
         area: 'Existing signup profile lookup failed.',
       );
-      _errorMessage =
-          '${FirebaseErrorMessage.describe(error.cause, fallback: 'Your account is signed in, but its profile could not be checked.')} Tap Retry account check.';
+      _errorMessage = FirebaseErrorMessage.describe(
+        error.cause,
+        fallback:
+            'Your account is signed in, but its profile could not be checked. Tap Retry account check.',
+      );
       return null;
     } catch (error, stackTrace) {
       _clearSession(notify: false);
@@ -267,6 +358,7 @@ class AuthProvider extends ChangeNotifier {
     _isAuthenticated = false;
     _userId = null;
     _signupState = SignupState.idle;
+    _pendingProfileSetup = null;
     onSessionCleared?.call();
     if (notify) notifyListeners();
   }
@@ -323,4 +415,32 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+}
+
+class _PendingProfileSetup {
+  const _PendingProfileSetup({
+    required this.firstName,
+    required this.lastName,
+    required this.schoolId,
+    required this.department,
+    required this.course,
+    this.sector,
+    this.employeeId,
+    this.yearLevel,
+    this.position,
+    this.middleName,
+    this.role,
+  });
+
+  final String firstName;
+  final String lastName;
+  final String schoolId;
+  final String department;
+  final String course;
+  final String? sector;
+  final String? employeeId;
+  final String? yearLevel;
+  final String? position;
+  final String? middleName;
+  final AssessmentRole? role;
 }

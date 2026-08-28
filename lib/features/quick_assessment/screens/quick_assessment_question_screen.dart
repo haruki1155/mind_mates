@@ -5,6 +5,7 @@ import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
+import '../../../services/firebase/firebase_error_message.dart';
 import '../models/quick_assessment_models.dart';
 import '../widgets/quick_assessment_widgets.dart';
 
@@ -16,14 +17,15 @@ class QuickAssessmentQuestionScreen extends StatelessWidget {
     return Consumer<AssessmentProvider>(
       builder: (context, provider, _) {
         final question = provider.currentQuestion;
+        final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
         return QuickAssessmentScaffold(
-          topClusters: const [
-            BubbleCluster(top: 66, left: -18),
-            BubbleCluster(top: 270, right: -24, mirrored: true),
-          ],
+          topClusters: const [],
+          showBottomBubble: false,
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 240),
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 240),
             switchInCurve: Curves.easeOutQuart,
             switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, animation) {
@@ -118,14 +120,44 @@ class _QuestionPage extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: EdgeInsets.only(
-            bottom: 48 + MediaQuery.paddingOf(context).bottom,
+          padding: EdgeInsets.fromLTRB(
+            24,
+            12,
+            24,
+            24 + MediaQuery.paddingOf(context).bottom,
           ),
-          child: QuickNextButton(
-            onPressed: provider.isSavingQuickAssessment
-                ? null
-                : () => _goNext(context),
-            isLoading: provider.isSavingQuickAssessment,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (provider.currentQuestionIndex > 0) ...[
+                    SizedBox(
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: provider.goBackQuickQuestion,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: const Text('Back'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: QuickAssessmentPalette.text,
+                          side: const BorderSide(
+                            color: QuickAssessmentPalette.softBorder,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  QuickNextButton(
+                    onPressed: provider.isSavingQuickAssessment
+                        ? null
+                        : () => _goNext(context),
+                    isLoading: provider.isSavingQuickAssessment,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -153,10 +185,16 @@ class _QuestionPage extends StatelessWidget {
     }
 
     final completed = provider.isLastQuestion;
+    if (completed && !provider.beginQuickCompletion()) return;
     provider.moveToNextQuestion();
 
     if (completed) {
-      final saved = await _saveQuickAssessment(context);
+      bool saved;
+      try {
+        saved = await _saveQuickAssessment(context);
+      } finally {
+        provider.endQuickCompletion();
+      }
       if (!context.mounted) return;
       if (!saved) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
@@ -167,63 +205,69 @@ class _QuestionPage extends StatelessWidget {
   }
 
   Future<bool> _saveQuickAssessment(BuildContext context) async {
-    final userId = _currentUserId(context);
+    final userId = await _currentUserId(context);
+    if (!context.mounted) return false;
     if (userId == null || userId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to save your assessment.')),
+        const SnackBar(
+          content: Text('Please sign in to save your assessment.'),
+        ),
       );
       return false;
     }
 
+    Map<String, Object>? payload;
     try {
-      final payload = await provider.saveQuickAssessmentForUser(userId);
-      if (!context.mounted) return false;
-
-      final userProvider = context.read<UserProvider>();
-      if (payload != null) {
-        await userProvider.markQuickAssessment(userId);
-        await userProvider.loadProfile(userId);
-      }
-      await _persistSelectedRole(userProvider);
-      return payload != null;
-    } catch (error) {
-      debugPrint('Quick assessment sync failed: $error');
+      payload = await provider.saveQuickAssessmentForUser(userId);
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Quick assessment sync failed.',
+      );
       if (!context.mounted) return false;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Unable to save your quick assessment. Please try again.',
+              FirebaseErrorMessage.describe(
+                error,
+                fallback:
+                    'Unable to save your quick assessment. Please try again.',
+              ),
             ),
           ),
         );
       return false;
     }
+
+    if (!context.mounted || payload == null) return false;
+
+    // The callable response is authoritative. Profile refresh is secondary
+    // and must not turn a verified assessment save into a false failure.
+    try {
+      await context.read<UserProvider>().loadProfile(userId);
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Quick assessment profile refresh failed after verified save.',
+      );
+    }
+    return true;
   }
 
-  String? _currentUserId(BuildContext context) {
+  Future<String?> _currentUserId(BuildContext context) async {
     try {
       final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      final userId = await authProvider.resolveAuthenticatedUserId();
       if (userId != null && userId.isNotEmpty) return userId;
     } on ProviderNotFoundException {
       // Some previews/tests may only provide UserProvider.
     }
 
-    try {
-      return context.read<UserProvider>().user?.id;
-    } on ProviderNotFoundException {
-      return null;
-    }
-  }
-
-  Future<void> _persistSelectedRole(UserProvider userProvider) async {
-    final role = provider.selectedRole;
-    final user = userProvider.user;
-    if (role == null || user == null || user.role == role.name) return;
-
-    await userProvider.updateProfile(user.copyWith(role: role.name));
+    return null;
   }
 }
 
@@ -240,80 +284,92 @@ class _OptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
-      scale: selected ? 1.01 : 1,
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOutCubic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: option.label,
+      onTap: onTap,
+      child: AnimatedScale(
+        scale: selected ? 1.01 : 1,
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: selected
-              ? QuickAssessmentPalette.selectedFill
-              : QuickAssessmentPalette.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
+        child: AnimatedContainer(
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
             color: selected
-                ? QuickAssessmentPalette.border
-                : QuickAssessmentPalette.softBorder,
-            width: selected ? 1.6 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: QuickAssessmentPalette.shadow.withValues(
-                alpha: selected ? 0.08 : 0.12,
-              ),
-              blurRadius: selected ? 12 : 8,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
+                ? QuickAssessmentPalette.selectedFill
+                : QuickAssessmentPalette.card,
             borderRadius: BorderRadius.circular(14),
-            splashColor: QuickAssessmentPalette.primary.withValues(alpha: 0.16),
-            highlightColor: QuickAssessmentPalette.primary.withValues(
-              alpha: 0.08,
+            border: Border.all(
+              color: selected
+                  ? QuickAssessmentPalette.border
+                  : QuickAssessmentPalette.softBorder,
+              width: selected ? 1.6 : 1,
             ),
-            child: SizedBox(
-              height: 52,
-              child: Row(
-                children: [
-                  const SizedBox(width: 14),
-                  Image.asset(
-                    option.iconAssetPath,
-                    width: 25,
-                    height: 25,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(Icons.circle, size: 18);
-                    },
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      option.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: QuickAssessmentPalette.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+            boxShadow: [
+              BoxShadow(
+                color: QuickAssessmentPalette.shadow.withValues(
+                  alpha: selected ? 0.08 : 0.12,
+                ),
+                blurRadius: selected ? 12 : 8,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(14),
+              splashColor: QuickAssessmentPalette.primary.withValues(
+                alpha: 0.16,
+              ),
+              highlightColor: QuickAssessmentPalette.primary.withValues(
+                alpha: 0.08,
+              ),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 56),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 14),
+                    Image.asset(
+                      option.iconAssetPath,
+                      width: 25,
+                      height: 25,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.circle, size: 18);
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        option.label,
+                        style: const TextStyle(
+                          color: QuickAssessmentPalette.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                  ),
-                  if (selected) ...[
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      size: 20,
-                      color: QuickAssessmentPalette.text,
-                    ),
+                    if (selected) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 20,
+                        color: QuickAssessmentPalette.text,
+                      ),
+                    ],
+                    const SizedBox(width: 14),
                   ],
-                  const SizedBox(width: 14),
-                ],
+                ),
               ),
             ),
           ),

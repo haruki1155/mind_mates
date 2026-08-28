@@ -10,7 +10,7 @@ void main() {
   testWidgets(
     'guided form exposes core inputs, ratings, tags, and safety guidance',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 1800));
+      await tester.binding.setSurfaceSize(const Size(800, 3000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final repository = _FormRepository();
       final provider = SleepProvider(repository);
@@ -39,7 +39,7 @@ void main() {
   );
 
   testWidgets('default valid entry saves through the provider', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1800));
+    await tester.binding.setSurfaceSize(const Size(800, 3000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final repository = _FormRepository();
     final provider = SleepProvider(repository);
@@ -64,11 +64,14 @@ class _FormRepository extends SleepRepository {
   SleepEntry? saved;
 
   @override
-  Future<List<SleepEntry>> save(
+  Future<SleepSaveResult> save(
     SleepEntry entry, {
     required bool cloudEnabled,
   }) async {
     saved = entry;
-    return [entry];
+    return SleepSaveResult(
+      status: SleepSaveStatus.savedLocallyAndSynced,
+      savedEntry: entry,
+    );
   }
 }

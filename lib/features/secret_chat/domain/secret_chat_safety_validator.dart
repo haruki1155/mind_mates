@@ -77,7 +77,7 @@ class SecretChatSafetyValidator {
         code: SecretChatValidationCode.crisisSupport,
         labels: ['crisis_support'],
         message:
-            'This sounds urgent. Please use MindAid or contact PACC/crisis support instead of posting publicly.',
+            'This sounds urgent. Please avoid posting publicly and seek direct help from a trusted person, qualified professional, or locally verified urgent-support service.',
       );
     }
     if (_containsUnsafeLanguage(normalized)) {

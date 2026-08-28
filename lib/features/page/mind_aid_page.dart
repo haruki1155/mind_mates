@@ -34,7 +34,7 @@ class _MindAidPageState extends State<MindAidPage> {
     final provider = context.watch<MindAidProvider>();
     final assessmentProvider = context.watch<AssessmentProvider>();
     final authProvider = context.watch<AuthProvider>();
-    final userId = authProvider.userId ?? 'guest';
+    final userId = authProvider.authenticatedUserId ?? '';
     final launchContext =
         ModalRoute.of(context)?.settings.arguments is MindAidLaunchContext
         ? ModalRoute.of(context)!.settings.arguments as MindAidLaunchContext
@@ -65,7 +65,7 @@ class _MindAidPageState extends State<MindAidPage> {
       onNotificationTap: () {},
       onActionSelected: (action) => _handleAction(action, launchContext),
       onFeedback: (messageId, helpful) async {
-        if (userId == 'guest') return;
+        if (userId.isEmpty) return;
         await provider.submitFeedback(
           userId: userId,
           messageId: messageId,
@@ -82,7 +82,9 @@ class _MindAidPageState extends State<MindAidPage> {
       onNewConversation: () => _startNewConversation(provider, userId),
       onPrivacyTap: () => _showConsentDialog(provider, userId, editing: true),
       disclaimerText: provider.usesDialogflow
-          ? 'Supportive AI using Dialogflow. MindAid is not a counselor or emergency service.'
+          ? provider.lastResponseSource == 'dialogflow'
+                ? 'Last reply used Dialogflow with local safety checks. MindAid is not a counselor or emergency service.'
+                : 'Dialogflow is available for eligible messages; greetings and safety checks stay local. MindAid is not a counselor or emergency service.'
           : 'Local supportive assistant. MindAid is not a counselor or emergency service.',
     );
   }
@@ -97,9 +99,8 @@ class _MindAidPageState extends State<MindAidPage> {
       text,
       context: contextValue,
     );
-    if (!mounted || !sent || userId == 'guest') return;
+    if (!mounted || !sent || userId.isEmpty) return;
     if (!context.read<MindAidProvider>().lastUserMessagePersisted) return;
-    await context.read<UserProvider>().markMindAidMessage(userId);
     await _refreshProfileAndReport(userId);
   }
 
@@ -113,9 +114,8 @@ class _MindAidPageState extends State<MindAidPage> {
       userId,
       context: contextValue,
     );
-    if (!mounted || !sent || userId == 'guest') return;
+    if (!mounted || !sent || userId.isEmpty) return;
     if (!context.read<MindAidProvider>().lastUserMessagePersisted) return;
-    await context.read<UserProvider>().markMindAidMessage(userId);
     await _refreshProfileAndReport(userId);
   }
 
@@ -175,7 +175,7 @@ class _MindAidPageState extends State<MindAidPage> {
   }
 
   void _loadWellnessSnapshot(String userId) {
-    if (userId == 'guest' || userId.trim().isEmpty) {
+    if (userId.trim().isEmpty) {
       if (_wellnessSnapshot != null || _loadedSnapshotUserId != userId) {
         _loadedSnapshotUserId = userId;
         _wellnessSnapshot = null;
@@ -215,9 +215,7 @@ class _MindAidPageState extends State<MindAidPage> {
   }
 
   void _scheduleConsentIfNeeded(MindAidProvider provider, String userId) {
-    if (userId == 'guest' ||
-        !provider.needsConsent ||
-        _consentDialogScheduled) {
+    if (userId.isEmpty || !provider.needsConsent || _consentDialogScheduled) {
       return;
     }
     _consentDialogScheduled = true;
@@ -240,7 +238,7 @@ class _MindAidPageState extends State<MindAidPage> {
           editing ? 'AI privacy settings' : 'Choose how MindAid works',
         ),
         content: const Text(
-          'Dialogflow can make MindAid more conversational. It receives your chat turns and derived signals such as mood trends and assessment level. Journal text, mood notes, raw answers, and contact details are never sent. You can instead keep using the local assistant.',
+          'Dialogflow can make MindAid more conversational. It receives your chat turns and derived signals such as mood trends and assessment level. Mood notes, raw answers, and contact details are never sent. You can instead keep using the local assistant.',
         ),
         actions: [
           TextButton(
@@ -262,7 +260,7 @@ class _MindAidPageState extends State<MindAidPage> {
     MindAidProvider provider,
     String userId,
   ) async {
-    if (userId == 'guest') return;
+    if (userId.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -289,7 +287,7 @@ class _MindAidPageState extends State<MindAidPage> {
     MindAidProvider provider,
     String userId,
   ) async {
-    if (userId == 'guest') return;
+    if (userId.isEmpty) return;
     await provider.startNewConversation(userId);
   }
 

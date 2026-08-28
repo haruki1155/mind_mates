@@ -25,6 +25,8 @@ class MindAidKnowledgeRetriever {
         normalizedInput,
         record.phrases,
       );
+      if (matchedKeywords.isEmpty && matchedPhrases.isEmpty) continue;
+
       final score = ScoreEngine.scoreRecord(
         normalizedInput,
         record,

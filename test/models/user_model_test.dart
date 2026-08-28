@@ -38,6 +38,22 @@ void main() {
       expect(user.displayName, 'mia@example.com');
     });
 
+    test('app-user serialization omits obsolete role verification fields', () {
+      final user = UserModel.fromJson({
+        'id': 'user_legacy',
+        'email': 'legacy@example.com',
+        'role': 'student',
+        'verificationStatus': 'pending',
+        'verifiedAt': null,
+        'verifiedBy': '',
+      }).toJson();
+
+      expect(user['role'], 'student');
+      expect(user.containsKey('verificationStatus'), isFalse);
+      expect(user.containsKey('verifiedAt'), isFalse);
+      expect(user.containsKey('verifiedBy'), isFalse);
+    });
+
     test('profile update json includes editable fields', () {
       final user = const UserModel(
         id: 'user_3',
@@ -52,7 +68,9 @@ void main() {
         dayStreak: 7,
       ).toProfileUpdateJson();
 
-      expect(user['name'], 'Ana Rivera');
+      expect(user['firstName'], 'Ana');
+      expect(user['lastName'], 'Rivera');
+      expect(user.containsKey('name'), isFalse);
       expect(user.containsKey('schoolId'), isFalse);
       expect(user.containsKey('department'), isFalse);
       expect(user.containsKey('course'), isFalse);

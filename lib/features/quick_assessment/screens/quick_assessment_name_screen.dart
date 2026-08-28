@@ -15,6 +15,7 @@ class QuickAssessmentNameScreen extends StatefulWidget {
 
 class _QuickAssessmentNameScreenState extends State<QuickAssessmentNameScreen> {
   late final TextEditingController _controller;
+  String? _errorText;
 
   @override
   void initState() {
@@ -33,13 +34,11 @@ class _QuickAssessmentNameScreenState extends State<QuickAssessmentNameScreen> {
   @override
   Widget build(BuildContext context) {
     return QuickAssessmentScaffold(
-      topClusters: const [
-        BubbleCluster(top: 66, left: -18),
-        BubbleCluster(top: 84, right: -20, mirrored: true),
-      ],
+      topClusters: const [],
+      showBottomBubble: false,
       child: Column(
         children: [
-          const QuickProgressHeader(step: 1, label: '1/6'),
+          const QuickProgressHeader(step: 0, label: 'Setup'),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -71,7 +70,11 @@ class _QuickAssessmentNameScreenState extends State<QuickAssessmentNameScreen> {
                           ),
                         ),
                         const SizedBox(height: 15),
-                        _NameField(controller: _controller),
+                        _NameField(
+                          controller: _controller,
+                          errorText: _errorText,
+                          onSubmitted: _submit,
+                        ),
                       ],
                     ),
                   ),
@@ -95,11 +98,11 @@ class _QuickAssessmentNameScreenState extends State<QuickAssessmentNameScreen> {
     provider.updateName(_controller.text);
 
     if (!provider.isNameValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your name to continue.')),
-      );
+      setState(() => _errorText = 'Please enter your name to continue.');
       return;
     }
+
+    setState(() => _errorText = null);
 
     provider.resetQuestions();
     Navigator.of(context).pushNamed(RouteNames.quickAssessmentQuestions);
@@ -107,50 +110,87 @@ class _QuickAssessmentNameScreenState extends State<QuickAssessmentNameScreen> {
 }
 
 class _NameField extends StatelessWidget {
-  const _NameField({required this.controller});
+  const _NameField({
+    required this.controller,
+    required this.onSubmitted,
+    this.errorText,
+  });
 
   final TextEditingController controller;
+  final VoidCallback onSubmitted;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      textAlign: TextAlign.center,
-      textInputAction: TextInputAction.done,
-      onChanged: context.read<AssessmentProvider>().updateName,
-      onSubmitted: (_) {
-        FocusScope.of(context).unfocus();
-      },
-      style: const TextStyle(
-        color: QuickAssessmentPalette.text,
-        fontSize: 18,
-        fontWeight: FontWeight.w900,
-      ),
-      decoration: InputDecoration(
-        hintText: 'Name',
-        hintStyle: TextStyle(
-          color: QuickAssessmentPalette.text.withValues(alpha: 0.82),
-          fontSize: 18,
-          fontWeight: FontWeight.w900,
-        ),
-        filled: true,
-        fillColor: QuickAssessmentPalette.cream,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: Color(0xFF939393), width: 2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(
-            color: QuickAssessmentPalette.primary,
-            width: 2,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Name',
+          style: TextStyle(
+            color: QuickAssessmentPalette.secondaryText,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          textAlign: TextAlign.left,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.name],
+          onChanged: (value) {
+            context.read<AssessmentProvider>().updateName(value);
+          },
+          onSubmitted: (_) => onSubmitted(),
+          style: const TextStyle(
+            color: QuickAssessmentPalette.text,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Enter your name',
+            errorText: errorText,
+            hintStyle: TextStyle(
+              color: QuickAssessmentPalette.text.withValues(alpha: 0.82),
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+            filled: true,
+            fillColor: QuickAssessmentPalette.cream,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 15,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: QuickAssessmentPalette.softBorder,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: QuickAssessmentPalette.primary,
+                width: 2,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.error,
+                width: 2,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../models/appointment_model.dart';
+import '../../../providers/appointment_provider.dart';
 
 enum AppointmentDisplayStatus {
   pending,
@@ -170,6 +172,68 @@ Future<void> showAppointmentDetailsSheet(
                 Text(
                   appointment.concern.trim(),
                   style: const TextStyle(height: 1.45),
+                ),
+              ],
+              if (appointment.lifecycleStatus ==
+                  AppointmentLifecycleStatus.rescheduleProposed) ...[
+                const Divider(height: 26),
+                const Text(
+                  'Respond to proposed schedule',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                Consumer<AppointmentProvider>(
+                  builder: (context, provider, _) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (provider.errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            provider.errorMessage!,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: provider.isSaving
+                                ? null
+                                : () async {
+                                    final saved = await provider
+                                        .respondToReschedule(
+                                          appointment,
+                                          accept: true,
+                                        );
+                                    if (saved && context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                            icon: const Icon(Icons.check),
+                            label: const Text('Accept new schedule'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: provider.isSaving
+                                ? null
+                                : () async {
+                                    final saved = await provider
+                                        .respondToReschedule(
+                                          appointment,
+                                          accept: false,
+                                        );
+                                    if (saved && context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                            icon: const Icon(Icons.close),
+                            label: const Text('Decline'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],

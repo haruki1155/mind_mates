@@ -1,5 +1,45 @@
 import '../core/utils/firestore_mapper.dart';
 
+enum AppointmentLifecycleStatus {
+  pending,
+  confirmed,
+  ongoing,
+  rescheduleProposed,
+  completed,
+  declined,
+  cancelled,
+  unknown;
+
+  static AppointmentLifecycleStatus parse(Object? value) {
+    final raw = '${value ?? 'pending'}'.trim().toLowerCase().replaceAll(RegExp(r'[ -]'), '_');
+    return switch (raw) {
+      'pending' || 'requested' => pending,
+      'confirmed' || 'upcoming' || 'scheduled' => confirmed,
+      'ongoing' || 'in_progress' || 'inprogress' => ongoing,
+      'reschedule_proposed' || 'reschedule' || 'rescheduled' => rescheduleProposed,
+      'completed' || 'complete' || 'done' => completed,
+      'declined' || 'rejected' => declined,
+      'cancelled' || 'canceled' => cancelled,
+      _ => unknown,
+    };
+  }
+
+  String get storedValue => switch (this) {
+    pending => 'pending', confirmed => 'confirmed', ongoing => 'ongoing',
+    rescheduleProposed => 'reschedule_proposed', completed => 'completed',
+    declined => 'declined', cancelled => 'cancelled', unknown => 'unknown',
+  };
+
+  String get label => switch (this) {
+    pending => 'Pending', confirmed => 'Confirmed', ongoing => 'Ongoing',
+    rescheduleProposed => 'Reschedule proposed', completed => 'Completed',
+    declined => 'Declined', cancelled => 'Cancelled', unknown => 'Unsupported',
+  };
+
+  bool get isTerminal => this == completed || this == declined || this == cancelled;
+  bool get isActive => !isTerminal && this != unknown;
+}
+
 class AppointmentModel {
   const AppointmentModel({
     required this.id,
@@ -29,6 +69,13 @@ class AppointmentModel {
     this.reviewedAt,
     this.proposedScheduledAt,
     this.proposedScheduledTime,
+    this.parentAppointmentId,
+    this.rootAppointmentId,
+    this.startedAt,
+    this.completedAt,
+    this.statusBeforeReschedule,
+    this.proposedBy,
+    this.proposedAt,
   });
 
   final String id;
@@ -58,6 +105,14 @@ class AppointmentModel {
   final DateTime? reviewedAt;
   final DateTime? proposedScheduledAt;
   final String? proposedScheduledTime;
+  final String? parentAppointmentId;
+  final String? rootAppointmentId;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final String? statusBeforeReschedule;
+  final String? proposedBy;
+  final DateTime? proposedAt;
+  AppointmentLifecycleStatus get lifecycleStatus => AppointmentLifecycleStatus.parse(status);
 
   factory AppointmentModel.fromJson(Map<String, dynamic> json, {String? id}) {
     return AppointmentModel(
@@ -89,6 +144,13 @@ class AppointmentModel {
       reviewedAt: dateTimeFromFirestore(json['reviewedAt']),
       proposedScheduledAt: dateTimeFromFirestore(json['proposedScheduledAt']),
       proposedScheduledTime: _optionalString(json['proposedScheduledTime']),
+      parentAppointmentId: _optionalString(json['parentAppointmentId']),
+      rootAppointmentId: _optionalString(json['rootAppointmentId']),
+      startedAt: dateTimeFromFirestore(json['startedAt']),
+      completedAt: dateTimeFromFirestore(json['completedAt']),
+      statusBeforeReschedule: _optionalString(json['statusBeforeReschedule']),
+      proposedBy: _optionalString(json['proposedBy']),
+      proposedAt: dateTimeFromFirestore(json['proposedAt']),
     );
   }
 
@@ -118,6 +180,13 @@ class AppointmentModel {
       'reviewedAt': reviewedAt,
       'proposedScheduledAt': proposedScheduledAt,
       'proposedScheduledTime': proposedScheduledTime ?? '',
+      'parentAppointmentId': parentAppointmentId ?? '',
+      'rootAppointmentId': rootAppointmentId ?? '',
+      'startedAt': startedAt,
+      'completedAt': completedAt,
+      'statusBeforeReschedule': statusBeforeReschedule ?? '',
+      'proposedBy': proposedBy ?? '',
+      'proposedAt': proposedAt,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
@@ -151,6 +220,13 @@ class AppointmentModel {
     DateTime? reviewedAt,
     DateTime? proposedScheduledAt,
     String? proposedScheduledTime,
+    String? parentAppointmentId,
+    String? rootAppointmentId,
+    DateTime? startedAt,
+    DateTime? completedAt,
+    String? statusBeforeReschedule,
+    String? proposedBy,
+    DateTime? proposedAt,
   }) {
     return AppointmentModel(
       id: id ?? this.id,
@@ -182,6 +258,14 @@ class AppointmentModel {
       proposedScheduledAt: proposedScheduledAt ?? this.proposedScheduledAt,
       proposedScheduledTime:
           proposedScheduledTime ?? this.proposedScheduledTime,
+      parentAppointmentId: parentAppointmentId ?? this.parentAppointmentId,
+      rootAppointmentId: rootAppointmentId ?? this.rootAppointmentId,
+      startedAt: startedAt ?? this.startedAt,
+      completedAt: completedAt ?? this.completedAt,
+      statusBeforeReschedule:
+          statusBeforeReschedule ?? this.statusBeforeReschedule,
+      proposedBy: proposedBy ?? this.proposedBy,
+      proposedAt: proposedAt ?? this.proposedAt,
     );
   }
 
@@ -195,4 +279,55 @@ class AppointmentModel {
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '');
   }
+}
+
+class AppointmentHistoryEvent {
+  const AppointmentHistoryEvent({
+    required this.id,
+    required this.eventType,
+    required this.status,
+    required this.reply,
+    this.previousStatus,
+    this.actorName,
+    this.actorRole,
+    this.createdAt,
+    this.proposedScheduledAt,
+    this.proposedScheduledTime,
+    this.linkedAppointmentId,
+  });
+
+  final String id;
+  final String eventType;
+  final String status;
+  final String reply;
+  final String? previousStatus;
+  final String? actorName;
+  final String? actorRole;
+  final DateTime? createdAt;
+  final DateTime? proposedScheduledAt;
+  final String? proposedScheduledTime;
+  final String? linkedAppointmentId;
+
+  factory AppointmentHistoryEvent.fromJson(
+    Map<String, dynamic> json, {
+    String? id,
+  }) => AppointmentHistoryEvent(
+    id: '${json['id'] ?? id ?? ''}',
+    eventType: '${json['eventType'] ?? json['status'] ?? 'updated'}',
+    status: '${json['status'] ?? ''}',
+    reply: '${json['reply'] ?? ''}',
+    previousStatus: AppointmentModel._optionalString(json['previousStatus']),
+    actorName: AppointmentModel._optionalString(
+      json['actorName'] ?? json['staffName'],
+    ),
+    actorRole: AppointmentModel._optionalString(json['actorRole']),
+    createdAt: dateTimeFromFirestore(json['createdAt']),
+    proposedScheduledAt: dateTimeFromFirestore(json['proposedScheduledAt']),
+    proposedScheduledTime: AppointmentModel._optionalString(
+      json['proposedScheduledTime'],
+    ),
+    linkedAppointmentId: AppointmentModel._optionalString(
+      json['linkedAppointmentId'],
+    ),
+  );
 }

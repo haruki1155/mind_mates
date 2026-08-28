@@ -123,6 +123,8 @@ void main() {
     expect(find.text('Student'), findsOneWidget);
     expect(find.text('Day streak'), findsOneWidget);
     expect(find.text('5'), findsWidgets);
+    expect(find.text('Mood status: Good'), findsOneWidget);
+    expect(find.text('Already Logged'), findsOneWidget);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(
@@ -266,6 +268,11 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.text('Check in on academic well-being'), findsOneWidget);
+    expect(
+      find.text('Your questions are personalized for your student role.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('verification'), findsNothing);
     await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
 

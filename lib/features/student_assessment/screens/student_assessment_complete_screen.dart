@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
+import '../../../core/config/support_contact_config.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
+import '../../../services/firebase/firebase_error_message.dart';
 import '../../quick_assessment/widgets/quick_assessment_widgets.dart';
 import '../models/student_assessment_models.dart';
 import '../models/assessment_interpretation_models.dart';
@@ -19,25 +21,9 @@ class StudentAssessmentCompleteScreen extends StatefulWidget {
 }
 
 class _StudentAssessmentCompleteScreenState
-    extends State<StudentAssessmentCompleteScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _backgroundController;
+    extends State<StudentAssessmentCompleteScreen> {
   bool _requestedSave = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _backgroundController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _backgroundController.dispose();
-    super.dispose();
-  }
+  String? _saveError;
 
   @override
   Widget build(BuildContext context) {
@@ -60,82 +46,64 @@ class _StudentAssessmentCompleteScreenState
 
         _saveResultIfNeeded(provider);
 
+        if (!provider.hasVerifiedStudentResult) {
+          return Scaffold(
+            backgroundColor: QuickAssessmentPalette.background,
+            body: SafeArea(
+              child: _SubmissionState(
+                error: _saveError,
+                onRetry: _retrySubmission,
+              ),
+            ),
+          );
+        }
+
         return Scaffold(
           backgroundColor: QuickAssessmentPalette.background,
           body: SafeArea(
-            child: Stack(
-              children: [
-                _ResultBackground(animation: _backgroundController),
-                CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(child: _Hero(result: result)),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 22),
-                      sliver: SliverList.list(
-                        children: [
-                          _AnimatedResultSection(
-                            delay: 0,
-                            child: _SummaryCards(result: result),
-                          ),
-                          const SizedBox(height: 12),
-                          _AnimatedResultSection(
-                            delay: 50,
-                            child: _CategoryBars(result: result),
-                          ),
-                          const SizedBox(height: 12),
-                          _AnimatedResultSection(
-                            delay: 90,
-                            child: _CategoryScoreDots(result: result),
-                          ),
-                          const SizedBox(height: 12),
-                          _AnimatedResultSection(
-                            delay: 110,
-                            child: _PilotFeedbackCard(
-                              onSelected:
-                                  provider.saveAssessmentClarityFeedback,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const _AnimatedResultSection(
-                            delay: 130,
-                            child: _PaccCard(),
-                          ),
-                          const SizedBox(height: 12),
-                          const _AnimatedResultSection(
-                            delay: 170,
-                            child: _ReferencesCard(),
-                          ),
-                          const SizedBox(height: 12),
-                          _AnimatedResultSection(
-                            delay: 210,
-                            child: _ImportantCard(
-                              disclaimer: result.disclaimer,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _AnimatedResultSection(
-                            delay: 250,
-                            child: _ResultActions(
-                              onTalkPressed: () {
-                                Navigator.of(
-                                  context,
-                                ).pushNamed(RouteNames.mindAid);
-                              },
-                              onContinuePressed: () {
-                                Navigator.of(context).pushNamedAndRemoveUntil(
-                                  RouteNames.home,
-                                  (route) => false,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                24 + MediaQuery.paddingOf(context).bottom,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Hero(result: result),
+                      const SizedBox(height: 16),
+                      _SummaryCards(result: result),
+                      const SizedBox(height: 16),
+                      _ResultActions(
+                        onTalkPressed: () =>
+                            Navigator.of(context).pushNamed(RouteNames.mindAid),
+                        onSupportPressed: () => Navigator.of(
+                          context,
+                        ).pushNamed(RouteNames.services),
+                        onContinuePressed: () {
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            RouteNames.home,
+                            (route) => false,
+                          );
+                        },
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      const _PaccCard(),
+                      const SizedBox(height: 16),
+                      _DetailedResults(result: result),
+                      const SizedBox(height: 16),
+                      _PilotFeedbackCard(
+                        onSelected: provider.saveAssessmentClarityFeedback,
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -149,19 +117,69 @@ class _StudentAssessmentCompleteScreenState
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final userId = _currentUserId();
-      if (userId == null || userId.isEmpty) return;
-
-      try {
-        final payload = await provider.saveStudentAssessmentForUser(userId);
-        if (payload == null) return;
-        if (!mounted) return;
-        await context.read<UserProvider>().markFullAssessment(userId);
-        if (!mounted) return;
-        await _reportProviderOrNull()?.refreshWeeklyReport(userId);
-      } catch (error) {
-        debugPrint('Student assessment sync failed: $error');
+      final userId = await _currentUserId();
+      if (!mounted) return;
+      if (userId == null || userId.isEmpty) {
+        setState(
+          () => _saveError = 'Please sign in again to save this assessment.',
+        );
+        return;
       }
+
+      Map<String, Object>? payload;
+      try {
+        payload = await provider.saveStudentAssessmentForUser(userId);
+      } catch (error, stackTrace) {
+        FirebaseErrorMessage.log(
+          error,
+          stackTrace,
+          area: 'Student assessment sync failed.',
+        );
+        if (mounted) {
+          setState(
+            () => _saveError = FirebaseErrorMessage.describe(
+              error,
+              fallback:
+                  'We could not verify your assessment yet. Check your connection and try again.',
+            ),
+          );
+        }
+        return;
+      }
+      if (payload == null) {
+        if (mounted) {
+          setState(() => _saveError = 'Sign in to save this assessment.');
+        }
+        return;
+      }
+
+      // Only the verified callable response controls submission state. These
+      // refreshes are best-effort and cannot invalidate a persisted result.
+      try {
+        if (mounted) await context.read<UserProvider>().loadProfile(userId);
+      } catch (error, stackTrace) {
+        FirebaseErrorMessage.log(
+          error,
+          stackTrace,
+          area: 'Full assessment profile refresh failed after verified save.',
+        );
+      }
+      try {
+        if (mounted) await _reportProviderOrNull()?.refreshWeeklyReport(userId);
+      } catch (error, stackTrace) {
+        FirebaseErrorMessage.log(
+          error,
+          stackTrace,
+          area: 'Weekly report refresh failed after verified assessment save.',
+        );
+      }
+    });
+  }
+
+  void _retrySubmission() {
+    setState(() {
+      _requestedSave = false;
+      _saveError = null;
     });
   }
 
@@ -173,20 +191,84 @@ class _StudentAssessmentCompleteScreenState
     }
   }
 
-  String? _currentUserId() {
+  Future<String?> _currentUserId() async {
+    AuthProvider? authProvider;
     try {
-      final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      authProvider = context.read<AuthProvider>();
+      final userId = await authProvider.resolveAuthenticatedUserId();
       if (userId != null && userId.isNotEmpty) return userId;
+      if (!mounted) return null;
     } on ProviderNotFoundException {
       // Tests and preview surfaces may provide only UserProvider.
     }
 
+    if (authProvider != null) return null;
+
     try {
-      return context.read<UserProvider>().user?.id;
+      final userId = context.read<UserProvider>().user?.id;
+      if (userId != null && userId.isNotEmpty) return userId;
     } on ProviderNotFoundException {
-      return null;
+      // No profile provider means this surface cannot save a result.
     }
+
+    return null;
+  }
+}
+
+class _SubmissionState extends StatelessWidget {
+  const _SubmissionState({required this.error, required this.onRetry});
+
+  final String? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = error != null;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              failed ? Icons.cloud_off_rounded : Icons.verified_user_outlined,
+              size: 52,
+              color: QuickAssessmentPalette.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              failed ? 'Assessment not submitted' : 'Preparing your results…',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              error ??
+                  'Your summary will appear after your assessment is securely submitted.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            if (failed)
+              Column(
+                children: [
+                  const Text(
+                    'Your responses are still available for this retry.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text('Try Again'),
+                  ),
+                ],
+              )
+            else
+              const CircularProgressIndicator(),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -198,58 +280,50 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 570,
-      decoration: const BoxDecoration(color: QuickAssessmentPalette.primary),
-      child: Stack(
-        alignment: Alignment.topCenter,
+      padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
+      decoration: BoxDecoration(
+        color: QuickAssessmentPalette.primary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: QuickAssessmentPalette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            top: 442,
-            left: -80,
-            right: -80,
-            child: Container(
-              height: 190,
-              decoration: const BoxDecoration(
-                color: QuickAssessmentPalette.background,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(160)),
+          const _HeroBadge(),
+          const SizedBox(height: 18),
+          const Text(
+            'Your Assessment Summary',
+            style: TextStyle(
+              color: _ResultPalette.text,
+              fontSize: 27,
+              fontWeight: FontWeight.w900,
+              height: 1.12,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: QuickAssessmentPalette.card.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              result.interpretation.supportPriority.label,
+              style: const TextStyle(
+                color: _ResultPalette.text,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _HeroBadge(),
-                const SizedBox(height: 14),
-                const Text(
-                  'Assessment Complete',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _ResultPalette.text,
-                    fontSize: 26,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w900,
-                    height: 1.05,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                const Text(
-                  'Here are your personalized insights',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _ResultPalette.secondaryText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _ScoreGauge(
-                  score: result.overallScore,
-                  status: result.interpretation.supportPriority.label,
-                ),
-              ],
+          const SizedBox(height: 16),
+          Text(
+            result.interpretation.userSummary,
+            style: const TextStyle(
+              color: _ResultPalette.secondaryText,
+              fontSize: 15,
+              height: 1.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -264,8 +338,8 @@ class _HeroBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 52,
-      height: 52,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
@@ -491,6 +565,8 @@ class _ScoreRingPainter extends CustomPainter {
   }
 }
 
+// Retained temporarily for compatibility with pending visual snapshots.
+// ignore: unused_element
 class _ResultBackground extends StatelessWidget {
   const _ResultBackground({required this.animation});
 
@@ -551,6 +627,7 @@ class _ResultBubble {
   final Color color;
 }
 
+// ignore: unused_element
 class _AnimatedResultSection extends StatelessWidget {
   const _AnimatedResultSection({required this.child, required this.delay});
 
@@ -589,22 +666,87 @@ class _SummaryCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final domains =
+        result.interpretation.domainResults
+            .where((domain) => domain.isScorable)
+            .toList()
+          ..sort((a, b) => b.score.compareTo(a.score));
+    final focusDomains = domains.take(2).toList(growable: false);
+    final suggestedAction = result.interpretation.suggestedActions.firstOrNull;
+    final nextStep = suggestedAction != null && suggestedAction.isNotEmpty
+        ? suggestedAction
+        : result.interpretation.priorityRationale.isNotEmpty
+        ? result.interpretation.priorityRationale
+        : result.interpretation.userSummary;
+
     return Column(
       children: [
-        _InfoCard(
-          title: result.interpretation.supportPriority.label,
-          body: result.interpretation.userSummary,
+        _Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Areas to pay attention to', style: _ResultText.title),
+              const SizedBox(height: 14),
+              if (focusDomains.isEmpty)
+                const Text(
+                  'There were not enough responses to identify focus areas.',
+                  style: _ResultText.body,
+                )
+              else
+                for (final entry in focusDomains.indexed) ...[
+                  _DomainSummaryRow(number: entry.$1 + 1, domain: entry.$2),
+                  if (entry.$1 != focusDomains.length - 1)
+                    const Divider(height: 24),
+                ],
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        _InfoCard(
-          title: 'Response confidence',
-          body:
-              '${result.interpretation.responseQuality.confidence.label} '
-              '(${result.interpretation.responseQuality.completionPercent.round()}% answered). '
-              'Skipped responses were excluded from scoring.',
+        const SizedBox(height: 12),
+        _InfoCard(title: 'Recommended next step', body: nextStep),
+      ],
+    );
+  }
+}
+
+class _DomainSummaryRow extends StatelessWidget {
+  const _DomainSummaryRow({required this.number, required this.domain});
+
+  final int number;
+  final AssessmentDomainResult domain;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _MiniNumber(number: number),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(domain.domain, style: _ResultText.title),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    domain.band.label,
+                    style: const TextStyle(
+                      color: _ResultPalette.secondaryText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(domain.interpretation, style: _ResultText.body),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        _InsightsCard(result: result),
       ],
     );
   }
@@ -749,29 +891,16 @@ class _CategoryBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      backgroundColor: const Color(0xFFFFFAEC),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Wellness Domains', style: _ResultText.title),
+          Text('Domain details', style: _ResultText.title),
           const SizedBox(height: 16),
           for (final entry in result.interpretation.domainResults.indexed)
             Padding(
-              padding: const EdgeInsets.only(bottom: 13),
+              padding: const EdgeInsets.only(bottom: 8),
               child: _ScoreBar(domain: entry.$2, staggerIndex: entry.$1),
             ),
-          const SizedBox(height: 8),
-          const Center(
-            child: Text(
-              '* Higher scores indicate greater reported concern',
-              style: TextStyle(
-                color: _ResultPalette.mutedText,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -786,7 +915,9 @@ class _ScoreBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final duration = Duration(milliseconds: 430 + (staggerIndex * 45));
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Duration(milliseconds: 430 + (staggerIndex * 45));
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: domain.isScorable ? domain.score / 100 : 0),
@@ -850,6 +981,9 @@ class _ScoreBar extends StatelessWidget {
   }
 }
 
+// Kept as a private legacy layout while old golden snapshots are migrated.
+// It is intentionally not mounted on the user-facing result screen.
+// ignore: unused_element
 class _CategoryScoreDots extends StatelessWidget {
   const _CategoryScoreDots({required this.result});
 
@@ -864,7 +998,7 @@ class _CategoryScoreDots extends StatelessWidget {
         children: [
           Text('Domain interpretation', style: _ResultText.title),
           const SizedBox(height: 8),
-          Text(result.interpretation.counselorSummary, style: _ResultText.body),
+          Text(result.interpretation.userSummary, style: _ResultText.body),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,
@@ -971,6 +1105,57 @@ class _ScoreBox extends StatelessWidget {
   }
 }
 
+class _DetailedResults extends StatelessWidget {
+  const _DetailedResults({required this.result});
+
+  final StudentAssessmentResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final quality = result.interpretation.responseQuality;
+    return _Panel(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(top: 12),
+          title: const Text(
+            'View detailed results',
+            style: TextStyle(
+              color: _ResultPalette.text,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          subtitle: const Text(
+            'Domains, strengths, response completeness, and methodology',
+            style: TextStyle(
+              color: _ResultPalette.mutedText,
+              fontSize: 13,
+              height: 1.3,
+            ),
+          ),
+          children: [
+            _CategoryBars(result: result),
+            const SizedBox(height: 12),
+            _InsightsCard(result: result),
+            const SizedBox(height: 12),
+            _InfoCard(
+              title: 'Response completeness',
+              body:
+                  '${quality.confidence.label}. ${quality.answered} of ${quality.presented} presented questions were answered.',
+            ),
+            const SizedBox(height: 12),
+            const _ReferencesCard(),
+            const SizedBox(height: 12),
+            _ImportantCard(disclaimer: result.disclaimer),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PaccCard extends StatelessWidget {
   const _PaccCard();
 
@@ -999,7 +1184,7 @@ class _PaccCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'PAACC Counseling Office',
+                  'Support contact information',
                   style: TextStyle(
                     color: _ResultPalette.text,
                     fontSize: 15,
@@ -1008,7 +1193,7 @@ class _PaccCard extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Urdaneta City University - 1st Floor, Lai Building\n+63 912 345 6789\npacc@ucu.edu.ph',
+                  SupportContactConfig.safeFallback,
                   style: TextStyle(
                     color: _ResultPalette.secondaryText,
                     fontSize: 12,
@@ -1029,30 +1214,10 @@ class _ReferencesCard extends StatelessWidget {
   const _ReferencesCard();
 
   static const sections = {
-    'Academic Stress and Student Well-Being': [
-      'World Health Organization. Mental health and COVID-19: Early evidence of the pandemic impact.',
-      'American Psychological Association. Psychological assessment and evaluation.',
-      'Tan, J., Cruz, M., & Reyes, P. Needs assessment of mental health challenges among university students in the Philippines.',
-      'American School Counselor Association. ASCA National Model.',
-    ],
-    'Financial Stress': [
-      'American Psychological Association. Stress in America Report.',
-      'World Health Organization. Mental health and well-being.',
-      'Department of Health Philippines. Philippine Mental Health Program.',
-    ],
-    'Sleep and Rest': [
-      'World Health Organization. Mental health: Strengthening our response.',
-      'National Sleep Foundation. Sleep Health Recommendations.',
-      'American Psychological Association. Sleep and mental health.',
-    ],
-    'Emotional Well-Being': [
-      'World Health Organization. Mental health: Strengthening our response.',
-      'Philippine Mental Health Association. Mental Health Promotion and Wellness.',
-      'Psychological Association of the Philippines. Mental health promotion and ethical psychological practice.',
-    ],
-    'Social Support and Help-Seeking': [
-      'Philippine Mental Health Association. Mental health promotion and wellness.',
-      'World Health Organization. Mental health and community support.',
+    'Validation status': [
+      'No documented validation source was found for the exact questions, weights, score ranges, completion rules, or follow-up combinations.',
+      'The current values are internal experimental product rules retained for compatibility and require qualified professional review.',
+      'General wellness publications must not be interpreted as validation of this scoring policy.',
     ],
   };
 
@@ -1081,7 +1246,7 @@ class _ReferencesCard extends StatelessWidget {
               borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: const Text(
-              'References',
+              'Method disclosure',
               style: TextStyle(
                 color: _ResultPalette.text,
                 fontSize: 15,
@@ -1169,10 +1334,12 @@ class _ImportantCard extends StatelessWidget {
 class _ResultActions extends StatelessWidget {
   const _ResultActions({
     required this.onTalkPressed,
+    required this.onSupportPressed,
     required this.onContinuePressed,
   });
 
   final VoidCallback onTalkPressed;
+  final VoidCallback onSupportPressed;
   final VoidCallback onContinuePressed;
 
   @override
@@ -1203,7 +1370,27 @@ class _ResultActions extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 46,
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: onSupportPressed,
+            icon: const Icon(Icons.support_agent_outlined, size: 19),
+            label: const Text('Find Support'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: QuickAssessmentPalette.text,
+              side: const BorderSide(color: QuickAssessmentPalette.softBorder),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 48,
           child: OutlinedButton(
             onPressed: onContinuePressed,
             style: OutlinedButton.styleFrom(
@@ -1236,8 +1423,8 @@ class _MiniNumber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 14,
-      height: 14,
+      width: 28,
+      height: 28,
       decoration: const BoxDecoration(
         color: QuickAssessmentPalette.primary,
         shape: BoxShape.circle,
@@ -1247,7 +1434,7 @@ class _MiniNumber extends StatelessWidget {
         '$number',
         style: const TextStyle(
           color: _ResultPalette.text,
-          fontSize: 9,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -1258,31 +1445,23 @@ class _MiniNumber extends StatelessWidget {
 class _Panel extends StatelessWidget {
   const _Panel({
     required this.child,
-    this.backgroundColor = QuickAssessmentPalette.card,
     this.borderColor = QuickAssessmentPalette.softBorder,
   });
 
   final Widget child;
-  final Color backgroundColor;
   final Color borderColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: QuickAssessmentPalette.shadow.withValues(alpha: 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+    return Material(
+      color: QuickAssessmentPalette.card,
+      shadowColor: QuickAssessmentPalette.shadow,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor),
       ),
-      child: child,
+      child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../repositories/admin_portal_repository.dart';
 import 'admin_portal.dart';
+import '../../authentication/password_policy.dart';
 
 class AdminChangePasswordScreen extends StatefulWidget {
   const AdminChangePasswordScreen({super.key, required this.repository});
@@ -98,15 +99,7 @@ class _AdminChangePasswordScreenState extends State<AdminChangePasswordScreen> {
   );
 
   String? _validatePassword(String? value) {
-    final text = value ?? '';
-    if (text.length < 12) return 'Use at least 12 characters.';
-    if (!RegExp(r'[A-Z]').hasMatch(text) ||
-        !RegExp(r'[a-z]').hasMatch(text) ||
-        !RegExp(r'[0-9]').hasMatch(text) ||
-        !RegExp(r'[^A-Za-z0-9]').hasMatch(text)) {
-      return 'Include uppercase, lowercase, number, and symbol.';
-    }
-    return null;
+    return validateNewPassword(value);
   }
 
   Future<void> _submit() async {

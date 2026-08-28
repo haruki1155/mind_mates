@@ -1,55 +1,46 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
-import '../database/firestore_collections.dart';
 import '../features/breathing/models/breathing_models.dart';
-import '../repositories/user_repository.dart';
-import '../services/firebase/firestore_service.dart';
+import '../services/firebase/firebase_callable_router.dart';
 
 class BreathingSessionRecord {
   const BreathingSessionRecord({
-    required this.userId,
+    required this.sessionId,
     required this.technique,
-    required this.completedSeconds,
-    required this.startedAt,
-    required this.completedAt,
   });
 
-  final String userId;
+  final String sessionId;
   final BreathingTechnique technique;
-  final int completedSeconds;
-  final DateTime startedAt;
-  final DateTime completedAt;
 }
 
 class BreathingRepository {
-  BreathingRepository({
-    FirestoreService? firestoreService,
-    UserRepository? userRepository,
-  }) : _firestoreService = firestoreService ?? FirestoreService(),
-       _userRepository = userRepository ?? UserRepository();
+  // Firebase is deliberately resolved lazily so repository fakes can run
+  // without a Firebase app in unit/widget tests.
+  // ignore: prefer_initializing_formals
+  BreathingRepository({FirebaseFunctions? functions}) : _functions = functions;
 
-  final FirestoreService _firestoreService;
-  final UserRepository _userRepository;
+  final FirebaseFunctions? _functions;
+  FirebaseFunctions get _client =>
+      _functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
+
+  Future<void> startSession(BreathingSessionRecord record) async {
+    await _client.routedCallable('startBreathingSession').call({
+      'sessionId': record.sessionId,
+      'techniqueId': record.technique.id,
+    });
+  }
 
   Future<String> completeSession(BreathingSessionRecord record) async {
-    final id = await _firestoreService
-        .createDocument(FirestoreCollections.breathingSessions, {
-          'userId': record.userId,
+    final response = await _client
+        .routedCallable('completeBreathingSession')
+        .call({
+          'sessionId': record.sessionId,
           'techniqueId': record.technique.id,
-          'techniqueTitle': record.technique.title,
-          'durationSeconds': record.technique.durationSeconds,
-          'completedSeconds': record.completedSeconds,
-          'completed': true,
-          'startedAt': Timestamp.fromDate(record.startedAt),
-          'completedAt': Timestamp.fromDate(record.completedAt),
-          'createdAt': FieldValue.serverTimestamp(),
         });
-
-    await _userRepository.recordActivity(
-      record.userId,
-      UserActivityType.breathingSession,
-      occurredAt: record.completedAt,
-    );
-    return id;
+    final data = response.data;
+    if (data is! Map || data['sessionId']?.toString() != record.sessionId) {
+      throw const FormatException('Breathing completion response was invalid.');
+    }
+    return record.sessionId;
   }
 }

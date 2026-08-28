@@ -11,7 +11,6 @@ class FirestoreCollections {
   static const assessments = 'assessments';
   static const assessmentFeedback = 'assessment_feedback';
   static const moods = 'moods';
-  static const journals = 'journals';
   static const appointments = 'appointments';
   static const appointmentHistory = 'history';
   static const notifications = 'notifications';
@@ -29,6 +28,8 @@ class FirestoreCollections {
   static const breathingSessions = 'breathing_sessions';
   static const sleepEntries = 'sleep_entries';
   static const sleepPreferences = 'sleep_preferences';
+  static const sleepSharedSummaries = 'sleep_shared_summaries';
+  static const activeCounselorAssignments = 'active_counselor_assignments';
   static const secretChats = 'secret_chats';
   static const secretChatComments = 'secret_chat_comments';
   static const secretChatInteractions = 'secret_chat_interactions';

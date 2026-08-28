@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'firebase_operation.dart';
+
 class FirestoreSetOperation {
   const FirestoreSetOperation({
     required this.collection,
@@ -15,19 +17,28 @@ class FirestoreSetOperation {
 }
 
 class FirestoreService {
-  FirestoreService({FirebaseFirestore? firestore}) {
+  FirestoreService({
+    FirebaseFirestore? firestore,
+    FirebaseOperationRunner? operationRunner,
+  }) : _operationRunner = operationRunner ?? FirebaseOperationRunner() {
     _firestore = firestore;
   }
 
   FirebaseFirestore? _firestore;
+  final FirebaseOperationRunner _operationRunner;
 
   FirebaseFirestore get firestore => _firestore ?? FirebaseFirestore.instance;
+
+  String? get authenticatedUserId => _operationRunner.currentUserId;
 
   Future<String> createDocument(
     String collection,
     Map<String, dynamic> data,
   ) async {
-    final document = await firestore.collection(collection).add(data);
+    final document = await _operationRunner.run(
+      area: 'Creating $collection document',
+      operation: () => firestore.collection(collection).add(data),
+    );
     return document.id;
   }
 
@@ -37,10 +48,13 @@ class FirestoreService {
     Map<String, dynamic> data, {
     bool merge = false,
   }) {
-    return firestore
-        .collection(collection)
-        .doc(documentId)
-        .set(data, SetOptions(merge: merge));
+    return _operationRunner.run(
+      area: 'Saving $collection/$documentId',
+      operation: () => firestore
+          .collection(collection)
+          .doc(documentId)
+          .set(data, SetOptions(merge: merge)),
+    );
   }
 
   Future<void> setDocumentsAtomically(
@@ -53,17 +67,22 @@ class FirestoreService {
           .doc(operation.documentId);
       batch.set(reference, operation.data, SetOptions(merge: operation.merge));
     }
-    await batch.commit();
+    await _operationRunner.run(
+      area: 'Saving Firestore batch',
+      operation: batch.commit,
+    );
   }
 
   Future<Map<String, dynamic>?> getDocument(
     String collection,
     String documentId,
+    {bool requiresAuthentication = true}
   ) async {
-    final snapshot = await firestore
-        .collection(collection)
-        .doc(documentId)
-        .get();
+    final snapshot = await _operationRunner.run(
+      area: 'Reading $collection/$documentId',
+      operation: () => firestore.collection(collection).doc(documentId).get(),
+      requiresAuthentication: requiresAuthentication,
+    );
     return snapshot.data();
   }
 
@@ -73,6 +92,7 @@ class FirestoreService {
     String? orderBy,
     bool descending = true,
     int? limit,
+    bool requiresAuthentication = true,
   }) async {
     Query<Map<String, dynamic>> query = firestore.collection(collection);
 
@@ -88,7 +108,11 @@ class FirestoreService {
       query = query.limit(limit);
     }
 
-    final snapshot = await query.get();
+    final snapshot = await _operationRunner.run(
+      area: 'Listing $collection documents',
+      operation: query.get,
+      requiresAuthentication: requiresAuthentication,
+    );
     return snapshot.docs
         .map((doc) => {'id': doc.id, ...doc.data()})
         .toList(growable: false);
@@ -138,10 +162,35 @@ class FirestoreService {
     String documentId,
     Map<String, dynamic> data,
   ) {
-    return firestore.collection(collection).doc(documentId).update(data);
+    return _operationRunner.run(
+      area: 'Updating $collection/$documentId',
+      operation: () =>
+          firestore.collection(collection).doc(documentId).update(data),
+    );
   }
 
   Future<void> deleteDocument(String collection, String documentId) {
-    return firestore.collection(collection).doc(documentId).delete();
+    return _operationRunner.run(
+      area: 'Deleting $collection/$documentId',
+      operation: () =>
+          firestore.collection(collection).doc(documentId).delete(),
+    );
+  }
+
+  Future<T> runTransaction<T>({
+    required String area,
+    required TransactionHandler<T> handler,
+  }) {
+    return _operationRunner.run(
+      area: area,
+      operation: () => firestore.runTransaction(handler),
+    );
+  }
+
+  Future<T> runAuthenticated<T>({
+    required String area,
+    required FirebaseOperation<T> operation,
+  }) {
+    return _operationRunner.run(area: area, operation: operation);
   }
 }

@@ -1,5 +1,6 @@
 import '../models/quick_assessment_models.dart';
 import '../../student_assessment/models/assessment_interpretation_models.dart';
+import '../../student_assessment/config/assessment_policy.dart';
 
 class QuickAssessmentScoring {
   const QuickAssessmentScoring._();
@@ -57,9 +58,15 @@ class QuickAssessmentScoring {
   }
 
   static QuickAssessmentLevel overallLevel(double concernScore) {
-    if (concernScore >= 75) return QuickAssessmentLevel.veryHigh;
-    if (concernScore >= 55) return QuickAssessmentLevel.high;
-    if (concernScore >= 30) return QuickAssessmentLevel.moderate;
+    if (concernScore >= AssessmentPolicy.quickVeryHighMinimum) {
+      return QuickAssessmentLevel.veryHigh;
+    }
+    if (concernScore >= AssessmentPolicy.quickHighMinimum) {
+      return QuickAssessmentLevel.high;
+    }
+    if (concernScore >= AssessmentPolicy.quickModerateMinimum) {
+      return QuickAssessmentLevel.moderate;
+    }
     return QuickAssessmentLevel.low;
   }
 
@@ -78,10 +85,13 @@ class QuickAssessmentScoring {
 
   static List<String> topConcernAreas(List<QuickAssessmentResponse> responses) {
     final sorted = areaScores(responses).entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+      ..sort((a, b) {
+        final scoreOrder = b.value.compareTo(a.value);
+        return scoreOrder == 0 ? a.key.compareTo(b.key) : scoreOrder;
+      });
 
     return sorted
-        .where((entry) => entry.value >= 30)
+        .where((entry) => entry.value >= AssessmentPolicy.quickModerateMinimum)
         .take(3)
         .map((entry) => entry.key)
         .toList();
@@ -96,7 +106,7 @@ class QuickAssessmentScoring {
       case QuickAssessmentLevel.high:
         return 'Responses suggest elevated stress or reduced well-being that may benefit from a fuller assessment and support.';
       case QuickAssessmentLevel.veryHigh:
-        return 'Responses suggest a very high level of concern and a strong need for timely support from a trusted person or counselor.';
+        return 'Responses produce a very high estimate under the experimental internal framework. This does not confirm a mental-health condition; consider direct support if you are concerned.';
     }
   }
 
@@ -107,9 +117,9 @@ class QuickAssessmentScoring {
       case QuickAssessmentLevel.moderate:
         return 'Complete the full role-based assessment for more personalized insight.';
       case QuickAssessmentLevel.high:
-        return 'Complete the full assessment and consider contacting PACC counseling support.';
+        return 'Complete the full assessment and consider using a locally verified counseling or professional support option.';
       case QuickAssessmentLevel.veryHigh:
-        return 'Reach out to PACC counseling support or another trusted support person as soon as possible.';
+        return 'Consider reaching out directly to a trusted person or locally verified qualified support service.';
     }
   }
 
@@ -141,7 +151,12 @@ class QuickAssessmentScoring {
       QuickAssessmentLevel.high => AssessmentSupportPriority.followUpSuggested,
       QuickAssessmentLevel.veryHigh => AssessmentSupportPriority.promptFollowUp,
     };
-    final top = domains.where((domain) => domain.score >= 30).take(3).toList();
+    final top = domains
+        .where(
+          (domain) => domain.score >= AssessmentPolicy.quickModerateMinimum,
+        )
+        .take(3)
+        .toList();
     final focus = top.isEmpty
         ? 'No quick-screen area showed a moderate concern signal.'
         : 'Higher signals appeared in ${top.map((domain) => domain.domain).join(', ')}.';
@@ -156,19 +171,34 @@ class QuickAssessmentScoring {
       ),
       domainResults: domains,
       rationale: [focus],
+      priorityRationale:
+          'Priority is based on the quick-screen classification and ranked quick-screen areas; it is separate from the full-assessment concern score.',
+      priorityReasonCodes: [
+        'quick_classification_${level.name}',
+        if (top.isNotEmpty) 'ranked_quick_concern_areas',
+      ],
       userSummary: '${summaryForLevel(level)} $focus This is not a diagnosis.',
       counselorSummary:
           'Quick wellness screen: ${priority.label}. $focus Complete the full role-based assessment for domain-level interpretation.',
       suggestedActions: [recommendedNextStepForLevel(level)],
-      questionSetVersion: 'quick_v2',
+      algorithmVersion: AssessmentPolicy.quickScoringPolicyVersion,
+      questionSetVersion: AssessmentPolicy.quickQuestionSetVersion,
     );
   }
 
   static AssessmentConcernBand _band(double score) {
-    if (score <= 20) return AssessmentConcernBand.low;
-    if (score <= 40) return AssessmentConcernBand.watchful;
-    if (score <= 60) return AssessmentConcernBand.moderate;
-    if (score <= 80) return AssessmentConcernBand.elevated;
+    if (score <= AssessmentPolicy.lowConcernMaximum) {
+      return AssessmentConcernBand.low;
+    }
+    if (score <= AssessmentPolicy.watchfulMaximum) {
+      return AssessmentConcernBand.watchful;
+    }
+    if (score <= AssessmentPolicy.moderateConcernMaximum) {
+      return AssessmentConcernBand.moderate;
+    }
+    if (score <= AssessmentPolicy.elevatedConcernMaximum) {
+      return AssessmentConcernBand.elevated;
+    }
     return AssessmentConcernBand.high;
   }
 }

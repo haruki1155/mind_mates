@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
@@ -19,10 +20,20 @@ class MindMateApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.light,
-      initialRoute: RouteNames.splash,
+      initialRoute: _initialRoute(),
       onGenerateRoute: RouteGenerator.generateRoute,
       builder: (context, child) =>
           MindAidLauncherOverlay(child: child ?? const SizedBox.shrink()),
     );
+  }
+
+  String _initialRoute() {
+    if (!kIsWeb) return RouteNames.splash;
+    final fragmentPath = Uri.base.fragment.split('?').first;
+    if (fragmentPath == RouteNames.resetPassword ||
+        fragmentPath == RouteNames.verifyRecoveryEmail) {
+      return fragmentPath;
+    }
+    return RouteNames.splash;
   }
 }

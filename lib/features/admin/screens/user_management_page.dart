@@ -1,9 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/profile_roles.dart';
 import '../../../models/user_model.dart';
 import '../../../repositories/admin_portal_repository.dart';
 import '../domain/admin_management_models.dart';
+import '../domain/admin_colors.dart';
 
 enum UserManagementCategory { appUsers, staff, admin }
 
@@ -18,26 +22,49 @@ class UserManagementPage extends StatefulWidget {
 class _UserManagementPageState extends State<UserManagementPage> {
   UserManagementCategory category = UserManagementCategory.appUsers;
   String query = '';
-  late Future<List<PublicAppUserRecord>> publicUsers;
+  String roleFilter = 'all';
+  String departmentFilter = '';
+  String courseFilter = '';
+  String yearLevelFilter = '';
+  Timer? _filterDebounce;
+  List<PublicAppUserRecord> publicUsers = const [];
+  String? nextPublicCursor;
+  bool loadingPublicUsers = true;
+  String? publicUsersError;
   int? publicUserCount;
+  bool deletingInactiveUsers = false;
+  int _publicLoadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    publicUsers = _loadPublicUsers();
+    _loadPublicUsers(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _filterDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleFilteredReload() {
+    _filterDebounce?.cancel();
+    _filterDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _loadPublicUsers(reset: true);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.repository.isSuperAdmin) {
-      return const Center(
-        child: Text('Super-administrator access is required.'),
-      );
-    }
+    final isSuperAdmin = widget.repository.isSuperAdmin;
     return Material(
       color: Colors.transparent,
       child: StreamBuilder<List<UserModel>>(
-        stream: widget.repository.watchUsers(),
+        // Approved portal staff only need the callable-backed anonymous
+        // directory. Never open the private profile collection for them.
+        stream: isSuperAdmin
+            ? widget.repository.watchUsers()
+            : Stream.value(const <UserModel>[]),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(child: Text('Unable to load user management.'));
@@ -58,55 +85,151 @@ class _UserManagementPageState extends State<UserManagementPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'User Management',
-                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                const Text(
+                Text(
                   'Privacy-safe app users and staff access management',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: AdminColors.textMuted),
                 ),
                 const SizedBox(height: 20),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _categoryButton(
-                            UserManagementCategory.appUsers,
-                            'App Users (${publicUserCount ?? '…'})',
-                          ),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _categoryButton(
+                          UserManagementCategory.appUsers,
+                          'App Users (${publicUserCount ?? '…'})',
+                        ),
+                        if (isSuperAdmin)
                           _categoryButton(
                             UserManagementCategory.staff,
                             'Staff / Counselors (${staff.length})',
                           ),
+                        if (isSuperAdmin)
                           _categoryButton(
                             UserManagementCategory.admin,
                             'Admin (${admins.length})',
                           ),
-                        ],
-                      ),
+                      ],
                     ),
-                    OutlinedButton.icon(
-                      onPressed: _showOrganizationDirectory,
-                      icon: const Icon(Icons.account_tree_outlined),
-                      label: const Text('Organization Directory'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (isSuperAdmin &&
+                            kDebugMode &&
+                            category == UserManagementCategory.appUsers)
+                          FilledButton.icon(
+                            onPressed: deletingInactiveUsers
+                                ? null
+                                : _deleteInactiveUsers,
+                            icon: deletingInactiveUsers
+                                ? const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.delete_forever_outlined),
+                            label: const Text('Delete inactive test users'),
+                          ),
+                        if (isSuperAdmin)
+                          OutlinedButton.icon(
+                            onPressed: _showOrganizationDirectory,
+                            icon: const Icon(Icons.account_tree_outlined),
+                            label: const Text('Organization Directory'),
+                          ),
+                      ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  onChanged: (value) =>
-                      setState(() => query = value.trim().toLowerCase()),
+                  onChanged: (value) {
+                    setState(() => query = value.trim().toLowerCase());
+                    if (category == UserManagementCategory.appUsers) {
+                      _scheduleFilteredReload();
+                    }
+                  },
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search),
                     hintText: category == UserManagementCategory.appUsers
-                        ? 'Search public user ID'
+                        ? 'Search public ID, role, department, course, or year'
                         : 'Search staff',
                     border: const OutlineInputBorder(),
                   ),
                 ),
+                if (category == UserManagementCategory.appUsers) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: roleFilter,
+                    decoration: const InputDecoration(
+                      labelText: 'Institutional role',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All roles')),
+                      DropdownMenuItem(
+                        value: 'Student',
+                        child: Text('Student'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Teaching',
+                        child: Text('Teaching'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Non-Teaching',
+                        child: Text('Non-Teaching'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Unknown',
+                        child: Text('Unknown'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => roleFilter = value ?? 'all');
+                      _loadPublicUsers(reset: true);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _academicFilterField(
+                        label: 'Department filter',
+                        onChanged: (value) {
+                          departmentFilter = value.trim().toLowerCase();
+                          _scheduleFilteredReload();
+                        },
+                      ),
+                      _academicFilterField(
+                        label: 'Course filter',
+                        onChanged: (value) {
+                          courseFilter = value.trim().toLowerCase();
+                          _scheduleFilteredReload();
+                        },
+                      ),
+                      _academicFilterField(
+                        label: 'Year level filter',
+                        onChanged: (value) {
+                          yearLevelFilter = value.trim().toLowerCase();
+                          _scheduleFilteredReload();
+                        },
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
@@ -136,58 +259,162 @@ class _UserManagementPageState extends State<UserManagementPage> {
         }),
       );
 
-  Widget _appUsersTable() => FutureBuilder<List<PublicAppUserRecord>>(
-    future: publicUsers,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (snapshot.hasError) {
-        return Column(
-          children: [
-            const Text('Unable to load anonymous app users.'),
-            FilledButton(
-              onPressed: _refreshPublicUsers,
-              child: const Text('Retry'),
-            ),
-          ],
-        );
-      }
-      final users = (snapshot.data ?? const <PublicAppUserRecord>[])
-          .where((user) => user.publicUserId.toLowerCase().contains(query))
-          .toList();
-      if (users.isEmpty) return const Text('No app users found.');
+  Widget _academicFilterField({
+    required String label,
+    required ValueChanged<String> onChanged,
+  }) => SizedBox(
+    width: 210,
+    child: TextField(
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        border: const OutlineInputBorder(),
+      ),
+    ),
+  );
+
+  Widget _appUsersTable() {
+    if (loadingPublicUsers && publicUsers.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (publicUsersError != null && publicUsers.isEmpty) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Private profile information is intentionally hidden.',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Public User ID')),
-                DataColumn(label: Text('Category')),
-              ],
-              rows: users
-                  .map(
-                    (user) => DataRow(
-                      cells: [
-                        DataCell(Text(user.publicUserId)),
-                        DataCell(Text(user.populationRole.label)),
-                      ],
-                    ),
-                  )
-                  .toList(),
-            ),
+          Text(publicUsersError!),
+          FilledButton(
+            onPressed: _refreshPublicUsers,
+            child: const Text('Retry'),
           ),
         ],
       );
-    },
-  );
+    }
+    final users = publicUsers
+        .where(
+          (user) => [
+            user.publicUserId,
+            user.populationRoleLabel,
+            user.department,
+            user.course,
+            user.yearLevel,
+          ].any((value) => value.toLowerCase().contains(query)),
+        )
+        .where(
+          (user) =>
+              roleFilter == 'all' || user.populationRoleLabel == roleFilter,
+        )
+        .toList();
+    if (users.isEmpty) {
+      return const Text('No app users match the current filters.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Anonymous academic directory. Personal profile information is intentionally hidden.',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 720) {
+              return Column(
+                children: users
+                    .map(
+                      (user) => Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user.publicUserId,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Chip(label: Text(user.populationRoleLabel)),
+                              Text(
+                                user.department.isEmpty
+                                    ? 'No department'
+                                    : user.department,
+                              ),
+                              Text(
+                                user.course.isEmpty ? 'No course' : user.course,
+                              ),
+                              Text(
+                                user.yearLevel.isEmpty
+                                    ? 'No year level'
+                                    : user.yearLevel,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              );
+            }
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Public User ID')),
+                  DataColumn(label: Text('Institutional role')),
+                  DataColumn(label: Text('Department')),
+                  DataColumn(label: Text('Course')),
+                  DataColumn(label: Text('Year level')),
+                ],
+                rows: users
+                    .map(
+                      (user) => DataRow(
+                        cells: [
+                          DataCell(Text(user.publicUserId)),
+                          DataCell(Chip(label: Text(user.populationRoleLabel))),
+                          DataCell(
+                            Text(
+                              user.department.isEmpty ? '—' : user.department,
+                            ),
+                          ),
+                          DataCell(
+                            Text(user.course.isEmpty ? '—' : user.course),
+                          ),
+                          DataCell(
+                            Text(user.yearLevel.isEmpty ? '—' : user.yearLevel),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            );
+          },
+        ),
+        if (publicUsersError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            publicUsersError!,
+            style: const TextStyle(color: Colors.redAccent),
+          ),
+        ],
+        if (nextPublicCursor != null || loadingPublicUsers) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: loadingPublicUsers ? null : () => _loadPublicUsers(),
+            icon: loadingPublicUsers
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.expand_more),
+            label: const Text('Load more'),
+          ),
+        ],
+      ],
+    );
+  }
 
   Widget _staffTable(List<UserModel> values) {
     final staff = values
@@ -527,14 +754,177 @@ class _UserManagementPageState extends State<UserManagementPage> {
   ];
 
   Future<void> _refreshPublicUsers() async {
-    setState(() => publicUsers = _loadPublicUsers());
+    await _loadPublicUsers(reset: true);
   }
 
-  Future<List<PublicAppUserRecord>> _loadPublicUsers() async {
-    final users = await widget.repository.listPublicAppUsers();
-    if (mounted) setState(() => publicUserCount = users.length);
-    return users;
+  Future<void> _loadPublicUsers({bool reset = false}) async {
+    if (loadingPublicUsers && !reset) return;
+    if (reset) _publicLoadGeneration++;
+    final generation = _publicLoadGeneration;
+    setState(() {
+      loadingPublicUsers = true;
+      publicUsersError = null;
+      if (reset) {
+        publicUsers = const [];
+        nextPublicCursor = null;
+      }
+    });
+    try {
+      final page = await widget.repository.fetchPublicAppUsersPage(
+        cursor: reset ? null : nextPublicCursor,
+        search: query,
+        role: switch (roleFilter) {
+          'Student' => 'student',
+          'Teaching' => 'teaching',
+          'Non-Teaching' => 'nonTeaching',
+          'Unknown' => 'unknown',
+          _ => '',
+        },
+        department: departmentFilter,
+        course: courseFilter,
+        yearLevel: yearLevelFilter,
+      );
+      if (!mounted || generation != _publicLoadGeneration) return;
+      setState(() {
+        publicUsers = [...publicUsers, ...page.users];
+        nextPublicCursor = page.nextCursor;
+        publicUserCount = page.totalAppUsers;
+      });
+    } catch (_) {
+      if (!mounted || generation != _publicLoadGeneration) return;
+      setState(() {
+        publicUsersError = publicUsers.isEmpty
+            ? 'Unable to load anonymous app users. Check your connection and retry.'
+            : 'More users could not be loaded. Your current results are still shown.';
+      });
+    } finally {
+      if (mounted && generation == _publicLoadGeneration) {
+        setState(() => loadingPublicUsers = false);
+      }
+    }
   }
+
+  Future<void> _deleteInactiveUsers() async {
+    setState(() => deletingInactiveUsers = true);
+    try {
+      final preview = await widget.repository.previewInactiveAppUserDeletion();
+      if (!mounted) return;
+      setState(() => deletingInactiveUsers = false);
+      if (preview.eligibleCount == 0) {
+        await _showCleanupMessage(
+          'No inactive app users',
+          'No app-user account has been inactive for '
+              '${preview.inactiveDays} days. '
+              '${preview.skippedMissingActivity} account(s) without an '
+              'activity or creation timestamp were safely skipped.',
+        );
+        return;
+      }
+
+      final confirmation = TextEditingController();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Permanently delete inactive test users?'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${preview.eligibleCount} app-user account(s) inactive '
+                      'since ${_date(preview.cutoff)} or earlier will lose '
+                      'Firebase Authentication, Firestore data, Secret Chat '
+                      'content, and uploaded images. This cannot be undone.',
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      preview.publicUserIds.join(', '),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    if (preview.skippedMissingActivity > 0) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '${preview.skippedMissingActivity} account(s) with '
+                        'missing timestamps will be skipped.',
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: confirmation,
+                      autofocus: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Type DELETE to confirm',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: confirmation.text == 'DELETE'
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                child: const Text('Delete permanently'),
+              ),
+            ],
+          ),
+        ),
+      );
+      confirmation.dispose();
+      if (confirmed != true || !mounted) return;
+
+      setState(() => deletingInactiveUsers = true);
+      final result = await widget.repository.deleteInactiveAppUsers();
+      if (!mounted) return;
+      await _refreshPublicUsers();
+      if (!mounted) return;
+      setState(() => deletingInactiveUsers = false);
+      await _showCleanupMessage(
+        'Inactive-user cleanup finished',
+        '${result.deletedCount} account(s) and '
+            '${result.deletedDocumentCount} data record(s) were deleted. '
+            '${result.failedCount} account(s) failed and can be retried.'
+            '${result.failedPublicUserIds.isEmpty ? '' : '\nFailed: ${result.failedPublicUserIds.join(', ')}'}',
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => deletingInactiveUsers = false);
+        await _showCleanupMessage(
+          'Inactive-user cleanup failed',
+          error.toString(),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => deletingInactiveUsers = false);
+    }
+  }
+
+  Future<void> _showCleanupMessage(String title, String message) =>
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _showOrganizationDirectory() => showDialog<void>(
     context: context,

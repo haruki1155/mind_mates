@@ -6,6 +6,7 @@ import '../features/secret_chat/domain/secret_chat_safety_validator.dart';
 import '../models/secret_chat_model.dart';
 import '../models/secret_chat_profile.dart';
 import '../repositories/secret_chat_repository.dart';
+import '../services/firebase/firebase_error_message.dart';
 
 class SecretChatProvider extends ChangeNotifier {
   SecretChatProvider(
@@ -434,7 +435,10 @@ class SecretChatProvider extends ChangeNotifier {
       return 'This thread is no longer available for replies.';
     }
     if (error is SecretChatAliasTakenException) return error.toString();
-    return 'Secret Chat is unavailable right now. Please try again.';
+    return FirebaseErrorMessage.describe(
+      error,
+      fallback: 'Secret Chat is unavailable right now. Please try again.',
+    );
   }
 }
 

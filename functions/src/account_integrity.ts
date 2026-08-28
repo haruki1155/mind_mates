@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 import {getAuth} from "firebase-admin/auth";
 import {FieldValue, Timestamp, getFirestore} from "firebase-admin/firestore";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 
 const db = getFirestore();
 const POPULATION_ROLES = ["student", "teaching", "nonTeaching"] as const;
@@ -87,6 +87,36 @@ function legacyRole(role: PopulationRole): string {
   return role === "teaching" ? "faculty" : role === "nonTeaching" ? "staff" : "student";
 }
 
+export function appUserProfileDocument(
+  uid: string,
+  email: string,
+  schoolId: string,
+  input: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    id: uid,
+    email,
+    schoolId,
+    ...input,
+    name: [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" "),
+    role: legacyRole(input.populationRole as PopulationRole),
+    declaredRole: input.populationRole,
+    accessRole: "appUser",
+    profileVersion: 3,
+    dayStreak: 0,
+    longestStreak: 0,
+    lastQualifyingActivityDateKey: "",
+    lastQualifyingActivityAt: null,
+    activeDateKeys: [],
+    avatarAssetName: "",
+    quickAssessmentCompleted: false,
+    quickAssessmentCompletedAt: null,
+    lastActiveAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
 function profileIsReady(profile: FirebaseFirestore.DocumentData): boolean {
   const role = profile.populationRole as PopulationRole;
   const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
@@ -96,7 +126,25 @@ function profileIsReady(profile: FirebaseFirestore.DocumentData): boolean {
   return present(profile.employeeId) && present(profile.sector) && present(profile.position);
 }
 
-export const provisionAppUserProfile = onCall({enforceAppCheck: true}, async (request) => {
+export function profileRepairUpdates(
+  existingData: FirebaseFirestore.DocumentData,
+  input: Record<string, string>,
+): Record<string, string> {
+  const repair: Record<string, string> = {};
+  const repairIfMissing = (key: string) => {
+    const value = input[key];
+    const current = existingData[key];
+    if (value && (current == null || (typeof current === "string" && !current.trim()))) {
+      repair[key] = value;
+    }
+  };
+  for (const key of ["firstName", "middleName", "lastName", "department", "course", "yearLevel", "sector", "position", "employeeId"]) {
+    repairIfMissing(key);
+  }
+  return repair;
+}
+
+async function provisionAppUserProfileHandler(request: CallableRequest) {
   const correlationId = randomUUID();
   const uid = requireUid(request);
   try {
@@ -104,46 +152,60 @@ export const provisionAppUserProfile = onCall({enforceAppCheck: true}, async (re
     const input = validatedProfileInput(request.data);
     const schoolId = schoolIdFromAuthEmail(authUser.email);
     const profileRef = db.collection("users").doc(uid);
-    let created = false;
+    let status: "created" | "already_exists" | "recovered" = "created";
     await db.runTransaction(async (transaction) => {
       const existing = await transaction.get(profileRef);
       if (existing.exists) {
-        const existingRole = existing.data()?.populationRole ?? existing.data()?.declaredRole;
+        const existingData = existing.data() ?? {};
+        const existingRole = existingData.populationRole ?? existingData.declaredRole;
         if (existingRole && existingRole !== input.populationRole) {
           throw new HttpsError("already-exists", "An account profile already exists with a different role.");
         }
+        // Only initialization fields may be repaired. Authorization, identity,
+        // assessment, and lifecycle fields are intentionally never client-writable.
+        const repair: Record<string, unknown> = profileRepairUpdates(existingData, input);
+        if (!existingData.name && (input.firstName || input.lastName)) {
+          repair.name = [input.firstName, input.middleName, input.lastName]
+            .filter(Boolean)
+            .join(" ");
+        }
+        if (!existingData.name && (input.firstName || input.lastName)) {
+          repair.name = [input.firstName, input.middleName, input.lastName]
+            .filter(Boolean)
+            .join(" ");
+        }
+        if (Object.keys(repair).length > 0) {
+          repair.updatedAt = FieldValue.serverTimestamp();
+          transaction.update(profileRef, repair);
+          status = "recovered";
+        } else {
+          status = "already_exists";
+        }
         return;
       }
-      created = true;
-      transaction.create(profileRef, {
-        id: uid, email: authUser.email ?? "", schoolId,
-        ...input,
-        name: [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" "),
-        role: legacyRole(input.populationRole as PopulationRole),
-        declaredRole: input.populationRole,
-        accessRole: "appUser", verificationStatus: "pending", profileVersion: 3,
-        verifiedAt: null, verifiedBy: "", dayStreak: 0, longestStreak: 0,
-        lastActivityDateKey: "", activeDateKeys: [], avatarAssetName: "",
-        quickAssessmentCompleted: false, quickAssessmentCompletedAt: null,
-        lastActiveAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      transaction.create(
+        profileRef,
+        appUserProfileDocument(uid, authUser.email ?? "", schoolId, input),
+      );
     });
-    console.info("profile_provisioned", {correlationId, created});
-    return {ok: true, created, profileReady: true, correlationId};
+    console.info("profile_provisioned", {correlationId, status});
+    return {status, profileExists: true, correlationId};
   } catch (error) {
     console.error("profile_provision_failed", {correlationId, code: safeErrorCode(error)});
     if (error instanceof HttpsError) throw error;
     throw new HttpsError("internal", "Profile setup could not be completed.", {correlationId});
   }
-});
+}
+
+export const provisionAppUserProfile = onCall({enforceAppCheck: true}, provisionAppUserProfileHandler);
+export const provisionAppUserProfileDev = onCall({enforceAppCheck: false}, provisionAppUserProfileHandler);
 
 function isVerifiedQuick(data: FirebaseFirestore.DocumentData | undefined, uid: string): boolean {
   return data?.userId === uid && data?.type === "quick" &&
     data?.calculationAuthority === "server" && data?.verificationStatus === "verified";
 }
 
-export const getAssessmentStatus = onCall({enforceAppCheck: true}, async (request) => {
+async function getAssessmentStatusHandler(request: CallableRequest) {
   const correlationId = randomUUID();
   const uid = requireUid(request);
   try {
@@ -184,4 +246,7 @@ export const getAssessmentStatus = onCall({enforceAppCheck: true}, async (reques
     if (error instanceof HttpsError) throw error;
     throw new HttpsError("unavailable", "Assessment status is temporarily unavailable.", {correlationId});
   }
-});
+}
+
+export const getAssessmentStatus = onCall({enforceAppCheck: true}, getAssessmentStatusHandler);
+export const getAssessmentStatusDev = onCall({enforceAppCheck: false}, getAssessmentStatusHandler);

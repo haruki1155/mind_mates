@@ -58,32 +58,3 @@ enum AccessRole {
     return AccessRole.appUser;
   }
 }
-
-enum VerificationStatus {
-  pending,
-  verified,
-  rejected,
-  needsReview;
-
-  String get storedValue => name;
-  String get label => switch (this) {
-    VerificationStatus.pending => 'Pending verification',
-    VerificationStatus.verified => 'Verified',
-    VerificationStatus.rejected => 'Verification rejected',
-    VerificationStatus.needsReview => 'Needs review',
-  };
-
-  static VerificationStatus parse(Object? value, {bool legacy = false}) {
-    final normalized = value?.toString().trim().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
-    return switch (normalized) {
-      'pending' => VerificationStatus.pending,
-      'verified' => VerificationStatus.verified,
-      'rejected' => VerificationStatus.rejected,
-      'needsreview' => VerificationStatus.needsReview,
-      _ => legacy ? VerificationStatus.needsReview : VerificationStatus.pending,
-    };
-  }
-}

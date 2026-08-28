@@ -19,6 +19,31 @@ import 'package:mind_mates/services/firebase/firestore_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  testWidgets('Quick and Full Assessment introduce scales separately', (
+    tester,
+  ) async {
+    final provider = AssessmentProvider(AssessmentRepository())
+      ..selectRole(AssessmentRole.student);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AssessmentProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: QuickAssessmentRoleScreen()),
+      ),
+    );
+    expect(find.text('Strongly Disagree'), findsNothing);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AssessmentProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: QuickAssessmentCategoryScreen()),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Response scale'), findsOneWidget);
+    expect(find.text('Strongly Disagree'), findsOneWidget);
+  });
+
   group('QuickAssessmentScoring', () {
     test('returns progress labels from 1/5 through 5/5', () {
       expect(QuickAssessmentScoring.progressLabelForStep(1), '1/5');
@@ -216,7 +241,10 @@ void main() {
       'saving uses authenticated user id and complete hidden payload',
       () async {
         final firestore = _FakeFirestoreService();
-        final repository = AssessmentRepository(firestoreService: firestore);
+        final repository = AssessmentRepository(
+          firestoreService: firestore,
+          submissionClient: _FakeAssessmentSubmissionClient(),
+        );
         final provider = _readyProvider(repository: repository);
 
         for (final question in QuickAssessmentQuestions.questions) {
@@ -240,15 +268,17 @@ void main() {
         expect(payload['signalSource'], 'quickAssessment');
         expect(payload['signalGeneratedAt'], isA<String>());
         expect(payload['responses'], isA<List<Object>>());
-        expect(firestore.collection, 'assessments');
-        expect(firestore.createdDocumentId, 'quick_user_123');
-        expect(firestore.createdDocument?['userId'], 'user_123');
+        expect(payload['calculationAuthority'], 'server');
+        expect(payload['verificationStatus'], 'verified');
       },
     );
 
     test('repeated save keeps one deterministic quick assessment', () async {
       final firestore = _FakeFirestoreService();
-      final repository = AssessmentRepository(firestoreService: firestore);
+      final repository = AssessmentRepository(
+        firestoreService: firestore,
+        submissionClient: _FakeAssessmentSubmissionClient(),
+      );
       final provider = _readyProvider(repository: repository);
 
       for (final question in QuickAssessmentQuestions.questions) {
@@ -259,29 +289,83 @@ void main() {
       await provider.saveQuickAssessmentForUser('user_1');
       await provider.saveQuickAssessmentForUser('user_1');
 
-      expect(firestore.atomicWriteCount, 1);
-      expect(firestore.createdDocumentId, 'quick_user_1');
-      expect(firestore.setDocumentData?['quickAssessmentCompleted'], isTrue);
+      expect(provider.quickResult, isNotNull);
     });
 
-    test('legacy quick assessment backfills profile completion', () async {
-      final firestore = _FakeFirestoreService(
-        legacyDocuments: [
-          {'id': 'legacy_1', 'userId': 'user_1', 'type': 'quick'},
-        ],
-      );
-      final repository = AssessmentRepository(firestoreService: firestore);
+    test(
+      'assessment status is delegated to the authoritative backend',
+      () async {
+        final firestore = _FakeFirestoreService(
+          legacyDocuments: [
+            {'id': 'legacy_1', 'userId': 'user_1', 'type': 'quick'},
+          ],
+        );
+        var checkedUserId = '';
+        final repository = AssessmentRepository(
+          firestoreService: firestore,
+          statusChecker: (userId) async {
+            checkedUserId = userId;
+            return true;
+          },
+        );
 
-      final completed = await repository.ensureQuickAssessmentCompletion(
-        'user_1',
-      );
+        final completed = await repository.ensureQuickAssessmentCompletion(
+          'user_1',
+        );
 
-      expect(completed, isTrue);
-      expect(firestore.setDocumentData?['quickAssessmentCompleted'], isTrue);
-    });
+        expect(completed, isTrue);
+        expect(checkedUserId, 'user_1');
+        expect(firestore.setDocumentData, isNull);
+      },
+    );
   });
 
   group('QuickAssessmentCategoryScreen', () {
+    testWidgets(
+      'does not submit with a stale cached profile ID after sign-out',
+      (tester) async {
+        final assessmentProvider = _readyProvider(
+          repository: AssessmentRepository(
+            firestoreService: _FakeFirestoreService(),
+            submissionClient: _FakeAssessmentSubmissionClient(),
+          ),
+        );
+        final userProvider = UserProvider(_FakeUserRepository())
+          ..setUser(
+            const UserModel(id: 'stale_user', email: 'stale@example.com'),
+          );
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AssessmentProvider>.value(
+                value: assessmentProvider,
+              ),
+              ChangeNotifierProvider<AuthProvider>(
+                create: (_) => AuthProvider(_FakeAuthRepository()),
+              ),
+              ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+            ],
+            child: const MaterialApp(home: QuickAssessmentQuestionScreen()),
+          ),
+        );
+
+        for (final question in QuickAssessmentQuestions.questions) {
+          await tester.tap(find.text(question.options.first.label).first);
+          await tester.pump();
+          await tester.ensureVisible(find.text('Next'));
+          await tester.tap(find.text('Next'));
+          await tester.pumpAndSettle();
+        }
+
+        expect(
+          find.text('Please sign in to save your assessment.'),
+          findsOneWidget,
+        );
+        expect(assessmentProvider.hasVerifiedQuickResult, isFalse);
+      },
+    );
+
     testWidgets('quick assessment completion opens optional full assessment', (
       tester,
     ) async {
@@ -290,7 +374,10 @@ void main() {
 
       final firestore = _FakeFirestoreService();
       final assessmentProvider = _readyProvider(
-        repository: AssessmentRepository(firestoreService: firestore),
+        repository: AssessmentRepository(
+          firestoreService: firestore,
+          submissionClient: _FakeAssessmentSubmissionClient(),
+        ),
       )..resetQuestions();
       final userProvider = UserProvider(_FakeUserRepository())
         ..setUser(
@@ -312,6 +399,10 @@ void main() {
                   AuthProvider(_FakeAuthRepository(currentUserId: 'user_123')),
             ),
             ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) =>
+                  AuthProvider(_FakeAuthRepository(currentUserId: 'user_1')),
+            ),
           ],
           child: MaterialApp(
             routes: {
@@ -332,8 +423,11 @@ void main() {
       }
 
       expect(find.text('optional full assessment target'), findsOneWidget);
-      expect(firestore.createdDocument?['userId'], 'user_123');
-      expect(firestore.createdDocument?['type'], 'quick');
+      expect(assessmentProvider.quickResult, isNotNull);
+      expect(
+        assessmentProvider.quickResult!.interpretation.questionSetVersion,
+        'experimental_quick_v1',
+      );
     });
 
     testWidgets('blocks full assessment when rolling limit is reached', (
@@ -364,6 +458,10 @@ void main() {
               value: assessmentProvider,
             ),
             ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) =>
+                  AuthProvider(_FakeAuthRepository(currentUserId: 'user_1')),
+            ),
           ],
           child: MaterialApp(
             routes: {
@@ -383,7 +481,7 @@ void main() {
       expect(find.text('student assessment target'), findsNothing);
     });
 
-    testWidgets('warns and continues when eligibility check throws', (
+    testWidgets('warns and blocks when eligibility check throws', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -408,6 +506,10 @@ void main() {
               value: assessmentProvider,
             ),
             ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) =>
+                  AuthProvider(_FakeAuthRepository(currentUserId: 'user_1')),
+            ),
           ],
           child: MaterialApp(
             routes: {
@@ -424,11 +526,11 @@ void main() {
 
       expect(
         find.text(
-          'Unable to verify assessment limit. You can continue for now.',
+          'Unable to verify assessment eligibility. Please retry before continuing.',
         ),
         findsOneWidget,
       );
-      expect(find.text('student assessment target'), findsOneWidget);
+      expect(find.text('student assessment target'), findsNothing);
     });
   });
 
@@ -490,8 +592,9 @@ class _FakeFirestoreService extends FirestoreService {
   @override
   Future<Map<String, dynamic>?> getDocument(
     String collection,
-    String documentId,
-  ) async => _documents['$collection/$documentId'];
+    String documentId, {
+    bool requiresAuthentication = true,
+  }) async => _documents['$collection/$documentId'];
 
   @override
   Future<List<Map<String, dynamic>>> getDocuments(
@@ -500,6 +603,7 @@ class _FakeFirestoreService extends FirestoreService {
     String? orderBy,
     bool descending = true,
     int? limit,
+    bool requiresAuthentication = true,
   }) async {
     final matches = legacyDocuments.where((document) {
       return whereEquals.entries.every(
@@ -550,6 +654,50 @@ class _FakeFirestoreService extends FirestoreService {
   }
 }
 
+class _FakeAssessmentSubmissionClient implements AssessmentSubmissionClient {
+  @override
+  Future<Map<String, Object>> submitQuickAssessment({
+    required String submissionId,
+    required String role,
+    required String name,
+    required List<Map<String, Object>> responses,
+  }) async {
+    return {
+      'userId': 'user_123',
+      'type': 'quick',
+      'calculationAuthority': 'server',
+      'verificationStatus': 'verified',
+      'role': role,
+      'name': name,
+      'responses': responses,
+      'concernScore': 100.0,
+      'overallLevel': QuickAssessmentLevel.veryHigh.name,
+      'summary': 'Server result',
+      'topConcernAreas': <String>['Stress load'],
+      'recommendedNextStep': 'Review support options.',
+      'mentalStatusSignal': QuickAssessmentSignal.highSupport.name,
+      'signalSource': 'quickAssessment',
+      'signalGeneratedAt': DateTime.now().toIso8601String(),
+      'createdAt': DateTime.now().toIso8601String(),
+      'algorithmVersion': 'internal_wellness_policy_v1',
+      'questionSetVersion': 'experimental_quick_v1',
+      'interpretation': <String, Object>{
+        'algorithmVersion': 'internal_wellness_policy_v1',
+        'questionSetVersion': 'experimental_quick_v1',
+        'supportPriority': 'promptFollowUp',
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, Object>> submitFullAssessment({
+    required String submissionId,
+    required String responseScaleVersion,
+    required String questionSetVersion,
+    required List<Map<String, Object>> answers,
+  }) => throw UnimplementedError();
+}
+
 class _EligibilityAssessmentRepository extends AssessmentRepository {
   _EligibilityAssessmentRepository(this.eligibility, {this.throws = false});
 
@@ -577,21 +725,10 @@ class _FakeAuthRepository extends AuthRepository {
 
 class _FakeUserRepository extends UserRepository {
   UserModel? updatedUser;
-  UserActivityType? recordedActivityType;
 
   @override
   Future<void> updateUserProfile(String uid, UserModel user) async {
     updatedUser = user;
-  }
-
-  @override
-  Future<UserModel?> recordActivity(
-    String uid,
-    UserActivityType type, {
-    DateTime? occurredAt,
-  }) async {
-    recordedActivityType = type;
-    return null;
   }
 }
 

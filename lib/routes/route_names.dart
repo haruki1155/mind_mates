@@ -5,7 +5,13 @@ class RouteNames {
   static const onboarding = '/onboarding';
   static const login = '/login';
   static const signup = '/signup';
+  static const finishAccountSetup = '/finish-account-setup';
+  static const finishAccountSetupForm = '/finish-account-setup/form';
   static const forgotPassword = '/forgot-password';
+  static const resetPassword = '/reset-password';
+  static const recoveryEmail = '/recovery-email';
+  static const verifyRecoveryEmail = '/verify-recovery-email';
+  static const assessmentStatus = '/assessment-status';
   static const quickAssessmentRole = '/quick-assessment/role';
   static const quickAssessmentName = '/quick-assessment/name';
   static const quickAssessmentQuestions = '/quick-assessment/questions';
@@ -23,7 +29,6 @@ class RouteNames {
   static const mentalHealthReport = '/profile/mental-health-report';
   static const mentalHealthInsights = '/profile/mental-health-insights';
   static const logMood = '/mood/log';
-  static const journal = '/journal';
   static const mindfulBreathing = '/insights/mindful-breathing';
   static const sleepQuality = '/sleep-quality';
   static const adminStatus = '/admin/status';

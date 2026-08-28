@@ -1,8 +1,10 @@
 import {createHash, randomUUID} from "node:crypto";
 import {FieldValue, Timestamp, getFirestore} from "firebase-admin/firestore";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {
   AssessmentRole,
+  FULL_QUESTION_SET_VERSION,
+  FULL_RESPONSE_SCALE_VERSION,
   roleFromPopulation,
 } from "./catalog";
 import {
@@ -14,7 +16,9 @@ import {
   validateQuickAnswers,
 } from "./calculator";
 import {toHttpsError} from "./errors";
+import {resolveFullSubmissionContract} from "./full_contract";
 import {quickProfileRoleDecision, submissionHashesMatch} from "./submission_policy";
+import {manilaDateKey, writeQualifyingWellnessState} from "../wellness";
 
 const db = getFirestore();
 const assessments = db.collection("assessments");
@@ -105,7 +109,7 @@ function legacyRole(role: AssessmentRole): string {
   return "student";
 }
 
-export const submitQuickAssessment = onCall({enforceAppCheck: true}, async (request) => {
+async function submitQuickAssessmentHandler(request: CallableRequest) {
   const correlationId = randomUUID();
   const uid = uidFrom(request);
   const data = objectData(request.data);
@@ -119,6 +123,8 @@ export const submitQuickAssessment = onCall({enforceAppCheck: true}, async (requ
     const result = calculateQuick(role, data.name, answers);
     const documentId = `quick_${uid}`;
     const ref = assessments.doc(documentId);
+    const occurredAt = Timestamp.now();
+    const activity = db.collection("user_activities").doc(`quickAssessment_${documentId}`);
     const submissionHash = hashSubmission({role, answers});
     const payload = {
       userId: uid,
@@ -141,8 +147,9 @@ export const submitQuickAssessment = onCall({enforceAppCheck: true}, async (requ
     };
     await db.runTransaction(async (transaction) => {
       const profileRef = db.collection("users").doc(uid);
-      const profile = await transaction.get(profileRef);
-      const current = await transaction.get(ref);
+      const [profile, current, activitySnapshot] = await Promise.all([
+        transaction.get(profileRef), transaction.get(ref), transaction.get(activity),
+      ]);
       if (!profile.exists) {
         throw new HttpsError("failed-precondition", "Complete your user profile before submitting an assessment.");
       }
@@ -153,7 +160,17 @@ export const submitQuickAssessment = onCall({enforceAppCheck: true}, async (requ
       if (current.exists && !submissionHashesMatch(current.data()?.submissionHash, submissionHash)) {
         throw new HttpsError("already-exists", "A different quick assessment is already stored for this account.");
       }
-      if (!current.exists) transaction.create(ref, payload);
+      if (!current.exists) {
+        transaction.create(ref, payload);
+        if (!activitySnapshot.exists) {
+          const dateKey = manilaDateKey(occurredAt);
+          transaction.create(activity, {
+            userId: uid, type: "quickAssessment", sourceId: documentId,
+            dateKey, occurredAt, createdAt: FieldValue.serverTimestamp(),
+          });
+          writeQualifyingWellnessState(transaction, profileRef, profile.data() ?? {}, occurredAt, dateKey);
+        }
+      }
       transaction.set(profileRef, {
         ...(roleDecision === "backfill" ? {
           role: legacyRole(role),
@@ -168,28 +185,51 @@ export const submitQuickAssessment = onCall({enforceAppCheck: true}, async (requ
     return {...responsePayload(await ref.get()), correlationId};
   } catch (error) {
     console.error("quick_assessment_failed", {correlationId, uid, error});
-    return toHttpsError(error);
+    return toHttpsError(error, correlationId);
   }
-});
+}
 
-export const submitFullAssessment = onCall({enforceAppCheck: true}, async (request) => {
+export const submitQuickAssessment = onCall({enforceAppCheck: true}, submitQuickAssessmentHandler);
+export const submitQuickAssessmentDev = onCall({enforceAppCheck: false}, submitQuickAssessmentHandler);
+
+async function submitFullAssessmentHandler(request: CallableRequest) {
   const correlationId = randomUUID();
   const uid = uidFrom(request);
   const data = objectData(request.data);
   const submissionId = submissionIdFrom(data.submissionId);
   const answers = parseFullAnswers(data.answers);
+  let contract;
+  try {
+    contract = resolveFullSubmissionContract(
+      data.responseScaleVersion,
+      data.questionSetVersion,
+      answers,
+    );
+  } catch (error) {
+    console.error("full_assessment_contract_rejected", {correlationId, uid, error});
+    return toHttpsError(error, correlationId);
+  }
   assessmentRequestSummary("submitFullAssessment", correlationId, submissionId, answers);
+  if (contract.source === "inferredAgreementCompatibility") {
+    console.warn("assessment_contract_version_inferred", {
+      correlationId,
+      uid,
+      responseScaleVersion: FULL_RESPONSE_SCALE_VERSION,
+      questionSetVersion: FULL_QUESTION_SET_VERSION,
+    });
+  }
   const ref = assessments.doc(fullDocumentId(uid, submissionId));
   const existing = await ref.get();
-  if (existing.exists) return responsePayload(existing);
+  if (existing.exists) return {...responsePayload(existing), correlationId};
   const profile = await db.collection("users").doc(uid).get();
   const role = profileRole(profile.data() ?? {});
   assessmentRequestSummary("submitFullAssessment", correlationId, submissionId, answers, role);
   try {
-    validateFullAnswers(role, answers);
-    const result = calculateFull(role, answers);
+    validateFullAnswers(role, answers, contract.responseScaleVersion);
+    const result = calculateFull(role, answers, contract.responseScaleVersion);
     const limitRef = limits.doc(uid);
-    const now = Date.now();
+    const occurredAt = Timestamp.now();
+    const now = occurredAt.toMillis();
     const windowStart = now - 7 * 24 * 60 * 60 * 1000;
     const minimumInterval = 2 * 24 * 60 * 60 * 1000;
     const payload = {
@@ -205,15 +245,21 @@ export const submitFullAssessment = onCall({enforceAppCheck: true}, async (reque
       questionSetVersion: result.questionSetVersion,
       serverAlgorithmVersion: result.algorithmVersion,
       serverQuestionSetVersion: result.questionSetVersion,
+      requestResponseScaleVersion: contract.responseScaleVersion,
+      requestQuestionSetVersion: contract.questionSetVersion,
+      contractVersionSource: contract.source,
       submissionId,
-      submissionHash: hashSubmission({role, answers}),
+      submissionHash: hashSubmission({role, answers, responseScaleVersion: contract.responseScaleVersion, questionSetVersion: contract.questionSetVersion}),
       createdAt: FieldValue.serverTimestamp(),
       submittedAt: FieldValue.serverTimestamp(),
       verifiedAt: FieldValue.serverTimestamp(),
     };
     await db.runTransaction(async (transaction) => {
-      const limitSnapshot = await transaction.get(limitRef);
-      const duplicate = await transaction.get(ref);
+      const activity = db.collection("user_activities").doc(`fullAssessment_${ref.id}`);
+      const profileRef = db.collection("users").doc(uid);
+      const [limitSnapshot, duplicate, profileSnapshot, activitySnapshot] = await Promise.all([
+        transaction.get(limitRef), transaction.get(ref), transaction.get(profileRef), transaction.get(activity),
+      ]);
       if (duplicate.exists) return;
       const timestamps = Array.isArray(limitSnapshot.data()?.completedAt)
         ? (limitSnapshot.data()?.completedAt as unknown[]).map((value) => value instanceof Timestamp ? value.toMillis() : Number(value)).filter((value) => Number.isFinite(value) && value > windowStart)
@@ -223,10 +269,22 @@ export const submitFullAssessment = onCall({enforceAppCheck: true}, async (reque
       if (timestamps.length >= 2) throw new HttpsError("resource-exhausted", "Only two full assessments are allowed in a rolling seven-day period.");
       transaction.create(ref, payload);
       transaction.set(limitRef, {userId: uid, completedAt: [...timestamps, now], updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      if (!profileSnapshot.exists) throw new HttpsError("failed-precondition", "Complete your user profile before submitting an assessment.");
+      if (!activitySnapshot.exists) {
+        const dateKey = manilaDateKey(occurredAt);
+        transaction.create(activity, {
+          userId: uid, type: "fullAssessment", sourceId: ref.id,
+          dateKey, occurredAt, createdAt: FieldValue.serverTimestamp(),
+        });
+        writeQualifyingWellnessState(transaction, profileRef, profileSnapshot.data() ?? {}, occurredAt, dateKey);
+      }
     });
     return {...responsePayload(await ref.get()), correlationId};
   } catch (error) {
     console.error("full_assessment_failed", {correlationId, uid, error});
-    return toHttpsError(error);
+    return toHttpsError(error, correlationId);
   }
-});
+}
+
+export const submitFullAssessment = onCall({enforceAppCheck: true}, submitFullAssessmentHandler);
+export const submitFullAssessmentDev = onCall({enforceAppCheck: false}, submitFullAssessmentHandler);

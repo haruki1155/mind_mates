@@ -35,6 +35,7 @@ class ReportModel {
     this.mentalStatusLabel = 'Normal',
     this.latestAssessmentStatus,
     this.latestAssessmentSource,
+    this.latestAssessmentVerificationStatus,
     this.mentalStatusSignal,
     this.topConcernAreas = const [],
     this.recommendedNextActions = const [],
@@ -74,6 +75,7 @@ class ReportModel {
   final String mentalStatusLabel;
   final String? latestAssessmentStatus;
   final String? latestAssessmentSource;
+  final String? latestAssessmentVerificationStatus;
   final String? mentalStatusSignal;
   final List<String> topConcernAreas;
   final List<String> recommendedNextActions;
@@ -125,6 +127,9 @@ class ReportModel {
       mentalStatusLabel: (json['mentalStatusLabel'] ?? 'Normal').toString(),
       latestAssessmentStatus: _stringOrNull(json['latestAssessmentStatus']),
       latestAssessmentSource: _stringOrNull(json['latestAssessmentSource']),
+      latestAssessmentVerificationStatus: _stringOrNull(
+        json['latestAssessmentVerificationStatus'],
+      ),
       mentalStatusSignal: _stringOrNull(json['mentalStatusSignal']),
       topConcernAreas: (json['topConcernAreas'] as List<dynamic>? ?? const [])
           .map((area) => area.toString())
@@ -171,6 +176,7 @@ class ReportModel {
       'mentalStatusLabel': mentalStatusLabel,
       'latestAssessmentStatus': latestAssessmentStatus,
       'latestAssessmentSource': latestAssessmentSource,
+      'latestAssessmentVerificationStatus': latestAssessmentVerificationStatus,
       'mentalStatusSignal': mentalStatusSignal,
       'topConcernAreas': topConcernAreas,
       'recommendedNextActions': recommendedNextActions,

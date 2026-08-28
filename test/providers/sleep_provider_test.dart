@@ -11,7 +11,7 @@ void main() {
     await provider.chooseStorage('user_1', SleepConsentChoice.localOnly);
     final saved = await provider.save(_entry());
 
-    expect(saved, isTrue);
+    expect(saved.status, SleepSaveStatus.savedLocallyAndSynced);
     expect(provider.cloudEnabled, isFalse);
     expect(provider.entries, hasLength(1));
     expect(repository.lastCloudEnabled, isFalse);
@@ -25,7 +25,10 @@ void main() {
       await provider.load('user_1');
       await provider.chooseStorage('user_1', SleepConsentChoice.cloud);
 
-      expect(await provider.save(_entry()), isTrue);
+      expect(
+        (await provider.save(_entry())).status,
+        SleepSaveStatus.savedLocallySyncPending,
+      );
       expect(provider.entries, hasLength(1));
       expect(provider.syncState, SleepSyncState.pending);
       expect(provider.errorMessage, contains('Saved on this device'));
@@ -69,15 +72,24 @@ class _FakeSleepRepository extends SleepRepository {
   }
 
   @override
-  Future<List<SleepEntry>> save(
+  Future<SleepSaveResult> save(
     SleepEntry entry, {
     required bool cloudEnabled,
   }) async {
     lastCloudEnabled = cloudEnabled;
     stored.removeWhere((item) => item.wakeDateKey == entry.wakeDateKey);
     stored.add(entry);
-    if (failCloudSave && cloudEnabled) throw StateError('offline');
-    return List.of(stored);
+    if (failCloudSave && cloudEnabled) {
+      return SleepSaveResult(
+        status: SleepSaveStatus.savedLocallySyncPending,
+        message: 'Saved on this device. Cloud sync is pending.',
+        savedEntry: entry,
+      );
+    }
+    return SleepSaveResult(
+      status: SleepSaveStatus.savedLocallyAndSynced,
+      savedEntry: entry,
+    );
   }
 
   @override

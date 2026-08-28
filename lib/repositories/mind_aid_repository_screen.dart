@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../database/firestore_collections.dart';
 import '../features/mind_aid/ai_engine/mind_aid_chat_engine.dart';
 import '../features/mind_aid/ai_engine/mind_aid_engine.dart';
+import '../features/mind_aid/ai_engine/mind_aid_safety_classifier.dart';
+import '../features/mind_aid/ai_engine/mind_aid_small_talk.dart';
+import '../features/mind_aid/ai_engine/score_engine.dart';
 import '../features/mind_aid/data/mind_aid_dataset_loader.dart';
 import '../features/mind_aid/domain/mind_aid_chat_models.dart';
 import '../features/mind_aid/domain/mind_aid_context.dart';
@@ -13,6 +16,7 @@ import '../features/mind_aid/domain/mind_aid_safety.dart';
 import '../models/mind_aid_message_model.dart';
 import '../models/mind_aid_suggestion_model.dart';
 import '../services/firebase/firestore_service.dart';
+import '../services/firebase/firebase_runtime_diagnostics.dart';
 import '../services/firebase/mind_aid_cloud_service.dart';
 
 class MindAidSendResult {
@@ -35,7 +39,7 @@ class MindAidRepository {
     MindAidEngine? engine,
     MindAidChatEngine? chatEngine,
     FirestoreService? firestoreService,
-    MindAidCloudService? cloudService,
+    MindAidCloudGateway? cloudService,
   }) : _datasetLoader = datasetLoader ?? MindAidDatasetLoader(),
        _engine = engine ?? MindAidEngine(),
        _chatEngine = chatEngine ?? MindAidChatEngine(),
@@ -46,10 +50,10 @@ class MindAidRepository {
   final MindAidEngine _engine;
   final MindAidChatEngine _chatEngine;
   final FirestoreService _firestoreService;
-  final MindAidCloudService? _cloudServiceOverride;
-  MindAidCloudService? _createdCloudService;
+  final MindAidCloudGateway? _cloudServiceOverride;
+  MindAidCloudGateway? _createdCloudService;
 
-  MindAidCloudService get _cloudService =>
+  MindAidCloudGateway get _cloudService =>
       _cloudServiceOverride ?? (_createdCloudService ??= MindAidCloudService());
 
   Future<MindAidPreferences> loadPreferences(String userId) async {
@@ -101,11 +105,28 @@ class MindAidRepository {
     );
   }
 
-  Future<void> clearHistory(String userId) =>
-      _cloudService.clearHistory(userId);
+  Future<void> clearHistory(String userId, {String? conversationId}) async {
+    _chatEngine.resetConversation(
+      userId: userId,
+      conversationId: conversationId,
+    );
+    await _cloudService.clearHistory(userId);
+  }
 
   Future<String> startNewConversation(String userId) =>
       _cloudService.startNewConversation(userId);
+
+  Future<bool> isDialogflowAvailable({
+    required String userId,
+    MindAidPreferences? preferences,
+  }) async {
+    if (userId.isEmpty ||
+        userId == 'guest' ||
+        preferences?.cloudConsent != true) {
+      return false;
+    }
+    return _cloudService.isCloudEnabled();
+  }
 
   Future<void> submitFeedback({
     required String userId,
@@ -155,16 +176,20 @@ class MindAidRepository {
     final conversationId = preferences?.conversationId.trim().isNotEmpty == true
         ? preferences!.conversationId
         : userId;
-    final analysis = _engine.process(text, dataset, context: context);
-    final isHighRisk =
-        analysis.requiresEscalation ||
-        analysis.severity == MindAidSeverity.high ||
-        analysis.severity == MindAidSeverity.crisis;
+    final normalizedInput = ScoreEngine.normalize(text);
+    final safety = const MindAidSafetyClassifier().classify(
+      normalizedInput: normalizedInput,
+      matches: const [],
+    );
+    final useLocalRoute =
+        safety.level.blocksCloud ||
+        MindAidSmallTalk.isSmallTalk(normalizedInput);
+    final cloudEligible =
+        userId != 'guest' && preferences?.cloudConsent == true;
+    final cloudEnabled = cloudEligible && await _cloudService.isCloudEnabled();
+    var localFallbackReason = '';
 
-    if (!isHighRisk &&
-        userId != 'guest' &&
-        preferences?.cloudConsent == true &&
-        await _cloudService.isCloudEnabled()) {
+    if (!useLocalRoute && cloudEnabled) {
       try {
         final cloud = await _cloudService.send(
           requestId: effectiveRequestId,
@@ -225,10 +250,17 @@ class MindAidRepository {
           chatResponse: response,
           userMessageSaved: true,
         );
-      } catch (_) {
+      } catch (error) {
         // The local engine below is the reliable fallback for rollout, network,
         // quota, permission, and Dialogflow response failures.
+        localFallbackReason = 'cloud_unavailable';
+        FirebaseRuntimeDiagnostics.log(
+          event: 'mind_aid_cloud_fallback',
+          error: error,
+        );
       }
+    } else if (!useLocalRoute && cloudEligible && !cloudEnabled) {
+      localFallbackReason = 'cloud_disabled';
     }
 
     final userMessageSaved = await _trySaveMessage(
@@ -246,6 +278,7 @@ class MindAidRepository {
     final result = await _chatEngine.respond(
       MindAidChatRequest(
         userId: userId,
+        conversationId: conversationId,
         text: text,
         recentMessages: recentMessages,
         moodLevel: context.moodLevel,
@@ -254,35 +287,62 @@ class MindAidRepository {
         assessment: context.assessment,
         conversationSummary: context.conversationSummary,
         preferredSupportStyle: context.preferredSupportStyle,
-        journalText: context.journalText,
         wellnessSnapshot: context.wellnessSnapshot,
       ),
       dataset,
     );
 
+    final routedResult = _withRouting(
+      result,
+      source: 'local',
+      fallbackReason: localFallbackReason,
+    );
     final message = MindAidMessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       conversationId: conversationId,
       sender: 'assistant',
-      text: result.text,
+      text: routedResult.text,
       createdAt: DateTime.now(),
-      status: result.status,
-      safetyLevel: result.safetyLevel.name,
-      primaryIntent: result.primaryIntent,
-      requiresEscalation: result.requiresEscalation,
+      status: routedResult.status,
+      safetyLevel: routedResult.safetyLevel.name,
+      primaryIntent: routedResult.primaryIntent,
+      requiresEscalation: routedResult.requiresEscalation,
       source: 'local',
-      fallbackReason: preferences?.cloudConsent == true
-          ? 'cloud_unavailable'
-          : '',
+      fallbackReason: localFallbackReason,
+      actions: routedResult.actions,
     );
 
     await _trySaveMessage(userId: userId, message: message);
 
     return MindAidSendResult(
       message: message,
-      suggestions: result.suggestions,
-      chatResponse: result,
+      suggestions: routedResult.suggestions,
+      chatResponse: routedResult,
       userMessageSaved: userMessageSaved,
+    );
+  }
+
+  MindAidChatResponse _withRouting(
+    MindAidChatResponse response, {
+    required String source,
+    required String fallbackReason,
+  }) {
+    return MindAidChatResponse(
+      text: response.text,
+      intentMatches: response.intentMatches,
+      severity: response.severity,
+      suggestions: response.suggestions,
+      followUpQuestions: response.followUpQuestions,
+      recommendations: response.recommendations,
+      requiresEscalation: response.requiresEscalation,
+      conversationState: response.conversationState,
+      status: response.status,
+      safetyLevel: response.safetyLevel,
+      intentOverride: response.intentOverride,
+      source: source,
+      confidence: response.confidence,
+      fallbackReason: fallbackReason,
+      actions: response.actions,
     );
   }
 

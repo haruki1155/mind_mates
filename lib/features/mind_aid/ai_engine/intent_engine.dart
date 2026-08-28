@@ -14,6 +14,16 @@ class IntentEngine {
     MindAidIntentMatch? bestMatch;
 
     for (final record in dataset.allRecords) {
+      final matchedKeywords = ScoreEngine.matchedTerms(
+        normalizedInput,
+        record.keywords,
+      );
+      final matchedPhrases = ScoreEngine.matchedPhrases(
+        normalizedInput,
+        record.phrases,
+      );
+      if (matchedKeywords.isEmpty && matchedPhrases.isEmpty) continue;
+
       final score = ScoreEngine.scoreRecord(
         normalizedInput,
         record,
@@ -25,14 +35,8 @@ class IntentEngine {
         bestMatch = MindAidIntentMatch(
           record: record,
           score: score,
-          matchedKeywords: ScoreEngine.matchedTerms(
-            normalizedInput,
-            record.keywords,
-          ),
-          matchedPhrases: ScoreEngine.matchedPhrases(
-            normalizedInput,
-            record.phrases,
-          ),
+          matchedKeywords: matchedKeywords,
+          matchedPhrases: matchedPhrases,
           confidence: (score / 6).clamp(0.05, 1).toDouble(),
         );
       }

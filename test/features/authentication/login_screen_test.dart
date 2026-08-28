@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mind_mates/features/authentication/screens/login_screen.dart';
+import 'package:mind_mates/features/authentication/screens/assessment_status_gate_screen.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/assessment_provider.dart';
 import 'package:mind_mates/providers/auth_provider.dart';
@@ -58,12 +59,41 @@ void main() {
     expect(authProvider.generatedEmail, 'ucu.2026.0001@mindmate.local');
     expect(find.text('home target'), findsOneWidget);
   });
+
+  testWidgets(
+    'login preserves the session when status verification is unavailable',
+    (tester) async {
+      final authProvider = _FakeAuthProvider();
+      await tester.pumpWidget(
+        _LoginHarness(
+          authProvider: authProvider,
+          assessmentRepository: _FakeAssessmentRepository(throws: true),
+        ),
+      );
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'School ID'),
+        'UCU 2026-0001',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'password123',
+      );
+      await tester.ensureVisible(find.text('Sign in'));
+      await tester.tap(find.text('Sign in'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Retry status check'), findsOneWidget);
+      expect(authProvider.signOutCalls, 0);
+    },
+  );
 }
 
 class _LoginHarness extends StatelessWidget {
-  const _LoginHarness({required this.authProvider});
+  const _LoginHarness({required this.authProvider, this.assessmentRepository});
 
   final AuthProvider authProvider;
+  final AssessmentRepository? assessmentRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -74,12 +104,16 @@ class _LoginHarness extends StatelessWidget {
           create: (_) => UserProvider(_FakeUserRepository()),
         ),
         ChangeNotifierProvider<AssessmentProvider>(
-          create: (_) => AssessmentProvider(_FakeAssessmentRepository()),
+          create: (_) => AssessmentProvider(
+            assessmentRepository ?? _FakeAssessmentRepository(),
+          ),
         ),
       ],
       child: MaterialApp(
         home: const LoginScreen(),
         routes: {
+          RouteNames.assessmentStatus: (_) =>
+              const AssessmentStatusGateScreen(),
           RouteNames.onboarding: (_) =>
               const Scaffold(body: Center(child: Text('onboarding target'))),
           RouteNames.home: (_) =>
@@ -96,6 +130,12 @@ class _FakeAuthProvider extends AuthProvider {
   int signInCalls = 0;
   String? schoolId;
   String? generatedEmail;
+  int signOutCalls = 0;
+
+  @override
+  Future<void> signOut() async {
+    signOutCalls++;
+  }
 
   @override
   Future<String?> signIn({
@@ -107,6 +147,9 @@ class _FakeAuthProvider extends AuthProvider {
     generatedEmail = AuthRepository.authEmailForSchoolId(schoolId);
     return 'user_1';
   }
+
+  @override
+  Future<String?> resolveAuthenticatedUserId() async => 'user_1';
 }
 
 class _FakeAuthRepository extends AuthRepository {
@@ -121,6 +164,13 @@ class _FakeUserRepository extends UserRepository {
 }
 
 class _FakeAssessmentRepository extends AssessmentRepository {
+  _FakeAssessmentRepository({this.throws = false});
+
+  final bool throws;
+
   @override
-  Future<bool> ensureQuickAssessmentCompletion(String userId) async => true;
+  Future<bool> ensureQuickAssessmentCompletion(String userId) async {
+    if (throws) throw StateError('temporary backend failure');
+    return true;
+  }
 }

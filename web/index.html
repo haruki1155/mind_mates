@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="MindMate administration and counseling management portal.">
+  <meta name="description" content="MindMates administration and counseling management portal.">
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#F6B900">
   <style>
@@ -29,16 +29,25 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="MindMate Admin">
+  <meta name="apple-mobile-web-app-title" content="MindMates Admin">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>MindMate Admin</title>
+  <title>MindMates Admin</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    // Firebase recommends the debug provider for localhost instead of adding
+    // localhost to the production reCAPTCHA key's allowed domains. The
+    // generated token must still be registered in Firebase App Check.
+    const appCheckDebugHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    if (appCheckDebugHosts.has(window.location.hostname)) {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

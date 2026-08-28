@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../models/mood_model.dart';
 import '../data/daily_affirmation_quotes.dart';
 import '../models/home_dashboard_data.dart';
 
@@ -348,6 +349,7 @@ class HomeWelcomeCard extends StatelessWidget {
     super.key,
     required this.user,
     required this.streak,
+    required this.currentMood,
     required this.onNotificationTap,
     required this.onStreakTap,
     required this.onMoodTap,
@@ -356,6 +358,7 @@ class HomeWelcomeCard extends StatelessWidget {
 
   final HomeUserData user;
   final HomeStreakData? streak;
+  final MoodModel? currentMood;
   final VoidCallback onNotificationTap;
   final VoidCallback onStreakTap;
   final VoidCallback onMoodTap;
@@ -423,12 +426,16 @@ class HomeWelcomeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _StreakCard(data: streak, onTap: onStreakTap),
+          _StreakCard(
+            data: streak,
+            currentMood: currentMood,
+            onTap: onStreakTap,
+          ),
           const SizedBox(height: 14),
           HomeWideButton(
             label: actionLabel,
-            icon: Icons.add,
-            assetName: '+.png',
+            icon: currentMood == null ? Icons.add : Icons.check_circle_outline,
+            assetName: currentMood == null ? '+.png' : null,
             onTap: onMoodTap,
           ),
         ],
@@ -438,9 +445,14 @@ class HomeWelcomeCard extends StatelessWidget {
 }
 
 class _StreakCard extends StatelessWidget {
-  const _StreakCard({required this.data, required this.onTap});
+  const _StreakCard({
+    required this.data,
+    required this.currentMood,
+    required this.onTap,
+  });
 
   final HomeStreakData? data;
+  final MoodModel? currentMood;
   final VoidCallback onTap;
 
   @override
@@ -526,8 +538,10 @@ class _StreakCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                     Text(
-                      streak?.description ??
-                          'Your streak will appear here after activity is synced.',
+                      currentMood == null
+                          ? streak?.description ??
+                                'Your streak will appear here after activity is synced.'
+                          : 'Mood status: ${_moodLabel(currentMood!)}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: HomeTextStyles.body,
@@ -560,6 +574,11 @@ class _StreakCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _moodLabel(MoodModel mood) {
+    final label = mood.label?.trim();
+    return label == null || label.isEmpty ? 'Logged' : label;
   }
 }
 

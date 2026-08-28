@@ -19,11 +19,19 @@ service cloud.firestore {
     }
 
     function hasPortalAccess() {
-      return currentAccessRole() in ['portalStaff', 'counselor', 'admin'];
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          (currentAccessRole() in ['portalStaff', 'counselor']
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.staffAccountStatus == 'approved')
+          || (currentAccessRole() == 'admin'
+            && exists(/databases/$(database)/documents/system_config/security)
+            && request.auth.uid == get(/databases/$(database)/documents/system_config/security).data.superAdminUid)
+        );
     }
 
     function hasClinicalAccess() {
-      return currentAccessRole() in ['counselor', 'admin'];
+      return hasPortalAccess() && currentAccessRole() in ['counselor', 'admin'];
     }
 
     function isAdmin() {
@@ -43,34 +51,69 @@ service cloud.firestore {
         && currentAccessRole() == 'admin';
     }
 
-    function validSelfProfileCreate(userId) {
-      return isOwner(userId)
-        && request.resource.data.id == userId
-        && request.resource.data.accessRole == 'appUser'
-        && request.resource.data.verificationStatus == 'pending'
-        && request.resource.data.role in ['student', 'faculty', 'staff']
-        && request.resource.data.populationRole in ['student', 'teaching', 'nonTeaching']
-        && request.resource.data.declaredRole == request.resource.data.populationRole;
-    }
-
     function validSelfProfileUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'name', 'firstName', 'middleName', 'lastName', 'avatarAssetName',
-        'updatedAt', 'lastActiveAt', 'lastActivityDateKey', 'activeDateKeys',
-        'streakUpdatedAt', 'dayStreak', 'longestStreak',
-        'quickAssessmentCompleted', 'quickAssessmentCompletedAt',
-        'lastMoodDateKey'
-      ]);
+        'firstName', 'middleName', 'lastName', 'avatarAssetName',
+        'updatedAt'
+      ])
+        && request.resource.data.updatedAt == request.time;
     }
 
-    function isLegacyPrivileged() {
+    // Temporary rollout bridge for debug clients built before appointment
+    // creation moved to createAppointmentRequest. Remove after every active
+    // development installation has the callable-backed client.
+    function validCompatibilityAppointmentCreate() {
       return signedIn()
+        && request.resource.data.userId == request.auth.uid
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'counselor'];
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accessRole == 'appUser'
+        && !('staffAccountStatus' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+        && request.resource.data.keys().hasOnly([
+          'userId', 'fullName', 'age', 'address', 'contactNumber', 'email',
+          'facebook', 'sex', 'course', 'yearLevel', 'preferredContactMethod',
+          'therapyBefore', 'concern', 'bestTime', 'scheduledAt',
+          'scheduledTime', 'location', 'status', 'populationRole',
+          'counselorName', 'assignedStaffId', 'staffReply', 'reviewedAt',
+          'proposedScheduledAt', 'proposedScheduledTime',
+          'parentAppointmentId', 'rootAppointmentId', 'startedAt',
+          'completedAt', 'statusBeforeReschedule', 'proposedBy', 'proposedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.scheduledAt is timestamp
+        && request.resource.data.scheduledAt > request.time
+        && request.resource.data.scheduledAt < request.time + duration.value(366, 'd')
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 160
+        && request.resource.data.concern is string
+        && request.resource.data.concern.size() >= 3
+        && request.resource.data.concern.size() <= 2000
+        && request.resource.data.scheduledTime is string
+        && request.resource.data.scheduledTime.size() >= 3
+        && request.resource.data.scheduledTime.size() <= 30
+        && request.resource.data.location is string
+        && request.resource.data.location.size() >= 2
+        && request.resource.data.location.size() <= 150
+        && request.resource.data.counselorName == ''
+        && request.resource.data.assignedStaffId == ''
+        && request.resource.data.staffReply == ''
+        && request.resource.data.reviewedAt == null
+        && request.resource.data.proposedScheduledAt == null
+        && request.resource.data.proposedScheduledTime == ''
+        && request.resource.data.parentAppointmentId == ''
+        && request.resource.data.rootAppointmentId == ''
+        && request.resource.data.startedAt == null
+        && request.resource.data.completedAt == null
+        && request.resource.data.statusBeforeReschedule == ''
+        && request.resource.data.proposedBy == ''
+        && request.resource.data.proposedAt == null;
     }
 
     match /users/{userId} {
-      allow create: if validSelfProfileCreate(userId);
+      allow create: if false;
       allow read: if isOwner(userId) || isSystemAdmin();
       allow update: if (isOwner(userId) && validSelfProfileUpdate());
       allow delete: if isSystemAdmin();
@@ -79,6 +122,10 @@ service cloud.firestore {
     match /system_config/{documentId} {
       allow read: if signedIn() && documentId == 'security';
       allow write: if false;
+    }
+
+    match /_super_admin_rotations/{rotationId} {
+      allow read, write: if false;
     }
 
     match /colleges/{recordId} {
@@ -100,6 +147,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /user_private/{userId} { allow read, write: if false; }
+    match /password_recovery_tokens/{tokenId} { allow read, write: if false; }
+    match /recovery_email_tokens/{tokenId} { allow read, write: if false; }
+    match /_password_recovery_limits/{userId} { allow read, write: if false; }
+    match /mail/{mailId} { allow read, write: if false; }
+
     match /admin_audit_logs/{auditId} {
       allow read: if isSystemAdmin();
       allow write: if false;
@@ -114,18 +167,15 @@ service cloud.firestore {
     }
 
     match /assessments/{assessmentId} {
-      allow create: if isOwner(request.resource.data.userId)
-        && (request.resource.data.type != 'quick'
-          || assessmentId == 'quick_' + request.auth.uid);
+      // Assessment results are calculated and written by trusted Functions
+      // only. The client may submit answers through callable Functions, but
+      // it must never be able to forge scores, classifications, or metadata.
+      allow create, update, delete: if false;
       allow get: if (signedIn()
           && assessmentId == 'quick_' + request.auth.uid)
         || isOwner(resource.data.userId)
         || isAdmin();
       allow list: if isOwner(resource.data.userId) || isAdmin();
-      allow update, delete: if isAdmin()
-        || (isOwner(resource.data.userId)
-          && request.resource.data.userId == resource.data.userId
-          && resource.data.type != 'quick');
     }
 
     match /assessment_feedback/{feedbackId} {
@@ -154,37 +204,12 @@ service cloud.firestore {
     }
 
     match /moods/{moodId} {
-      allow create: if isOwner(request.resource.data.userId)
-        && moodId.matches('^daily_' + request.auth.uid + '_[0-9]{8}$')
-        && request.resource.data.keys().hasOnly([
-          'userId', 'level', 'label', 'note', 'dateKey', 'timezone', 'createdAt'
-        ])
-        && request.resource.data.level is int
-        && request.resource.data.level >= 1
-        && request.resource.data.level <= 5
-        && request.resource.data.label is string
-        && request.resource.data.label.size() <= 40
-        && request.resource.data.note is string
-        && request.resource.data.note.size() <= 300
-        && request.resource.data.dateKey is string
-        && request.resource.data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && request.resource.data.timezone == 'Asia/Manila'
-        && request.resource.data.createdAt == request.time;
       allow get: if (signedIn()
           && moodId.matches('^daily_' + request.auth.uid + '_[0-9]{8}$'))
         || isOwner(resource.data.userId)
         || isAdmin();
       allow list: if isOwner(resource.data.userId) || isAdmin();
-      allow update, delete: if isAdmin()
-        || (isOwner(resource.data.userId)
-          && resource.data.timezone != 'Asia/Manila');
-    }
-
-    match /journals/{journalId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, delete: if isOwner(resource.data.userId);
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
+      allow create, update, delete: if isAdmin();
     }
 
     match /reports/{reportId} {
@@ -202,17 +227,20 @@ service cloud.firestore {
     }
 
     match /user_activities/{activityId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, delete: if isOwner(resource.data.userId) || isAdmin();
-      allow update: if (isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId) || isAdmin();
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /breathing_sessions/{sessionId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, delete: if isOwner(resource.data.userId) || isAdmin();
-      allow update: if (isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId) || isAdmin();
+      // Breathing completion is validated and written by a callable Function.
+      // This keeps wellbeing reports and activity streaks tamper-resistant.
+      allow create: if false;
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /breathing_session_locks/{userId} {
+      allow read, write: if false;
     }
 
     match /mind_aid_messages/{messageId} {
@@ -283,30 +311,34 @@ service cloud.firestore {
     }
 
     match /sleep_entries/{sleepId} {
-      allow create: if isOwner(request.resource.data.userId)
-        && sleepId == 'sleep_' + request.auth.uid + '_' + request.resource.data.wakeDateKey
-        && validSleepEntry(request.resource.data);
+      // Cloud writes are callable-owned so revisions and chronology cannot be
+      // forged by a client. Owners may still read their own diary.
+      allow create, update, delete: if false;
       allow get, list: if isOwner(resource.data.userId);
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.wakeDateKey == resource.data.wakeDateKey
-        && request.resource.data.createdAt == resource.data.createdAt
-        && sleepId == 'sleep_' + request.auth.uid + '_' + request.resource.data.wakeDateKey
-        && validSleepEntry(request.resource.data);
-      allow delete: if isOwner(resource.data.userId);
     }
 
     match /sleep_preferences/{userId} {
-      allow read, delete: if isOwner(userId);
-      allow create, update: if isOwner(userId)
-        && request.resource.data.keys().hasOnly([
-          'userId', 'consentVersion', 'cloudConsent', 'grantedAt', 'updatedAt'
-        ])
-        && request.resource.data.userId == userId
-        && request.resource.data.consentVersion == 'sleep-v1'
-        && request.resource.data.cloudConsent == true
-        && request.resource.data.grantedAt is timestamp
-        && request.resource.data.updatedAt == request.time;
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
+    match /active_counselor_assignments/{assignmentId} {
+      allow get, list: if isOwner(resource.data.studentId)
+        || (hasClinicalAccess() && resource.data.counselorId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /sleep_shared_summaries/{shareId} {
+      allow get, list: if isOwner(resource.data.ownerId)
+        || (hasClinicalAccess()
+          && currentAccessRole() == 'counselor'
+          && resource.data.counselorId == request.auth.uid
+          && resource.data.revokedAt == null
+          && resource.data.expiresAt > request.time
+          && exists(/databases/$(database)/documents/active_counselor_assignments/$(resource.data.assignmentId))
+          && get(/databases/$(database)/documents/active_counselor_assignments/$(resource.data.assignmentId)).data.status == 'active'
+          && get(/databases/$(database)/documents/active_counselor_assignments/$(resource.data.assignmentId)).data.counselorId == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     match /mind_aid_preferences/{userId} {
@@ -430,12 +462,17 @@ service cloud.firestore {
     }
 
     match /analytics_daily/{dateKey} {
-      allow read: if hasPortalAccess();
+      allow read: if hasClinicalAccess();
       allow write: if false;
       match /users/{userId} {
-        allow read: if hasPortalAccess();
+        allow read: if hasClinicalAccess();
         allow write: if false;
       }
+    }
+
+    match /service_monitoring_daily/{documentId} {
+      allow read: if hasClinicalAccess();
+      allow write: if false;
     }
 
     match /_analytics_events/{eventId} {
@@ -464,9 +501,10 @@ service cloud.firestore {
     }
 
     match /appointments/{appointmentId} {
-      allow create: if isOwner(request.resource.data.userId);
+      allow create: if validCompatibilityAppointmentCreate();
       allow read: if isOwner(resource.data.userId) || hasPortalAccess();
-      allow update, delete: if hasPortalAccess();
+      // Lifecycle, history, follow-ups, and notifications are callable-owned.
+      allow update, delete: if false;
       match /history/{historyId} {
         allow read: if isOwner(get(/databases/$(database)/documents/appointments/$(appointmentId)).data.userId) || hasPortalAccess();
         allow write: if false;
@@ -474,7 +512,7 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if isOwner(resource.data.userId) || isSystemAdmin();
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
       allow create, delete: if false;

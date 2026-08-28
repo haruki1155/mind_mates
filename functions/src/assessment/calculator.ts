@@ -1,5 +1,10 @@
 import {
-  ALGORITHM_VERSION,
+  FULL_ALGORITHM_VERSION,
+  FULL_RESPONSE_SCALE_VERSION,
+  LEGACY_FULL_ALGORITHM_VERSION,
+  LEGACY_FULL_QUESTION_SET_VERSION,
+  LEGACY_FULL_RESPONSE_SCALE_VERSION,
+  QUICK_ALGORITHM_VERSION,
   AssessmentDirection,
   AssessmentQuestion,
   AssessmentRole,
@@ -63,8 +68,36 @@ function riskScore(value: number, direction: AssessmentDirection): number {
   return direction === "protective" ? ((5 - value) / 4) * 100 : ((value - 1) / 4) * 100;
 }
 
-function scoreForAnswer(answer: string, direction: AssessmentDirection): number {
-  const values: Record<string, number> = {never: 1, rarely: 2, sometimes: 3, often: 4, always: 5};
+const agreementValues: Record<string, number> = {
+  stronglyDisagree: 1,
+  disagree: 2,
+  neutral: 3,
+  agree: 4,
+  stronglyAgree: 5,
+};
+
+const legacyFrequencyValues: Record<string, number> = {
+  never: 1,
+  rarely: 2,
+  sometimes: 3,
+  often: 4,
+  always: 5,
+};
+
+function valuesForResponseScale(responseScaleVersion: string): Record<string, number> {
+  if (responseScaleVersion === FULL_RESPONSE_SCALE_VERSION) return agreementValues;
+  if (responseScaleVersion === LEGACY_FULL_RESPONSE_SCALE_VERSION) {
+    return legacyFrequencyValues;
+  }
+  throw new AssessmentValidationError("Unsupported full-assessment response scale.");
+}
+
+function scoreForAnswer(
+  answer: string,
+  direction: AssessmentDirection,
+  responseScaleVersion = FULL_RESPONSE_SCALE_VERSION,
+): number {
+  const values = valuesForResponseScale(responseScaleVersion);
   const value = values[answer];
   if (!value) throw new AssessmentValidationError("Invalid Likert answer.");
   return riskScore(value, direction);
@@ -107,17 +140,25 @@ function actionFor(domain: string, band: string): string {
   return `Consider discussing this area with university wellness support and ${text}.`;
 }
 
-function shouldShowDeeper(questions: AssessmentQuestion[], answers: FullAnswer[]): boolean {
+function shouldShowDeeper(
+  questions: AssessmentQuestion[],
+  answers: FullAnswer[],
+  responseScaleVersion = FULL_RESPONSE_SCALE_VERSION,
+): boolean {
   const riskCore = questions.filter((question) => !question.conditional && question.direction === "risk" &&
     ["academicCore", "workplaceStressCore", "workplaceResponsibilityCore"].includes(question.section));
   const byId = new Map(answers.map((answer) => [answer.questionId, answer]));
   const scored = riskCore
     .map((question) => ({question, answer: byId.get(question.id)}))
     .filter((item): item is {question: AssessmentQuestion; answer: FullAnswer} => Boolean(item.answer && !item.answer.isSkipped));
-  const always = scored.filter((item) => item.answer.answer === "always").length;
-  const oftenOrAlways = scored.filter((item) => item.answer.answer === "often" || item.answer.answer === "always").length;
-  const average = scored.length === 0 ? 0 : scored.reduce((total, item) => total + scoreForAnswer(item.answer.answer, item.question.direction), 0) / scored.length;
-  return always >= CONDITIONAL_RULE.always || oftenOrAlways >= CONDITIONAL_RULE.oftenOrAlways || average >= CONDITIONAL_RULE.average;
+  const maximum = responseScaleVersion === FULL_RESPONSE_SCALE_VERSION ? "stronglyAgree" : "always";
+  const high = responseScaleVersion === FULL_RESPONSE_SCALE_VERSION ? "agree" : "often";
+  const stronglyAgree = scored.filter((item) => item.answer.answer === maximum).length;
+  const agreeOrStronglyAgree = scored.filter((item) => item.answer.answer === high || item.answer.answer === maximum).length;
+  const average = scored.length === 0 ? 0 : scored.reduce((total, item) => total + scoreForAnswer(item.answer.answer, item.question.direction, responseScaleVersion), 0) / scored.length;
+  return stronglyAgree >= CONDITIONAL_RULE.stronglyAgree ||
+    agreeOrStronglyAgree >= CONDITIONAL_RULE.agreeOrStronglyAgree ||
+    average >= CONDITIONAL_RULE.average;
 }
 
 function quality(presented: number, answers: FullAnswer[]) {
@@ -129,10 +170,20 @@ function quality(presented: number, answers: FullAnswer[]) {
   return {presented, answered, skipped, completionPercent, confidence, confidenceLabel};
 }
 
-export function calculateFull(role: AssessmentRole, answers: FullAnswer[]): Record<string, unknown> {
+export function calculateFull(
+  role: AssessmentRole,
+  answers: FullAnswer[],
+  responseScaleVersion = FULL_RESPONSE_SCALE_VERSION,
+): Record<string, unknown> {
+  const algorithmVersion = responseScaleVersion === LEGACY_FULL_RESPONSE_SCALE_VERSION
+    ? LEGACY_FULL_ALGORITHM_VERSION
+    : FULL_ALGORITHM_VERSION;
+  const questionSetVersion = responseScaleVersion === LEGACY_FULL_RESPONSE_SCALE_VERSION
+    ? LEGACY_FULL_QUESTION_SET_VERSION
+    : FULL_QUESTION_SET_VERSION;
   const questions = QUESTIONS_BY_ROLE[role];
   const byId = new Map(answers.map((answer) => [answer.questionId, answer]));
-  const showDeeper = shouldShowDeeper(questions, answers);
+  const showDeeper = shouldShowDeeper(questions, answers, responseScaleVersion);
   const presented = questions.filter((question) => !question.conditional || showDeeper);
   const expectedIds = new Set(presented.map((question) => question.id));
   if (answers.some((answer) => !expectedIds.has(answer.questionId))) throw new AssessmentValidationError("Answers do not match the active question set.");
@@ -147,7 +198,7 @@ export function calculateFull(role: AssessmentRole, answers: FullAnswer[]): Reco
   for (const question of presented) {
     const answer = byId.get(question.id);
     if (!answer || answer.isSkipped) continue;
-    const score = scoreForAnswer(answer.answer, question.direction);
+    const score = scoreForAnswer(answer.answer, question.direction, responseScaleVersion);
     if (score >= INDICATOR_BOUNDARIES.elevated) {
       const values = elevatedByDomain.get(question.domain) ?? [];
       values.push(question.text);
@@ -168,7 +219,7 @@ export function calculateFull(role: AssessmentRole, answers: FullAnswer[]): Reco
       .filter((answer): answer is FullAnswer => Boolean(answer && !answer.isSkipped))
       .map((answer) => {
         const question = domainQuestions.find((item) => item.id === answer.questionId)!;
-        return scoreForAnswer(answer.answer, question.direction);
+        return scoreForAnswer(answer.answer, question.direction, responseScaleVersion);
       });
     const completionPercent = domainQuestions.length === 0 ? 0 : round((scores.length / domainQuestions.length) * 100);
     const scorable = scores.length >= MIN_DOMAIN_ANSWERS && scores.length / domainQuestions.length >= MIN_DOMAIN_COMPLETION;
@@ -255,8 +306,8 @@ export function calculateFull(role: AssessmentRole, answers: FullAnswer[]): Reco
     insufficientResponses: "There were not enough answered questions for a dependable interpretation.",
   };
   const interpretation: Interpretation = {
-    algorithmVersion: ALGORITHM_VERSION,
-    questionSetVersion: FULL_QUESTION_SET_VERSION,
+    algorithmVersion,
+    questionSetVersion,
     recallPeriodDays: 14,
     supportPriority: priority,
     priorityRationale,
@@ -282,12 +333,13 @@ export function calculateFull(role: AssessmentRole, answers: FullAnswer[]): Reco
     message: overallScore === null ? "Some wellness categories did not have enough responses for a dependable summary. Review the category results that are available." : status,
     disclaimer: DISCLAIMER,
     totalResponses: answers.filter((answer) => !answer.isSkipped).length,
-    algorithmVersion: ALGORITHM_VERSION,
-    questionSetVersion: FULL_QUESTION_SET_VERSION,
+    algorithmVersion,
+    questionSetVersion,
     supportPriority: priority,
     priorityRationale,
     policySource: POLICY_SOURCE,
     validationStatus: POLICY_VALIDATION_STATUS,
+    responseScaleVersion,
     interpretation,
   };
 }
@@ -313,7 +365,7 @@ export function calculateQuick(role: string, name: string, answers: QuickAnswer[
     .sort((a, b) => b.score - a.score || a.area.localeCompare(b.area)).slice(0, 3).map((item) => item.area);
   const priority = level === "low" ? "routine" : level === "moderate" ? "monitor" : level === "high" ? "followUpSuggested" : "promptFollowUp";
   const interpretation: Interpretation = {
-    algorithmVersion: ALGORITHM_VERSION,
+    algorithmVersion: QUICK_ALGORITHM_VERSION,
     questionSetVersion: QUICK_QUESTION_SET_VERSION,
     recallPeriodDays: 14,
     supportPriority: priority,
@@ -342,7 +394,7 @@ export function calculateQuick(role: string, name: string, answers: QuickAnswer[
     recommendedNextStep: interpretation.suggestedActions[0],
     mentalStatusSignal: signal,
     signalSource: "quickAssessment",
-    algorithmVersion: ALGORITHM_VERSION,
+    algorithmVersion: QUICK_ALGORITHM_VERSION,
     questionSetVersion: QUICK_QUESTION_SET_VERSION,
     supportPriority: priority,
     policySource: POLICY_SOURCE,
@@ -351,21 +403,30 @@ export function calculateQuick(role: string, name: string, answers: QuickAnswer[
   };
 }
 
-export function activeQuestions(role: AssessmentRole, answers: FullAnswer[]): AssessmentQuestion[] {
+export function activeQuestions(
+  role: AssessmentRole,
+  answers: FullAnswer[],
+  responseScaleVersion = FULL_RESPONSE_SCALE_VERSION,
+): AssessmentQuestion[] {
   const questions = QUESTIONS_BY_ROLE[role];
-  return questions.filter((question) => !question.conditional || shouldShowDeeper(questions, answers));
+  return questions.filter((question) => !question.conditional || shouldShowDeeper(questions, answers, responseScaleVersion));
 }
 
-export function validateFullAnswers(role: AssessmentRole, answers: FullAnswer[]): void {
+export function validateFullAnswers(
+  role: AssessmentRole,
+  answers: FullAnswer[],
+  responseScaleVersion = FULL_RESPONSE_SCALE_VERSION,
+): void {
   if (!Array.isArray(answers) || answers.length === 0 || answers.length > 60) throw new AssessmentValidationError("A valid answer list is required.");
   if (new Set(answers.map((answer) => answer.questionId)).size !== answers.length) throw new AssessmentValidationError("Duplicate question IDs are not allowed.");
   const questions = QUESTIONS_BY_ROLE[role];
   const questionById = new Map(questions.map((question) => [question.id, question]));
+  const responseValues = valuesForResponseScale(responseScaleVersion);
   for (const answer of answers) {
     const question = questionById.get(answer.questionId);
-    if (!question || typeof answer.answer !== "string" || !["never", "rarely", "sometimes", "often", "always"].includes(answer.answer) || typeof answer.isSkipped !== "boolean") throw new AssessmentValidationError("Invalid full-assessment answer.");
+    if (!question || typeof answer.answer !== "string" || !(answer.answer in responseValues) || typeof answer.isSkipped !== "boolean") throw new AssessmentValidationError("Invalid full-assessment answer.");
   }
-  const expected = new Set(activeQuestions(role, answers).map((question) => question.id));
+  const expected = new Set(activeQuestions(role, answers, responseScaleVersion).map((question) => question.id));
   if (answers.some((answer) => !expected.has(answer.questionId)) || answers.length !== expected.size) throw new AssessmentValidationError("Answers do not match the active question set.");
 }
 

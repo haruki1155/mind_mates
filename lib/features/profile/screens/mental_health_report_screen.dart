@@ -129,13 +129,15 @@ class _MentalHealthReportScreenState extends State<MentalHealthReportScreen> {
 
   String? _currentUserId({bool hydrate = false}) {
     final authProvider = _readProviderOrNull<AuthProvider>();
-    final authUserId =
-        authProvider?.userId ??
-        (hydrate ? authProvider?.hydrateCurrentUser() : null);
+    final authUserId = authProvider?.authenticatedUserId;
     if (authUserId != null && authUserId.isNotEmpty) return authUserId;
 
-    final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
-    if (profileUserId != null && profileUserId.isNotEmpty) return profileUserId;
+    if (authProvider == null) {
+      final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
+      if (profileUserId != null && profileUserId.isNotEmpty) {
+        return profileUserId;
+      }
+    }
 
     return null;
   }

@@ -32,7 +32,6 @@ class MindAidEngine {
       assessment: context.assessment,
       conversationSummary: context.conversationSummary,
       preferredSupportStyle: context.preferredSupportStyle,
-      journalText: context.journalText,
     );
 
     final match = IntentEngine.detectBestMatch(

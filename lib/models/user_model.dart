@@ -26,7 +26,6 @@ class UserModel {
     this.populationRole,
     this.declaredRole,
     this.accessRole = AccessRole.appUser,
-    this.verificationStatus = VerificationStatus.pending,
     this.staffAccountStatus,
     this.mustChangePassword = false,
     this.passwordChangedAt,
@@ -38,6 +37,8 @@ class UserModel {
     this.longestStreak = 0,
     this.lastActivityDateKey,
     this.lastActiveAt,
+    this.lastQualifyingActivityDateKey,
+    this.lastQualifyingActivityAt,
     this.activeDateKeys = const [],
     this.avatarAssetName,
     this.quickAssessmentCompleted = false,
@@ -66,7 +67,6 @@ class UserModel {
   final PopulationRole? populationRole;
   final PopulationRole? declaredRole;
   final AccessRole accessRole;
-  final VerificationStatus verificationStatus;
   final StaffAccountStatus? staffAccountStatus;
   final bool mustChangePassword;
   final DateTime? passwordChangedAt;
@@ -78,6 +78,8 @@ class UserModel {
   final int longestStreak;
   final String? lastActivityDateKey;
   final DateTime? lastActiveAt;
+  final String? lastQualifyingActivityDateKey;
+  final DateTime? lastQualifyingActivityAt;
   final List<String> activeDateKeys;
   final String? avatarAssetName;
   final bool quickAssessmentCompleted;
@@ -157,7 +159,6 @@ class UserModel {
     PopulationRole? populationRole,
     PopulationRole? declaredRole,
     AccessRole? accessRole,
-    VerificationStatus? verificationStatus,
     StaffAccountStatus? staffAccountStatus,
     bool? mustChangePassword,
     DateTime? passwordChangedAt,
@@ -169,6 +170,8 @@ class UserModel {
     int? longestStreak,
     String? lastActivityDateKey,
     DateTime? lastActiveAt,
+    String? lastQualifyingActivityDateKey,
+    DateTime? lastQualifyingActivityAt,
     List<String>? activeDateKeys,
     String? avatarAssetName,
     bool? quickAssessmentCompleted,
@@ -195,7 +198,6 @@ class UserModel {
       populationRole: populationRole ?? this.populationRole,
       declaredRole: declaredRole ?? this.declaredRole,
       accessRole: accessRole ?? this.accessRole,
-      verificationStatus: verificationStatus ?? this.verificationStatus,
       staffAccountStatus: staffAccountStatus ?? this.staffAccountStatus,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       passwordChangedAt: passwordChangedAt ?? this.passwordChangedAt,
@@ -207,6 +209,10 @@ class UserModel {
       longestStreak: longestStreak ?? this.longestStreak,
       lastActivityDateKey: lastActivityDateKey ?? this.lastActivityDateKey,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
+      lastQualifyingActivityDateKey:
+          lastQualifyingActivityDateKey ?? this.lastQualifyingActivityDateKey,
+      lastQualifyingActivityAt:
+          lastQualifyingActivityAt ?? this.lastQualifyingActivityAt,
       activeDateKeys: activeDateKeys ?? this.activeDateKeys,
       avatarAssetName: avatarAssetName ?? this.avatarAssetName,
       quickAssessmentCompleted:
@@ -242,10 +248,6 @@ class UserModel {
       populationRole: canonicalRole ?? legacyPopulation,
       declaredRole: declaredRole ?? canonicalRole ?? legacyPopulation,
       accessRole: AccessRole.parse(json['accessRole'], legacyRole: legacyRole),
-      verificationStatus: VerificationStatus.parse(
-        json['verificationStatus'],
-        legacy: !json.containsKey('profileVersion'),
-      ),
       staffAccountStatus: StaffAccountStatus.parse(json['staffAccountStatus']),
       mustChangePassword: json['mustChangePassword'] == true,
       passwordChangedAt: _dateOrNull(json['passwordChangedAt']),
@@ -257,6 +259,10 @@ class UserModel {
       longestStreak: _intOrZero(json['longestStreak']),
       lastActivityDateKey: _stringOrNull(json['lastActivityDateKey']),
       lastActiveAt: _dateOrNull(json['lastActiveAt']),
+      lastQualifyingActivityDateKey: _stringOrNull(
+        json['lastQualifyingActivityDateKey'],
+      ),
+      lastQualifyingActivityAt: _dateOrNull(json['lastQualifyingActivityAt']),
       activeDateKeys: _stringList(json['activeDateKeys']),
       avatarAssetName: _stringOrNull(json['avatarAssetName']),
       quickAssessmentCompleted: json['quickAssessmentCompleted'] == true,
@@ -288,19 +294,22 @@ class UserModel {
       'populationRole': populationRole?.storedValue ?? '',
       'declaredRole': declaredRole?.storedValue ?? '',
       'accessRole': accessRole.storedValue,
-      'verificationStatus': verificationStatus.storedValue,
       if (staffAccountStatus != null)
         'staffAccountStatus': staffAccountStatus!.name,
       'mustChangePassword': mustChangePassword,
       'passwordChangedAt': passwordChangedAt?.toIso8601String(),
-      'verifiedAt': verifiedAt?.toIso8601String(),
-      'verifiedBy': verifiedBy ?? '',
+      if (staffAccountStatus != null || accessRole != AccessRole.appUser) ...{
+        'verifiedAt': verifiedAt?.toIso8601String(),
+        'verifiedBy': verifiedBy ?? '',
+      },
       'profileVersion': profileVersion,
       'createdAt': createdAt?.toIso8601String(),
       'dayStreak': dayStreak,
       'longestStreak': longestStreak,
       'lastActivityDateKey': lastActivityDateKey ?? '',
       'lastActiveAt': lastActiveAt?.toIso8601String(),
+      'lastQualifyingActivityDateKey': lastQualifyingActivityDateKey ?? '',
+      'lastQualifyingActivityAt': lastQualifyingActivityAt?.toIso8601String(),
       'activeDateKeys': activeDateKeys,
       'avatarAssetName': avatarAssetName ?? '',
       'quickAssessmentCompleted': quickAssessmentCompleted,
@@ -311,7 +320,6 @@ class UserModel {
 
   Map<String, dynamic> toProfileUpdateJson() {
     return {
-      'name': displayName,
       'firstName': firstName?.trim() ?? '',
       'middleName': middleName?.trim() ?? '',
       'lastName': lastName?.trim() ?? '',

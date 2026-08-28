@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
-import '../auth_flow_routes.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -37,6 +34,7 @@ class _LoginBody extends StatefulWidget {
 class _LoginBodyState extends State<_LoginBody> {
   final _identificationController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _passwordObscured = true;
 
   @override
   void dispose() {
@@ -60,8 +58,6 @@ class _LoginBodyState extends State<_LoginBody> {
     }
 
     final authProvider = context.read<AuthProvider>();
-    final userProvider = context.read<UserProvider>();
-    final assessmentProvider = context.read<AssessmentProvider>();
     final userId = await authProvider.signIn(
       schoolId: schoolId,
       password: password,
@@ -82,36 +78,9 @@ class _LoginBodyState extends State<_LoginBody> {
       return;
     }
 
-    try {
-      await userProvider.loadProfile(userId);
-      final hasCompletedQuickAssessment = await assessmentProvider
-          .ensureQuickAssessmentCompletion(userId);
-      if (hasCompletedQuickAssessment &&
-          userProvider.user?.quickAssessmentCompleted != true) {
-        await userProvider.loadProfile(userId);
-      }
-
-      if (!mounted) return;
-      final destination = destinationAfterAuthentication(
-        hasCompletedQuickAssessment: hasCompletedQuickAssessment,
-      );
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(destination, (route) => false);
-    } catch (error) {
-      debugPrint('Unable to verify quick assessment completion: $error');
-      await authProvider.signOut();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Unable to verify your assessment status. Please try again.',
-            ),
-          ),
-        );
-    }
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(RouteNames.assessmentStatus, (route) => false);
   }
 
   void _openForgotPassword() {
@@ -154,10 +123,14 @@ class _LoginBodyState extends State<_LoginBody> {
                         return _LoginFormCard(
                           identificationController: _identificationController,
                           passwordController: _passwordController,
+                          passwordObscured: _passwordObscured,
                           isLoading: authProvider.isLoading,
                           onForgotPassword: _openForgotPassword,
                           onCreateAccount: _openSignup,
                           onSignIn: _handleSignIn,
+                          onTogglePassword: () => setState(
+                            () => _passwordObscured = !_passwordObscured,
+                          ),
                         );
                       },
                     ),
@@ -236,18 +209,22 @@ class _LoginFormCard extends StatelessWidget {
   const _LoginFormCard({
     required this.identificationController,
     required this.passwordController,
+    required this.passwordObscured,
     required this.isLoading,
     required this.onForgotPassword,
     required this.onCreateAccount,
     required this.onSignIn,
+    required this.onTogglePassword,
   });
 
   final TextEditingController identificationController;
   final TextEditingController passwordController;
+  final bool passwordObscured;
   final bool isLoading;
   final VoidCallback onForgotPassword;
   final VoidCallback onCreateAccount;
   final Future<void> Function() onSignIn;
+  final VoidCallback onTogglePassword;
 
   @override
   Widget build(BuildContext context) {
@@ -283,7 +260,14 @@ class _LoginFormCard extends StatelessWidget {
             controller: passwordController,
             label: 'Password',
             icon: Icons.lock_outline_rounded,
-            obscureText: true,
+            obscureText: passwordObscured,
+            suffixIcon: IconButton(
+              tooltip: passwordObscured ? 'Show password' : 'Hide password',
+              onPressed: onTogglePassword,
+              icon: Icon(
+                passwordObscured ? Icons.visibility : Icons.visibility_off,
+              ),
+            ),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) {
               if (!isLoading) onSignIn();
@@ -380,6 +364,7 @@ class _LoginField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.obscureText = false,
+    this.suffixIcon,
     this.onSubmitted,
   }) : assert(assetIconPath != null || icon != null);
 
@@ -390,6 +375,7 @@ class _LoginField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final bool obscureText;
+  final Widget? suffixIcon;
   final ValueChanged<String>? onSubmitted;
 
   @override
@@ -424,6 +410,7 @@ class _LoginField extends StatelessWidget {
           vertical: 16,
         ),
         prefixIcon: _LoginFieldIcon(assetIconPath: assetIconPath, icon: icon),
+        suffixIcon: suffixIcon,
         prefixIconConstraints: const BoxConstraints(
           minWidth: 48,
           minHeight: 52,

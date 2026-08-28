@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/mood_model.dart';
 import '../repositories/mood_repository.dart';
+import '../services/firebase/firebase_error_message.dart';
 
 class MoodProvider extends ChangeNotifier {
   MoodProvider(this._repository, {DateTime Function()? nowProvider})
@@ -33,11 +34,20 @@ class MoodProvider extends ChangeNotifier {
     try {
       final referenceNow = now ?? _nowProvider();
       _moods = await _repository.fetchRecentMoods(userId);
-      if (_todayMood == null || !_matchesToday(_todayMood!, now: referenceNow)) {
+      if (_todayMood == null ||
+          !_matchesToday(_todayMood!, now: referenceNow)) {
         _todayMood = _moodForToday(_moods, now: referenceNow);
       }
-    } catch (error) {
-      _errorMessage = 'Unable to load moods.';
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Loading moods failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to load moods.',
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -46,8 +56,7 @@ class MoodProvider extends ChangeNotifier {
 
   Future<void> loadTodayMood(String userId, {DateTime? now}) async {
     final referenceNow = now ?? _nowProvider();
-    if (_todayMood != null &&
-        !_matchesToday(_todayMood!, now: referenceNow)) {
+    if (_todayMood != null && !_matchesToday(_todayMood!, now: referenceNow)) {
       _todayMood = null;
       _dailySaveResult = null;
     }
@@ -63,15 +72,23 @@ class MoodProvider extends ChangeNotifier {
           ? fetched
           : null;
       if (_todayMood != null) _insertMood(_todayMood!);
-    } catch (_) {
-      _errorMessage = 'Unable to load today\'s mood.';
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Loading today\'s mood failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to load today\'s mood.',
+      );
     } finally {
       _isLoadingToday = false;
       notifyListeners();
     }
   }
 
-  Future<bool> logDailyMood({
+  Future<DailyMoodSaveResult?> logDailyMood({
     required String userId,
     required int level,
     String? label,
@@ -92,11 +109,19 @@ class MoodProvider extends ChangeNotifier {
       _todayMood = result.mood;
       _insertMood(result.mood);
       notifyListeners();
-      return true;
-    } catch (_) {
-      _errorMessage = 'Unable to save mood.';
+      return result;
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Saving daily mood failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to save mood.',
+      );
       notifyListeners();
-      return false;
+      return null;
     }
   }
 
@@ -129,8 +154,12 @@ class MoodProvider extends ChangeNotifier {
       _todayMood = _moodForToday(_moods, now: referenceNow);
       notifyListeners();
       return true;
-    } catch (error) {
-      _errorMessage = 'Unable to save mood.';
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(error, stackTrace, area: 'Saving mood failed.');
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to save mood.',
+      );
       notifyListeners();
       return false;
     }

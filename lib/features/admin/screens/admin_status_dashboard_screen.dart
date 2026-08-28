@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_colors.dart';
+import '../domain/admin_colors.dart';
 import '../../../models/admin_status_summary_model.dart';
 import '../../../repositories/admin_status_repository.dart';
 import 'admin_assessment_detail_screen.dart';
@@ -52,10 +52,10 @@ class AdminStatusDashboardScreen extends StatelessWidget {
     );
     if (embedded) return content;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AdminColors.background,
       appBar: AppBar(
         title: const Text('Admin User Status'),
-        backgroundColor: AppColors.surface,
+        backgroundColor: AdminColors.surface,
         surfaceTintColor: Colors.transparent,
       ),
       body: content,
@@ -92,17 +92,17 @@ class _DashboardContent extends StatelessWidget {
                       _StatusSummaryTile(
                         label: 'Prompt follow-up',
                         count: severeCount,
-                        color: const Color(0xFFB3261E),
+                        color: AdminColors.error,
                       ),
                       _StatusSummaryTile(
                         label: 'Review suggested',
                         count: moderateCount,
-                        color: const Color(0xFFB06A00),
+                        color: AdminColors.warning,
                       ),
                       _StatusSummaryTile(
                         label: 'Routine monitoring',
                         count: normalCount,
-                        color: AppColors.primary,
+                        color: AdminColors.primaryPressed,
                       ),
                     ],
                   ),
@@ -139,7 +139,7 @@ class _StatusSummaryTile extends StatelessWidget {
       width: 230,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AdminColors.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: .28)),
       ),
@@ -161,7 +161,7 @@ class _StatusSummaryTile extends StatelessWidget {
                 Text(
                   '$count',
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
+                    color: AdminColors.textPrimary,
                     fontSize: 28,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -171,7 +171,7 @@ class _StatusSummaryTile extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: AppColors.textMuted,
+                    color: AdminColors.textMuted,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -195,16 +195,16 @@ class _StatusTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AdminColors.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE1E8E5)),
+        border: Border.all(color: AdminColors.border),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F6F4)),
+            headingRowColor: WidgetStateProperty.all(AdminColors.softSurface),
             columnSpacing: 28,
             columns: const [
               DataColumn(label: Text('User')),
@@ -267,9 +267,9 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      AdminUserStatus.severe => const Color(0xFFB3261E),
-      AdminUserStatus.moderate => const Color(0xFFB06A00),
-      AdminUserStatus.normal => AppColors.primary,
+      AdminUserStatus.severe => AdminColors.error,
+      AdminUserStatus.moderate => AdminColors.warning,
+      AdminUserStatus.normal => AdminColors.success,
     };
 
     return Container(
@@ -308,19 +308,19 @@ class _MessagePanel extends StatelessWidget {
         width: 360,
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AdminColors.surface,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.primary, size: 38),
+            Icon(icon, color: AdminColors.primaryPressed, size: 38),
             const SizedBox(height: 12),
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: AdminColors.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
               ),
@@ -330,7 +330,7 @@ class _MessagePanel extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: AppColors.textMuted,
+                color: AdminColors.textMuted,
                 fontSize: 13,
                 height: 1.35,
                 fontWeight: FontWeight.w600,

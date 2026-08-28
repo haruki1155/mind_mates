@@ -4,17 +4,43 @@ import {getMessaging} from "firebase-admin/messaging";
 import {getAuth} from "firebase-admin/auth";
 import {getDownloadURL, getStorage} from "firebase-admin/storage";
 import {onDocumentCreated, onDocumentDeleted, onDocumentWritten} from "firebase-functions/v2/firestore";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
-export {submitQuickAssessment, submitFullAssessment} from "./assessment/submissions";
-export {provisionAppUserProfile, getAssessmentStatus} from "./account_integrity";
-import {defineString} from "firebase-functions/params";
-import {randomBytes} from "node:crypto";
-export {aggregateMindAidFeedback, sendMindAidMessage} from "./mind_aid";
+import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
+import {randomBytes, randomUUID} from "node:crypto";
+import {superAdminUidFromSecurity} from "./admin_security";
+import {recordServiceSuccess, serviceKeyForActivity} from "./service_monitoring";
+export {aggregateMindAidFeedback, sendMindAidMessage, sendMindAidMessageDev} from "./mind_aid";
+export {submitQuickAssessment, submitQuickAssessmentDev, submitFullAssessment,
+  submitFullAssessmentDev} from "./assessment/submissions";
+export {provisionAppUserProfile, provisionAppUserProfileDev, getAssessmentStatus,
+  getAssessmentStatusDev} from "./account_integrity";
+export {requestRecoveryEmailVerification, confirmRecoveryEmailVerification,
+  requestPasswordRecovery, confirmPasswordRecovery,
+  requestRecoveryEmailVerificationDev, confirmRecoveryEmailVerificationDev,
+  requestPasswordRecoveryDev, confirmPasswordRecoveryDev} from "./account_recovery";
+export {listPublicAppUsers, listPublicAppUsersDev, getAppUserDashboardSummary,
+  getAppUserDashboardSummaryDev} from "./admin_directory";
+export {getAdminServiceMonitoring, getAdminServiceMonitoringDev,
+  purgeServiceMonitoring} from "./service_monitoring";
+export {createAppointmentRequest, reviewAppointment, respondToAppointmentReschedule,
+  scheduleAppointmentFollowUp, createAppointmentRequestDev, reviewAppointmentDev,
+  respondToAppointmentRescheduleDev, scheduleAppointmentFollowUpDev,
+  canonicalAppointmentStatus,
+  canTransitionAppointment} from "./appointment_workflow";
+export {startBreathingSession, startBreathingSessionDev, completeBreathingSession,
+  completeBreathingSessionDev} from "./breathing_sessions";
+export {logDailyMood} from "./mood_logging";
+export {recordSecretChatPostActivity, recordSecretChatCommentActivity} from "./activity_triggers";
+export {recordAppOpen} from "./activity_logging";
+export {setSleepCloudConsent, setSleepCloudConsentDev, saveSleepEntry,
+  saveSleepEntryDev, deleteSleepEntry, deleteSleepEntryDev,
+  deleteAllSleepEntries, deleteAllSleepEntriesDev, revokeSleepCloud,
+  revokeSleepCloudDev, setCounselorAssignment, setCounselorAssignmentDev,
+  createSleepShare, createSleepShareDev, revokeSleepShare,
+  revokeSleepShareDev} from "./sleep_wellness";
 
 if (!getApps().length) initializeApp();
 
 const db = getFirestore();
-const superAdminUid = defineString("SUPER_ADMIN_UID");
 const posts = db.collection("secret_chats");
 const stats = db.collection("secret_chat_profile_stats");
 const events = db.collection("_secret_chat_events");
@@ -23,6 +49,10 @@ const secretChatProfiles = db.collection("secret_chat_profiles");
 const secretChatAliases = db.collection("secret_chat_aliases");
 const publicUserIds = db.collection("user_public_ids");
 const publicUserIdReservations = db.collection("public_user_id_reservations");
+const accountDeletionJobs = db.collection("_account_deletion_jobs");
+
+const INACTIVE_ACCOUNT_DAYS = 7;
+const INACTIVE_ACCOUNT_MS = INACTIVE_ACCOUNT_DAYS * 24 * 60 * 60 * 1000;
 
 const SECRET_CHAT_ALIAS_PATTERN = /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/;
 const SECRET_CHAT_PHOTO_PATTERN = /^secret_chat_profiles\/([^/]+)\/avatar_[0-9]+\.(jpg|png)$/;
@@ -68,7 +98,7 @@ function callableProfile(
   };
 }
 
-export const saveSecretChatProfile = onCall(async (request) => {
+async function saveSecretChatProfileHandler(request: CallableRequest) {
   const userId = requireAuthenticatedUser(request);
   const alias = normalizeSecretChatAlias(request.data?.alias);
   const aliasKey = alias.toLowerCase();
@@ -107,9 +137,12 @@ export const saveSecretChatProfile = onCall(async (request) => {
   });
 
   return {profile: callableProfile(await profileRef.get())};
-});
+}
 
-export const finalizeSecretChatProfilePhoto = onCall(async (request) => {
+export const saveSecretChatProfile = onCall({enforceAppCheck: true}, saveSecretChatProfileHandler);
+export const saveSecretChatProfileDev = onCall({enforceAppCheck: false}, saveSecretChatProfileHandler);
+
+async function finalizeSecretChatProfilePhotoHandler(request: CallableRequest) {
   const userId = requireAuthenticatedUser(request);
   const photoPath = typeof request.data?.photoPath === "string" ?
     request.data.photoPath : "";
@@ -143,9 +176,12 @@ export const finalizeSecretChatProfilePhoto = onCall(async (request) => {
     await getStorage().bucket().file(previousPath).delete({ignoreNotFound: true}).catch(() => undefined);
   }
   return {profile: callableProfile(await profileRef.get())};
-});
+}
 
-export const removeSecretChatProfilePhoto = onCall(async (request) => {
+export const finalizeSecretChatProfilePhoto = onCall({enforceAppCheck: true}, finalizeSecretChatProfilePhotoHandler);
+export const finalizeSecretChatProfilePhotoDev = onCall({enforceAppCheck: false}, finalizeSecretChatProfilePhotoHandler);
+
+async function removeSecretChatProfilePhotoHandler(request: CallableRequest) {
   const userId = requireAuthenticatedUser(request);
   const profileRef = secretChatProfiles.doc(userId);
   const before = await profileRef.get();
@@ -162,9 +198,12 @@ export const removeSecretChatProfilePhoto = onCall(async (request) => {
     await getStorage().bucket().file(previousPath).delete({ignoreNotFound: true}).catch(() => undefined);
   }
   return {profile: callableProfile(await profileRef.get())};
-});
+}
 
-export const deleteSecretChatPost = onCall(async (request) => {
+export const removeSecretChatProfilePhoto = onCall({enforceAppCheck: true}, removeSecretChatProfilePhotoHandler);
+export const removeSecretChatProfilePhotoDev = onCall({enforceAppCheck: false}, removeSecretChatProfilePhotoHandler);
+
+async function deleteSecretChatPostHandler(request: CallableRequest) {
   const userId = requireAuthenticatedUser(request);
   const postId = typeof request.data?.postId === "string" ? request.data.postId.trim() : "";
   if (!postId || postId.length > 150 || postId.includes("/")) {
@@ -196,7 +235,10 @@ export const deleteSecretChatPost = onCall(async (request) => {
   for (const document of interactionsSnapshot.docs) writer.delete(document.ref);
   await writer.close();
   return {deleted: true, postId};
-});
+}
+
+export const deleteSecretChatPost = onCall({enforceAppCheck: true}, deleteSecretChatPostHandler);
+export const deleteSecretChatPostDev = onCall({enforceAppCheck: false}, deleteSecretChatPostHandler);
 
 function manilaDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -215,26 +257,35 @@ async function requireStaff(uid: string): Promise<FirebaseFirestore.DocumentData
   if (!["portalStaff", "counselor", "admin"].includes(accessRole)) {
     throw new HttpsError("permission-denied", "Staff access is required.");
   }
+  if (accessRole !== "admin" && user.data()?.staffAccountStatus !== "approved") {
+    throw new HttpsError("permission-denied", "This staff account is not approved.");
+  }
+  if (accessRole === "admin" && await configuredSuperAdminUid() !== uid) {
+    throw new HttpsError("permission-denied", "Administrator access is not configured for this account.");
+  }
   return {...(user.data() ?? {}), accessRole};
 }
 
-function configuredSuperAdminUid(): string {
-  const value = superAdminUid.value().trim();
-  if (!value) throw new HttpsError("failed-precondition", "SUPER_ADMIN_UID is not configured.");
+async function configuredSuperAdminUid(): Promise<string> {
+  const security = await db.collection("system_config").doc("security").get();
+  const value = superAdminUidFromSecurity(security.data());
+  if (!value) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The super-administrator security record is not configured.",
+    );
+  }
   return value;
 }
 
 async function requireSuperAdmin(uid: string): Promise<FirebaseFirestore.DocumentData> {
-  if (uid !== configuredSuperAdminUid()) {
+  if (uid !== await configuredSuperAdminUid()) {
     throw new HttpsError("permission-denied", "Super-administrator access is required.");
   }
   const actor = await requireStaff(uid);
   if (actor.accessRole !== "admin") {
     throw new HttpsError("permission-denied", "The configured account is not an administrator.");
   }
-  await db.collection("system_config").doc("security").set(
-    {superAdminUid: uid, updatedAt: FieldValue.serverTimestamp()}, {merge: true},
-  );
   return actor;
 }
 
@@ -251,7 +302,7 @@ const BUNDLED_STAFF_DEPARTMENTS = [
   "Health Services", "IT/MIS", "Maintenance/Facilities", "Security", "Other",
 ] as const;
 
-export const registerStaffAccount = onCall(async (request) => {
+async function registerStaffAccountHandler(request: CallableRequest) {
   const userId = requireAuthenticatedUser(request);
   const authUser = await getAuth().getUser(userId);
   const email = String(authUser.email ?? "").trim().toLowerCase();
@@ -298,14 +349,17 @@ export const registerStaffAccount = onCall(async (request) => {
       id: userId, email, firstName, lastName, name: `${firstName} ${lastName}`,
       employeeId, employeeIdKey, position, department, departmentId, collegeId, courseId,
       populationRole: "nonTeaching", declaredRole: "nonTeaching", role: "staff",
-      accessRole: "appUser", staffAccountStatus: "pending", verificationStatus: "pending",
+      accessRole: "appUser", staffAccountStatus: "pending",
       profileVersion: 3, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
   });
   return {ok: true};
-});
+}
 
-export const reviewStaffRegistration = onCall(async (request) => {
+export const registerStaffAccount = onCall({enforceAppCheck: true}, registerStaffAccountHandler);
+export const registerStaffAccountDev = onCall({enforceAppCheck: false}, registerStaffAccountHandler);
+
+async function reviewStaffRegistrationHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   const actor = await requireSuperAdmin(actorId);
   const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
@@ -325,7 +379,7 @@ export const reviewStaffRegistration = onCall(async (request) => {
     }
     const status = approve ? "approved" : "rejected";
     transaction.update(target, {staffAccountStatus: status, accessRole: approve ? accessRole : "appUser",
-      verificationStatus: approve ? "verified" : "rejected", verifiedBy: actorId,
+      verifiedBy: actorId,
       verifiedAt: approve ? FieldValue.serverTimestamp() : null, updatedAt: FieldValue.serverTimestamp()});
     transaction.create(audit, {actorId, actorAccessRole: actor.accessRole, targetUserId,
       action: approve ? "staffRegistrationApproved" : "staffRegistrationRejected", reason,
@@ -335,15 +389,18 @@ export const reviewStaffRegistration = onCall(async (request) => {
   });
   if (!approve) await getAuth().revokeRefreshTokens(targetUserId);
   return {ok: true};
-});
+}
 
-export const setStaffAccountEnabled = onCall(async (request) => {
+export const reviewStaffRegistration = onCall({enforceAppCheck: true}, reviewStaffRegistrationHandler);
+export const reviewStaffRegistrationDev = onCall({enforceAppCheck: false}, reviewStaffRegistrationHandler);
+
+async function setStaffAccountEnabledHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   const actor = await requireSuperAdmin(actorId);
   const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
   const enabled = request.data?.enabled === true;
   const reason = requiredText(request.data?.reason, "Reason", 3, 500);
-  if (targetUserId === actorId || targetUserId === configuredSuperAdminUid()) {
+  if (targetUserId === actorId || targetUserId === await configuredSuperAdminUid()) {
     throw new HttpsError("permission-denied", "The super-administrator cannot be modified.");
   }
   const target = db.collection("users").doc(targetUserId);
@@ -366,13 +423,13 @@ export const setStaffAccountEnabled = onCall(async (request) => {
   await getAuth().updateUser(targetUserId, {disabled: !enabled});
   if (!enabled) await getAuth().revokeRefreshTokens(targetUserId);
   return {ok: true};
-});
+}
 
-const POPULATION_ROLES = ["student", "teaching", "nonTeaching"] as const;
+export const setStaffAccountEnabled = onCall({enforceAppCheck: true}, setStaffAccountEnabledHandler);
+export const setStaffAccountEnabledDev = onCall({enforceAppCheck: false}, setStaffAccountEnabledHandler);
+
 const ACCESS_ROLES = ["appUser", "portalStaff", "counselor", "admin"] as const;
 export type AccessRoleValue = typeof ACCESS_ROLES[number];
-export const canReviewVerification = (role: string): boolean =>
-  ["portalStaff", "counselor", "admin"].includes(role);
 export const canAccessClinicalData = (role: string): boolean =>
   role === "counselor" || role === "admin";
 export const canManageAccess = (role: string): boolean => role === "admin";
@@ -389,6 +446,26 @@ export function newPublicUserId(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = randomBytes(6);
   return `USR-${Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")}`;
+}
+
+export type InactiveAppUserDecision =
+  "eligible" | "active" | "missing-activity" | "protected-account";
+
+export function inactiveAppUserDecision(
+  data: FirebaseFirestore.DocumentData,
+  cutoff: Timestamp,
+): InactiveAppUserDecision {
+  if (data.accessRole !== "appUser" || data.staffAccountStatus != null) {
+    return "protected-account";
+  }
+  const activity = data.lastActiveAt instanceof Timestamp ? data.lastActiveAt :
+    data.createdAt instanceof Timestamp ? data.createdAt : null;
+  if (!activity) return "missing-activity";
+  return activity.toMillis() <= cutoff.toMillis() ? "eligible" : "active";
+}
+
+function inactiveCutoff(): Timestamp {
+  return Timestamp.fromMillis(Date.now() - INACTIVE_ACCOUNT_MS);
 }
 
 async function ensurePublicUserId(userId: string): Promise<string> {
@@ -419,43 +496,328 @@ async function ensurePublicUserId(userId: string): Promise<string> {
 
 export const assignPublicIdOnUserCreate = onDocumentCreated("users/{userId}", async (event) => {
   const data = event.data?.data();
-  if (!data || data.staffAccountStatus != null || data.accessRole === "admin") return;
+  if (!data || data.staffAccountStatus != null || data.accessRole !== "appUser") return;
   await ensurePublicUserId(event.params.userId);
 });
 
-export const listPublicAppUsers = onCall(async (request) => {
+async function backfillPublicAppUserIdsHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   await requireSuperAdmin(actorId);
   const snapshots = await db.collection("users").get();
   const appUsers = snapshots.docs.filter((doc) => {
     const data = doc.data();
-    return data.staffAccountStatus == null && data.accessRole !== "admin";
-  });
-  return {users: await Promise.all(appUsers.map(async (doc) => ({
-    publicUserId: await ensurePublicUserId(doc.id),
-    populationRole: String(doc.data().populationRole ?? doc.data().declaredRole ?? doc.data().role ?? ""),
-  })))};
-});
-
-export const backfillPublicAppUserIds = onCall(async (request) => {
-  const actorId = requireAuthenticatedUser(request);
-  await requireSuperAdmin(actorId);
-  const snapshots = await db.collection("users").get();
-  const appUsers = snapshots.docs.filter((doc) => {
-    const data = doc.data();
-    return data.staffAccountStatus == null && data.accessRole !== "admin";
+    return data.staffAccountStatus == null && data.accessRole === "appUser";
   });
   await Promise.all(appUsers.map((doc) => ensurePublicUserId(doc.id)));
   return {ok: true, processed: appUsers.length};
-});
+}
 
-export const confirmSuperAdmin = onCall(async (request) => {
+export const backfillPublicAppUserIds = onCall({enforceAppCheck: true}, backfillPublicAppUserIdsHandler);
+export const backfillPublicAppUserIdsDev = onCall({enforceAppCheck: false}, backfillPublicAppUserIdsHandler);
+
+type CleanupCandidate = {
+  uid: string;
+  publicUserId: string;
+};
+
+async function inactiveCleanupCandidates(cutoff: Timestamp): Promise<{
+  candidates: CleanupCandidate[];
+  skippedMissingActivity: number;
+}> {
+  const snapshot = await db.collection("users").get();
+  const superAdminId = await configuredSuperAdminUid();
+  const candidates: CleanupCandidate[] = [];
+  let skippedMissingActivity = 0;
+  for (const document of snapshot.docs) {
+    const decision = inactiveAppUserDecision(document.data(), cutoff);
+    if (decision === "missing-activity") skippedMissingActivity++;
+    if (decision !== "eligible" || document.id === superAdminId) continue;
+    candidates.push({
+      uid: document.id,
+      publicUserId: await ensurePublicUserId(document.id),
+    });
+  }
+  return {candidates, skippedMissingActivity};
+}
+
+async function previewInactiveAppUserDeletionHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   await requireSuperAdmin(actorId);
-  return {isSuperAdmin: true};
-});
+  const cutoff = inactiveCutoff();
+  const result = await inactiveCleanupCandidates(cutoff);
+  return {
+    cutoff: cutoff.toDate().toISOString(),
+    inactiveDays: INACTIVE_ACCOUNT_DAYS,
+    eligibleCount: result.candidates.length,
+    skippedMissingActivity: result.skippedMissingActivity,
+    publicUserIds: result.candidates.map((candidate) => candidate.publicUserId).sort(),
+  };
+}
 
-export const completeAdminPasswordChange = onCall(async (request) => {
+export const previewInactiveAppUserDeletion = onCall({enforceAppCheck: true}, previewInactiveAppUserDeletionHandler);
+export const previewInactiveAppUserDeletionDev = onCall({enforceAppCheck: false}, previewInactiveAppUserDeletionHandler);
+
+async function deleteQuery(query: FirebaseFirestore.Query): Promise<number> {
+  const snapshot = await query.get();
+  if (snapshot.empty) return 0;
+  const writer = db.bulkWriter();
+  for (const document of snapshot.docs) writer.delete(document.ref);
+  await writer.close();
+  return snapshot.size;
+}
+
+async function deleteUserFieldDocuments(
+  uid: string,
+  collections: readonly string[],
+): Promise<number> {
+  let deleted = 0;
+  for (const collection of collections) {
+    deleted += await deleteQuery(db.collection(collection).where("userId", "==", uid));
+  }
+  return deleted;
+}
+
+async function deleteTargetAuditDocuments(uid: string): Promise<number> {
+  let deleted = 0;
+  for (const collection of ["admin_audit_logs", "role_audit_logs"]) {
+    deleted += await deleteQuery(db.collection(collection).where("targetUserId", "==", uid));
+  }
+  return deleted;
+}
+
+async function deleteAddressedMail(addresses: string[]): Promise<number> {
+  let deleted = 0;
+  for (const address of new Set(addresses.map((value) => value.trim().toLowerCase()).filter(Boolean))) {
+    deleted += await deleteQuery(db.collection("mail").where("to", "array-contains", address));
+  }
+  return deleted;
+}
+
+async function deleteSecretChatData(uid: string): Promise<number> {
+  let deleted = 0;
+  const postsSnapshot = await posts.where("authorId", "==", uid).get();
+  for (const post of postsSnapshot.docs) {
+    deleted += await deleteQuery(db.collection("secret_chat_comments").where("postId", "==", post.id));
+    deleted += await deleteQuery(db.collection("secret_chat_interactions").where("postId", "==", post.id));
+    await post.ref.delete();
+    deleted++;
+  }
+  deleted += await deleteQuery(db.collection("secret_chat_comments").where("authorId", "==", uid));
+  deleted += await deleteQuery(db.collection("secret_chat_interactions").where("userId", "==", uid));
+  deleted += await deleteQuery(secretChatAliases.where("userId", "==", uid));
+  return deleted;
+}
+
+async function recursivelyDeleteUserParents(uid: string): Promise<number> {
+  let deleted = 0;
+  const appointments = await db.collection("appointments").where("userId", "==", uid).get();
+  for (const appointment of appointments.docs) {
+    await db.recursiveDelete(appointment.ref);
+    deleted++;
+  }
+  const devices = db.collection("user_devices").doc(uid);
+  await db.recursiveDelete(devices);
+  deleted++;
+  return deleted;
+}
+
+const USER_FIELD_COLLECTIONS = [
+  "assessments", "assessment_limits", "moods", "reports",
+  // The feature is removed; retain deletion-only handling for historical data.
+  "journals",
+  "user_activities", "breathing_sessions", "mind_aid_messages", "mind_aid_feedback",
+  "sleep_entries", "notifications", "inquiries", "role_correction_requests",
+  "recovery_email_tokens", "password_recovery_tokens", "_analytics_events",
+  "_mind_aid_events",
+] as const;
+
+async function cleanUserAccount(uid: string, publicUserId: string): Promise<number> {
+  const profileRef = db.collection("users").doc(uid);
+  const [profile, privateProfile, authUser] = await Promise.all([
+    profileRef.get(),
+    db.collection("user_private").doc(uid).get(),
+    getAuth().getUser(uid).catch((error: {code?: string}) => {
+      if (error.code === "auth/user-not-found") return null;
+      throw error;
+    }),
+  ]);
+  const emailAddresses = [
+    String(authUser?.email ?? ""),
+    String(profile.data()?.email ?? ""),
+    String(privateProfile.data()?.recoveryEmail ?? ""),
+    String(privateProfile.data()?.recoveryEmailPending ?? ""),
+  ];
+
+  if (authUser) await getAuth().deleteUser(uid);
+  await profileRef.delete();
+
+  let deleted = 1;
+  deleted += await recursivelyDeleteUserParents(uid);
+  deleted += await deleteUserFieldDocuments(uid, USER_FIELD_COLLECTIONS);
+  deleted += await deleteTargetAuditDocuments(uid);
+  deleted += await deleteSecretChatData(uid);
+  deleted += await deleteAddressedMail(emailAddresses);
+  deleted += await deleteQuery(db.collectionGroup("users").where("userId", "==", uid));
+
+  const directRefs = [
+    db.collection("user_private").doc(uid),
+    db.collection("_password_recovery_limits").doc(uid),
+    db.collection("assessment_limits").doc(uid),
+    db.collection("admin_status_summaries").doc(uid),
+    db.collection("sleep_preferences").doc(uid),
+    db.collection("mind_aid_preferences").doc(uid),
+    db.collection("_mind_aid_rate_limits").doc(uid),
+    secretChatProfiles.doc(uid),
+    stats.doc(uid),
+    publicUserIds.doc(uid),
+    publicUserIdReservations.doc(publicUserId),
+  ];
+  const writer = db.bulkWriter();
+  for (const ref of directRefs) writer.delete(ref);
+  await writer.close();
+  deleted += directRefs.length;
+
+  await getStorage().bucket().deleteFiles({
+    prefix: `secret_chat_profiles/${uid}/`,
+    force: true,
+  });
+
+  // A second sweep catches writes that raced with the first pass. The deleted
+  // Auth account/profile prevents new legitimate writes for this UID.
+  deleted += await deleteUserFieldDocuments(uid, USER_FIELD_COLLECTIONS);
+  deleted += await deleteSecretChatData(uid);
+  await profileRef.delete();
+  return deleted;
+}
+
+async function deleteInactiveAppUsersHandler(request: CallableRequest) {
+  const actorId = requireAuthenticatedUser(request);
+  const actor = await requireSuperAdmin(actorId);
+  const superAdminId = await configuredSuperAdminUid();
+  if (request.data?.confirmation !== "DELETE") {
+    throw new HttpsError("invalid-argument", "Type DELETE to confirm permanent account removal.");
+  }
+  const cutoff = inactiveCutoff();
+  const preview = await inactiveCleanupCandidates(cutoff);
+  const runId = randomUUID();
+
+  for (const candidate of preview.candidates) {
+    await db.runTransaction(async (transaction) => {
+      const profile = await transaction.get(db.collection("users").doc(candidate.uid));
+      if (!profile.exists || candidate.uid === superAdminId ||
+          inactiveAppUserDecision(profile.data()!, cutoff) !== "eligible") return;
+      transaction.set(accountDeletionJobs.doc(candidate.uid), {
+        uid: candidate.uid,
+        publicUserId: candidate.publicUserId,
+        runId,
+        status: "pending",
+        cutoff,
+        createdAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    });
+  }
+
+  const jobs = await accountDeletionJobs.get();
+  const deletedPublicUserIds: string[] = [];
+  const failedPublicUserIds: string[] = [];
+  let deletedDocumentCount = 0;
+  for (const job of jobs.docs) {
+    const uid = job.id;
+    const publicUserId = String(job.data().publicUserId ?? "Unknown");
+    try {
+      let claimed = false;
+      await db.runTransaction(async (transaction) => {
+        claimed = false;
+        const [currentJob, currentProfile] = await Promise.all([
+          transaction.get(job.ref),
+          transaction.get(db.collection("users").doc(uid)),
+        ]);
+        if (!currentJob.exists) return;
+        const status = String(currentJob.data()?.status ?? "pending");
+        const lease = currentJob.data()?.leaseExpiresAt;
+        if (status === "processing" && lease instanceof Timestamp && lease.toMillis() > Date.now()) return;
+        if (currentProfile.exists && (uid === superAdminId ||
+            inactiveAppUserDecision(currentProfile.data()!, cutoff) !== "eligible")) {
+          transaction.delete(job.ref);
+          return;
+        }
+        claimed = true;
+        transaction.set(job.ref, {
+          status: "processing",
+          attempts: FieldValue.increment(1),
+          leaseExpiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true});
+      });
+      if (!claimed) continue;
+      deletedDocumentCount += await cleanUserAccount(uid, publicUserId);
+      await job.ref.delete();
+      deletedPublicUserIds.push(publicUserId);
+    } catch (error) {
+      console.error("inactive_account_cleanup_failed", {runId, publicUserId, error});
+      await job.ref.set({
+        status: "failed",
+        lastError: error instanceof Error ? error.message.slice(0, 300) : "Unknown cleanup error",
+        leaseExpiresAt: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      failedPublicUserIds.push(publicUserId);
+    }
+  }
+
+  await db.collection("admin_audit_logs").add({
+    actorId,
+    actorAccessRole: actor.accessRole,
+    targetUserId: "",
+    action: "inactiveAppUsersDeleted",
+    reason: `Debug cleanup of accounts inactive for ${INACTIVE_ACCOUNT_DAYS} days`,
+    runId,
+    cutoff,
+    deletedCount: deletedPublicUserIds.length,
+    failureCount: failedPublicUserIds.length,
+    skippedMissingActivity: preview.skippedMissingActivity,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return {
+    runId,
+    cutoff: cutoff.toDate().toISOString(),
+    deletedCount: deletedPublicUserIds.length,
+    failedCount: failedPublicUserIds.length,
+    skippedMissingActivity: preview.skippedMissingActivity,
+    deletedDocumentCount,
+    deletedPublicUserIds: deletedPublicUserIds.sort(),
+    failedPublicUserIds: failedPublicUserIds.sort(),
+  };
+}
+
+export const deleteInactiveAppUsers = onCall({...{timeoutSeconds: 3600, memory: "1GiB"}, enforceAppCheck: true}, deleteInactiveAppUsersHandler);
+export const deleteInactiveAppUsersDev = onCall({...{timeoutSeconds: 3600, memory: "1GiB"}, enforceAppCheck: false}, deleteInactiveAppUsersHandler);
+
+async function confirmSuperAdminHandler(request: CallableRequest) {
+  const correlationId = randomUUID();
+  try {
+    const actorId = requireAuthenticatedUser(request);
+    await requireSuperAdmin(actorId);
+    return {isSuperAdmin: true, correlationId};
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      const details = error.details && typeof error.details === "object" ?
+        error.details as Record<string, unknown> : {};
+      throw new HttpsError(error.code, error.message, {...details, correlationId});
+    }
+    console.error("super_admin_confirmation_failed", {correlationId});
+    throw new HttpsError(
+      "internal",
+      "Unable to confirm super-administrator access.",
+      {correlationId},
+    );
+  }
+}
+
+export const confirmSuperAdmin = onCall({enforceAppCheck: true}, confirmSuperAdminHandler);
+export const confirmSuperAdminDev = onCall({enforceAppCheck: false}, confirmSuperAdminHandler);
+
+async function completeAdminPasswordChangeHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   const actor = await requireSuperAdmin(actorId);
   const target = db.collection("users").doc(actorId);
@@ -470,133 +832,12 @@ export const completeAdminPasswordChange = onCall(async (request) => {
       after: {mustChangePassword: false}, createdAt: FieldValue.serverTimestamp()});
   });
   return {ok: true};
-});
+}
 
-export const requestRoleCorrection = onCall(async (request) => {
-  const userId = requireAuthenticatedUser(request);
-  const requestedRole = String(request.data?.requestedRole ?? "");
-  if (!POPULATION_ROLES.includes(requestedRole as typeof POPULATION_ROLES[number])) {
-    throw new HttpsError("invalid-argument", "Choose a valid population role.");
-  }
-  const reason = requiredText(request.data?.reason, "Reason", 10, 500);
-  const userRef = db.collection("users").doc(userId);
-  const requestRef = db.collection("role_correction_requests").doc();
-  await db.runTransaction(async (transaction) => {
-    const user = await transaction.get(userRef);
-    if (!user.exists) throw new HttpsError("not-found", "User profile not found.");
-    const currentRole = String(user.data()?.populationRole ?? user.data()?.declaredRole ?? "");
-    if (currentRole === requestedRole) {
-      throw new HttpsError("failed-precondition", "This is already your current role.");
-    }
-    transaction.create(requestRef, {
-      userId,
-      currentRole,
-      requestedRole,
-      reason,
-      status: "pending",
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-  return {ok: true, requestId: requestRef.id};
-});
+export const completeAdminPasswordChange = onCall({enforceAppCheck: true}, completeAdminPasswordChangeHandler);
+export const completeAdminPasswordChangeDev = onCall({enforceAppCheck: false}, completeAdminPasswordChangeHandler);
 
-export const reviewProfileVerification = onCall(async (request) => {
-  const actorId = requireAuthenticatedUser(request);
-  const actor = await requireStaff(actorId);
-  const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
-  const decision = String(request.data?.decision ?? "");
-  const reason = requiredText(request.data?.reason, "Reason", 3, 500);
-  if (!["verified", "rejected", "needsReview"].includes(decision)) {
-    throw new HttpsError("invalid-argument", "Choose a valid verification decision.");
-  }
-  if (actorId === targetUserId) {
-    throw new HttpsError("permission-denied", "You cannot verify your own profile.");
-  }
-  const target = db.collection("users").doc(targetUserId);
-  const audit = db.collection("role_audit_logs").doc();
-  await db.runTransaction(async (transaction) => {
-    const before = await transaction.get(target);
-    if (!before.exists) throw new HttpsError("not-found", "User profile not found.");
-    transaction.update(target, {
-      verificationStatus: decision,
-      verifiedAt: decision === "verified" ? FieldValue.serverTimestamp() : null,
-      verifiedBy: decision === "verified" ? actorId : "",
-      profileVersion: 2,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    transaction.create(audit, {
-      targetUserId,
-      actorId,
-      actorAccessRole: actor.accessRole,
-      action: "verificationReviewed",
-      reason,
-      before: {verificationStatus: before.data()?.verificationStatus ?? "needsReview"},
-      after: {verificationStatus: decision},
-      createdAt: FieldValue.serverTimestamp(),
-    });
-  });
-  return {ok: true};
-});
-
-export const reviewRoleCorrection = onCall(async (request) => {
-  const actorId = requireAuthenticatedUser(request);
-  const actor = await requireStaff(actorId);
-  if (actor.accessRole !== "admin") {
-    throw new HttpsError("permission-denied", "Administrator access is required.");
-  }
-  const requestId = requiredText(request.data?.requestId, "Request ID", 1, 128);
-  const approve = request.data?.approve === true;
-  const reason = requiredText(request.data?.reason, "Reason", 3, 500);
-  const requestRef = db.collection("role_correction_requests").doc(requestId);
-  const audit = db.collection("role_audit_logs").doc();
-  await db.runTransaction(async (transaction) => {
-    const correction = await transaction.get(requestRef);
-    if (!correction.exists || correction.data()?.status !== "pending") {
-      throw new HttpsError("failed-precondition", "This request is no longer pending.");
-    }
-    const targetUserId = String(correction.data()?.userId ?? "");
-    if (targetUserId === actorId) {
-      throw new HttpsError("permission-denied", "You cannot approve your own role change.");
-    }
-    const target = db.collection("users").doc(targetUserId);
-    const before = await transaction.get(target);
-    if (!before.exists) throw new HttpsError("not-found", "User profile not found.");
-    const requestedRole = String(correction.data()?.requestedRole ?? "");
-    transaction.update(requestRef, {
-      status: approve ? "approved" : "rejected",
-      reviewReason: reason,
-      reviewedBy: actorId,
-      reviewedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    if (approve) {
-      transaction.update(target, {
-        populationRole: requestedRole,
-        declaredRole: requestedRole,
-        verificationStatus: "verified",
-        verifiedAt: FieldValue.serverTimestamp(),
-        verifiedBy: actorId,
-        profileVersion: 2,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-    transaction.create(audit, {
-      targetUserId,
-      actorId,
-      actorAccessRole: actor.accessRole,
-      action: approve ? "roleCorrectionApproved" : "roleCorrectionRejected",
-      reason,
-      requestId,
-      before: {populationRole: before.data()?.populationRole ?? before.data()?.role ?? ""},
-      after: {populationRole: approve ? requestedRole : before.data()?.populationRole ?? ""},
-      createdAt: FieldValue.serverTimestamp(),
-    });
-  });
-  return {ok: true};
-});
-
-export const assignAccessRole = onCall(async (request) => {
+async function assignAccessRoleHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   const actor = await requireSuperAdmin(actorId);
   const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
@@ -605,7 +846,7 @@ export const assignAccessRole = onCall(async (request) => {
   if (![...STAFF_ACCESS_ROLES, "appUser"].includes(accessRole as "portalStaff" | "counselor" | "appUser")) {
     throw new HttpsError("invalid-argument", "Choose Portal Staff, Counselor, or revoke access.");
   }
-  if (targetUserId === actorId || targetUserId === configuredSuperAdminUid()) {
+  if (targetUserId === actorId || targetUserId === await configuredSuperAdminUid()) {
     throw new HttpsError("permission-denied", "The super-administrator cannot be modified.");
   }
   const target = db.collection("users").doc(targetUserId);
@@ -626,9 +867,12 @@ export const assignAccessRole = onCall(async (request) => {
     });
   });
   return {ok: true};
-});
+}
 
-export const saveOrganizationRecord = onCall(async (request) => {
+export const assignAccessRole = onCall({enforceAppCheck: true}, assignAccessRoleHandler);
+export const assignAccessRoleDev = onCall({enforceAppCheck: false}, assignAccessRoleHandler);
+
+async function saveOrganizationRecordHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   await requireSuperAdmin(actorId);
   const kind = String(request.data?.kind ?? "");
@@ -653,9 +897,12 @@ export const saveOrganizationRecord = onCall(async (request) => {
     ...(kind === "course" ? {collegeId} : {}), updatedBy: actorId, updatedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp()}, {merge: true});
   return {ok: true, id: recordId};
-});
+}
 
-export const updateStaffOrganization = onCall(async (request) => {
+export const saveOrganizationRecord = onCall({enforceAppCheck: true}, saveOrganizationRecordHandler);
+export const saveOrganizationRecordDev = onCall({enforceAppCheck: false}, saveOrganizationRecordHandler);
+
+async function updateStaffOrganizationHandler(request: CallableRequest) {
   const actorId = requireAuthenticatedUser(request);
   const actor = await requireSuperAdmin(actorId);
   const targetUserId = requiredText(request.data?.userId, "User ID", 1, 128);
@@ -681,7 +928,10 @@ export const updateStaffOrganization = onCall(async (request) => {
       after: {departmentId, collegeId, courseId}, createdAt: FieldValue.serverTimestamp()});
   });
   return {ok: true};
-});
+}
+
+export const updateStaffOrganization = onCall({enforceAppCheck: true}, updateStaffOrganizationHandler);
+export const updateStaffOrganizationDev = onCall({enforceAppCheck: false}, updateStaffOrganizationHandler);
 
 export function reactionDelta(before: unknown, after: unknown): number {
   return Number(after === true) - Number(before === true);
@@ -691,7 +941,7 @@ export function activeCommentDelta(before: unknown, after: unknown): number {
   return Number(after === "active") - Number(before === "active");
 }
 
-export const rebuildMySecretChatStats = onCall(async (request) => {
+async function rebuildMySecretChatStatsHandler(request: CallableRequest) {
   const userId = request.auth?.uid;
   if (!userId) throw new HttpsError("unauthenticated", "Sign in is required.");
   const statsRef = stats.doc(userId);
@@ -713,7 +963,10 @@ export const rebuildMySecretChatStats = onCall(async (request) => {
     });
   });
   return {rebuilt: true};
-});
+}
+
+export const rebuildMySecretChatStats = onCall({enforceAppCheck: true}, rebuildMySecretChatStatsHandler);
+export const rebuildMySecretChatStatsDev = onCall({enforceAppCheck: false}, rebuildMySecretChatStatsHandler);
 
 async function once(eventId: string, apply: (
   transaction: FirebaseFirestore.Transaction,
@@ -745,6 +998,7 @@ export const syncSecretChatInteraction = onDocumentWritten(
       const post = postSnapshot.data()!;
       const authorId = String(post.authorId ?? "");
       if (!authorId) return;
+      if (!(await transaction.get(db.collection("users").doc(authorId))).exists) return;
       const statsRef = stats.doc(authorId);
       await transaction.get(statsRef);
       const readerId = String(after?.userId ?? "");
@@ -785,6 +1039,7 @@ export const syncSecretChatComment = onDocumentWritten(
       if (!postSnapshot.exists) return;
       const authorId = String(postSnapshot.data()?.authorId ?? "");
       if (!authorId) return;
+      if (!(await transaction.get(db.collection("users").doc(authorId))).exists) return;
       const statsRef = stats.doc(authorId);
       await transaction.get(statsRef);
       transaction.set(postRef, {
@@ -808,6 +1063,7 @@ export const removeDeletedPostStats = onDocumentDeleted(
     const post = event.data?.data();
     const authorId = String(post?.authorId ?? "");
     if (!authorId) return;
+    if (!(await db.collection("users").doc(authorId).get()).exists) return;
     await once(`post_delete_${event.id}`, async (transaction, marker) => {
       const statsRef = stats.doc(authorId);
       await transaction.get(statsRef);
@@ -829,7 +1085,14 @@ export const aggregateUserActivity = onDocumentCreated(
     const userId = String(activity?.userId ?? "");
     const type = String(activity?.type ?? "unknown").replace(/[^A-Za-z0-9_]/g, "_");
     if (!userId) return;
-    const occurred = activity?.createdAt instanceof Timestamp ? activity.createdAt.toDate() : new Date();
+    const profile = await db.collection("users").doc(userId).get();
+    const profileData = profile.data();
+    // Portal activity is operational data, not app-user engagement.
+    if (!profile.exists || profileData?.accessRole !== "appUser" ||
+        profileData.staffAccountStatus != null) return;
+    // Invalid activity timestamps must not contaminate today's aggregates.
+    if (!(activity?.createdAt instanceof Timestamp)) return;
+    const occurred = activity.createdAt.toDate();
     const dateKey = manilaDateKey(occurred);
     const marker = analyticsEvents.doc(event.params.activityId);
     const day = db.collection("analytics_daily").doc(dateKey);
@@ -848,7 +1111,7 @@ export const aggregateUserActivity = onDocumentCreated(
       transaction.set(dailyUser, {
         userId,
         lastActivityType: type,
-        lastActiveAt: activity?.createdAt ?? FieldValue.serverTimestamp(),
+        lastActiveAt: activity.createdAt,
         updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
       transaction.create(marker, {
@@ -858,21 +1121,71 @@ export const aggregateUserActivity = onDocumentCreated(
         processedAt: FieldValue.serverTimestamp(),
       });
     });
+    const serviceKey = serviceKeyForActivity(type);
+    if (serviceKey) {
+      try {
+        await recordServiceSuccess(serviceKey);
+      } catch (_) {
+        // Monitoring is non-blocking and must never affect user activity.
+      }
+    }
   },
 );
 
-export const reviewAppointment = onCall(async (request) => {
+/*
+ * Historical implementation retained temporarily in source history only.
+ * The deployed exports are the App Check-protected implementations in
+ * appointment_workflow.ts above. Keeping this block commented ensures it
+ * cannot register an unprotected callable while existing dirty work is
+ * reconciled in a later cleanup commit.
+export type AppointmentLifecycleStatus =
+  "pending" | "confirmed" | "ongoing" | "reschedule_proposed" |
+  "completed" | "declined" | "cancelled";
+
+const TERMINAL_APPOINTMENT_STATUSES = new Set<AppointmentLifecycleStatus>([
+  "completed", "declined", "cancelled",
+]);
+
+function legacyCanonicalAppointmentStatus(value: unknown): AppointmentLifecycleStatus {
+  const status = String(value ?? "pending").trim().toLowerCase().replace(/[ -]/g, "_");
+  if (["pending", "requested"].includes(status)) return "pending";
+  if (["confirmed", "upcoming", "scheduled"].includes(status)) return "confirmed";
+  if (["ongoing", "in_progress", "inprogress"].includes(status)) return "ongoing";
+  if (["reschedule_proposed", "reschedule", "rescheduled"].includes(status)) return "reschedule_proposed";
+  if (["completed", "complete", "done"].includes(status)) return "completed";
+  if (["declined", "rejected"].includes(status)) return "declined";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  return "pending";
+}
+
+function legacyCanTransitionAppointment(
+  before: AppointmentLifecycleStatus,
+  action: AppointmentLifecycleStatus,
+): boolean {
+  const transitions: Record<AppointmentLifecycleStatus, AppointmentLifecycleStatus[]> = {
+    pending: ["confirmed", "declined", "reschedule_proposed"],
+    reschedule_proposed: ["confirmed", "declined", "reschedule_proposed"],
+    confirmed: ["ongoing", "declined", "reschedule_proposed"],
+    ongoing: ["completed"],
+    completed: [],
+    declined: [],
+    cancelled: [],
+  };
+  return transitions[before].includes(action);
+}
+
+const legacyReviewAppointment = onCall(async (request) => {
   const staffId = request.auth?.uid;
   if (!staffId) throw new HttpsError("unauthenticated", "Sign in is required.");
   const staff = await requireStaff(staffId);
   const input = request.data as Record<string, unknown>;
   const appointmentId = String(input.appointmentId ?? "").trim();
-  const action = String(input.action ?? "").trim();
+  const action = legacyCanonicalAppointmentStatus(input.action);
   const reply = String(input.reply ?? "").trim();
   const proposedMillis = Number(input.proposedScheduledAt ?? 0);
   const proposedTime = String(input.proposedScheduledTime ?? "").trim();
-  if (!appointmentId || !["confirmed", "declined", "reschedule_proposed"].includes(action)) {
-    throw new HttpsError("invalid-argument", "A valid appointment decision is required.");
+  if (!appointmentId || !["confirmed", "declined", "reschedule_proposed", "ongoing", "completed"].includes(action)) {
+    throw new HttpsError("invalid-argument", "A valid appointment action is required.");
   }
   if (!reply) throw new HttpsError("invalid-argument", "A reply to the student is required.");
   if (action === "reschedule_proposed" && (!Number.isFinite(proposedMillis) || proposedMillis <= 0 || !proposedTime)) {
@@ -886,9 +1199,11 @@ export const reviewAppointment = onCall(async (request) => {
     const current = await transaction.get(appointment);
     if (!current.exists) throw new HttpsError("not-found", "Appointment not found.");
     const data = current.data()!;
-    const before = String(data.status ?? "pending").toLowerCase();
-    if (!["pending", "upcoming", "reschedule_proposed"].includes(before)) {
-      throw new HttpsError("failed-precondition", "This appointment has already been finalized.");
+    const before = legacyCanonicalAppointmentStatus(data.status);
+    if (!legacyCanTransitionAppointment(before, action)) {
+      const message = TERMINAL_APPOINTMENT_STATUSES.has(before) ?
+        "This appointment is already archived." : "This appointment cannot take that action yet.";
+      throw new HttpsError("failed-precondition", message);
     }
     const userId = String(data.userId ?? "");
     if (!userId) throw new HttpsError("failed-precondition", "Appointment has no student.");
@@ -899,6 +1214,8 @@ export const reviewAppointment = onCall(async (request) => {
       counselorName: staffName,
       staffReply: reply,
       reviewedAt: FieldValue.serverTimestamp(),
+      ...(action === "ongoing" ? {startedAt: FieldValue.serverTimestamp()} : {}),
+      ...(action === "completed" ? {completedAt: FieldValue.serverTimestamp()} : {}),
       updatedAt: FieldValue.serverTimestamp(),
       proposedScheduledAt: action === "reschedule_proposed" ? Timestamp.fromMillis(proposedMillis) : null,
       proposedScheduledTime: action === "reschedule_proposed" ? proposedTime : "",
@@ -914,7 +1231,10 @@ export const reviewAppointment = onCall(async (request) => {
       staffName,
       createdAt: FieldValue.serverTimestamp(),
     });
-    const title = action === "confirmed" ? "Appointment confirmed" : action === "declined" ? "Appointment update" : "New appointment time proposed";
+    const title = action === "confirmed" ? "Appointment confirmed" :
+      action === "ongoing" ? "Counseling session started" :
+      action === "completed" ? "Counseling session completed" :
+      action === "declined" ? "Appointment update" : "New appointment time proposed";
     transaction.create(notification, {
       userId,
       appointmentId,
@@ -927,6 +1247,74 @@ export const reviewAppointment = onCall(async (request) => {
   });
   return {ok: true};
 });
+
+const legacyScheduleAppointmentFollowUp = onCall(async (request) => {
+  const staffId = requireAuthenticatedUser(request);
+  const staff = await requireStaff(staffId);
+  const input = request.data as Record<string, unknown>;
+  const sourceAppointmentId = String(input.sourceAppointmentId ?? "").trim();
+  const scheduledMillis = Number(input.scheduledAt ?? 0);
+  const scheduledTime = String(input.scheduledTime ?? "").trim();
+  const location = String(input.location ?? "").trim();
+  const reply = String(input.reply ?? "").trim();
+  if (!sourceAppointmentId || !Number.isFinite(scheduledMillis) || scheduledMillis <= 0 ||
+      !scheduledTime || !location || !reply) {
+    throw new HttpsError("invalid-argument", "A follow-up date, time, location, and message are required.");
+  }
+
+  const source = db.collection("appointments").doc(sourceAppointmentId);
+  const followUp = db.collection("appointments").doc();
+  const notification = db.collection("notifications").doc();
+  await db.runTransaction(async (transaction) => {
+    const current = await transaction.get(source);
+    if (!current.exists) throw new HttpsError("not-found", "Appointment not found.");
+    const sourceData = current.data()!;
+    if (legacyCanonicalAppointmentStatus(sourceData.status) !== "completed") {
+      throw new HttpsError("failed-precondition", "Only a completed appointment can receive a follow-up.");
+    }
+    const userId = String(sourceData.userId ?? "");
+    if (!userId) throw new HttpsError("failed-precondition", "Appointment has no app user.");
+    const staffName = String(staff.name ?? staff.email ?? "Counseling staff");
+    const rootAppointmentId = String(sourceData.rootAppointmentId ?? sourceAppointmentId);
+    const copyFields = ["fullName", "age", "address", "contactNumber", "email", "facebook", "sex",
+      "course", "yearLevel", "preferredContactMethod", "therapyBefore", "concern", "bestTime"];
+    const followUpData: Record<string, unknown> = {
+      userId,
+      status: "pending",
+      scheduledAt: Timestamp.fromMillis(scheduledMillis),
+      scheduledTime,
+      location,
+      parentAppointmentId: sourceAppointmentId,
+      rootAppointmentId,
+      assignedStaffId: staffId,
+      counselorName: staffName,
+      staffReply: reply,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    for (const field of copyFields) if (sourceData[field] !== undefined) followUpData[field] = sourceData[field];
+    transaction.create(followUp, followUpData);
+    transaction.create(source.collection("history").doc(), {
+      previousStatus: "completed",
+      status: "follow_up_scheduled",
+      linkedAppointmentId: followUp.id,
+      reply, staffId, staffName, createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(followUp.collection("history").doc(), {
+      previousStatus: null,
+      status: "follow_up_created",
+      parentAppointmentId: sourceAppointmentId,
+      rootAppointmentId, reply, staffId, staffName, createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(notification, {
+      userId, appointmentId: followUp.id, type: "appointment",
+      title: "Follow-up appointment scheduled", body: reply,
+      createdAt: FieldValue.serverTimestamp(), readAt: null,
+    });
+  });
+  return {ok: true, appointmentId: followUp.id};
+});
+*/
 
 export const sendAppointmentNotification = onDocumentCreated(
   {document: "notifications/{notificationId}", retry: true},

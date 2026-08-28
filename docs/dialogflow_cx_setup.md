@@ -1,5 +1,8 @@
 # MindAid Dialogflow CX Setup
 
+The repeatable synchronization, validation, deployment, and pilot procedure is
+documented in [mind_aid_cx_operations.md](mind_aid_cx_operations.md).
+
 The Flutter app never calls Dialogflow directly. It calls the authenticated
 `sendMindAidMessage` Firebase callable in `asia-southeast1`; the Function uses
 its Google service identity to call CX.
@@ -52,8 +55,8 @@ Create these flows and route high-risk intents before any no-match generator:
 | Flow | Example intents | Response policy |
 | --- | --- | --- |
 | Welcome | greeting, capabilities, goodbye | Deterministic |
-| General Support | overwhelmed, lonely, motivation | Controlled generative fallback allowed |
-| Academic Stress | exams, workload, deadlines, burnout | Controlled generative fallback allowed |
+| General Support | overwhelmed, lonely, motivation | Deterministic approved responses |
+| Academic Stress | exams, workload, deadlines, burnout | Deterministic approved responses |
 | Mood and Coping | anxiety, low mood, sleep, grounding | Deterministic intents; approved coping steps |
 | Assessment | explain result, concern category | Deterministic; screening is not diagnosis |
 | Counseling Handoff | talk to PACC, book counselor | Deterministic action payload |
@@ -61,26 +64,14 @@ Create these flows and route high-risk intents before any no-match generator:
 
 Use the existing records under `assets/data/mind_aid/` as the approved source
 for intents and response wording. Add English and common Taglish training
-phrases to the same English intents. Do not upload journals, mood notes, raw
+phrases to the same English intents. Do not upload private notes, mood notes, raw
 assessment answers, user contact details, or production transcripts as
 training data.
 
-For General Support and Academic Stress no-match handlers only, use this policy
-in the generative fallback prompt:
-
-```text
-You are MindAid, a brief and supportive university wellbeing assistant.
-Do not diagnose, prescribe, claim medical certainty, or represent yourself as
-a counselor. Validate the feeling, offer at most two practical low-risk steps,
-and ask one gentle follow-up question. Never invent campus services or contact
-details. If the message suggests danger, self-harm, violence, abuse, or severe
-distress, do not answer generatively; use the static safety fallback.
-```
-
-Add banned phrases covering diagnoses, medication instructions, secrecy,
-guarantees, and claims of being a therapist. Every generative handler must also
-contain a static response because generative fallback is not covered by the CX
-SLA.
+The current reviewed configuration does not use a generator or webhook in any
+flow. Its no-match handlers ask a deterministic clarification question. Do not
+enable generative fallback without a separate clinical, privacy, security, and
+red-team review.
 
 ## 4. Custom payload contract
 
@@ -127,13 +118,22 @@ the values:
 
 ```json
 {
-  "paccName": "PACC Counseling Services",
-  "paccPhone": "VERIFIED_NUMBER",
-  "campusSecurityPhone": "VERIFIED_NUMBER",
-  "emergencyLabel": "Local emergency service",
-  "emergencyPhone": "VERIFIED_NUMBER"
+  "contacts": [{
+    "value": "INSTITUTIONALLY_VERIFIED_VALUE",
+    "type": "counseling",
+    "displayName": "APPROVED_DISPLAY_NAME",
+    "availability": "APPROVED_AVAILABILITY_TEXT",
+    "verificationStatus": "verified",
+    "verifiedAt": "2026-01-01T00:00:00Z",
+    "approvingAuthority": "NAMED_INSTITUTIONAL_AUTHORITY",
+    "enabled": true
+  }]
 }
 ```
+
+The Functions suppress entries missing any verification field. Do not enter
+placeholder values or availability claims. Replace the example verification
+date only with the actual approval date.
 
 Create the Remote Config Boolean `mind_aid_dialogflow_enabled`. Set it to
 `true` for the pilot app build; the callable still enforces the server-side UID
@@ -149,6 +149,15 @@ flutter run --dart-define=MINDAID_DIALOGFLOW_FORCE=true
 This flag does not bypass server consent or rollout enforcement.
 
 ## 6. Test and deploy
+
+Synchronize the reviewed agent specification before deploying Functions:
+
+```powershell
+cd functions
+npm run mindaid:cx:dry-run
+npm run mindaid:cx:apply
+npm run mindaid:cx:test
+```
 
 ```powershell
 cd functions

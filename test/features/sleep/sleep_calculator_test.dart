@@ -103,6 +103,56 @@ void main() {
     expect(summary.averageScheduleShiftMinutes, isNull);
   });
 
+  test(
+    'summary keeps coverage separate from missing days and averages optional daytime ratings',
+    () {
+      final summary = SleepCalculator.summarize(
+        [_entry(day: 14, energy: 4, focus: 2), _entry(day: 12, energy: 2)],
+        days: 7,
+        now: DateTime.utc(2026, 7, 14),
+      );
+      expect(summary.entryCount, 2);
+      expect(summary.windowDays, 7);
+      expect(summary.averageEnergy, 3);
+      expect(summary.averageFocus, 2);
+      expect(summary.typicalBedtimeMinutes, isNull);
+    },
+  );
+
+  test('regularity uses noon-anchored bedtime minutes across midnight', () {
+    final summary = SleepCalculator.summarize(
+      [
+        _entry(day: 14, attempted: DateTime(2026, 7, 13, 23, 45)),
+        _entry(day: 13, attempted: DateTime(2026, 7, 13, 0, 15)),
+        _entry(day: 12, attempted: DateTime(2026, 7, 11, 23, 55)),
+      ],
+      days: 7,
+      now: DateTime.utc(2026, 7, 14),
+    );
+    expect(summary.typicalBedtimeMinutes, greaterThan(1400));
+    expect(summary.bedtimeVariationMinutes, lessThan(30));
+  });
+
+  test('baseline change needs coverage in both comparison windows', () {
+    final entries = [
+      for (var day = 14; day >= 12; day--) _entry(day: day),
+      for (var day = 7; day >= 5; day--)
+        _entry(
+          day: day,
+          attempted: DateTime(2026, 7, day - 1, 23),
+          onset: DateTime(2026, 7, day - 1, 23, 30),
+          wake: DateTime(2026, 7, day, 5),
+          out: DateTime(2026, 7, day, 5, 15),
+        ),
+    ];
+    final summary = SleepCalculator.summarize(
+      entries,
+      days: 7,
+      now: DateTime.utc(2026, 7, 14),
+    );
+    expect(summary.comparisonSleepMinutes, closeTo(120, .1));
+  });
+
   test('profile average uses the latest seven available entries', () {
     final entries = List.generate(
       9,
@@ -123,7 +173,10 @@ void main() {
       now: DateTime.utc(2026, 7, 14),
     );
     expect(result, hasLength(1));
-    expect(result.single.message, contains('not proof of a cause'));
+    expect(
+      result.single.message,
+      contains('does not show that the tag caused'),
+    );
   });
 }
 
@@ -133,6 +186,8 @@ SleepEntry _entry({
   int awakenings = 0,
   int awakeMinutes = 0,
   Set<String> tags = const {},
+  int? energy,
+  int? focus,
   DateTime? attempted,
   DateTime? onset,
   DateTime? wake,
@@ -159,5 +214,7 @@ SleepEntry _entry({
     concernTags: const {},
     createdAt: wakeDate,
     clientUpdatedAt: wakeDate,
+    energy: energy,
+    focus: focus,
   );
 }

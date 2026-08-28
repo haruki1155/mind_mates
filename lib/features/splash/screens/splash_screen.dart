@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/auth_provider.dart';
-import '../../../providers/assessment_provider.dart';
-import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
-import '../../authentication/auth_flow_routes.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -50,25 +47,11 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     final authProvider = context.read<AuthProvider>();
-    final userId = authProvider.hydrateCurrentUser();
+    final userId = await authProvider.restoreCurrentUser();
+    if (!mounted) return;
     var routeName = RouteNames.login;
     if (userId != null && userId.isNotEmpty) {
-      try {
-        final userProvider = context.read<UserProvider>();
-        final assessmentProvider = context.read<AssessmentProvider>();
-        await userProvider.loadProfile(userId);
-        final completed = await assessmentProvider
-            .ensureQuickAssessmentCompletion(userId);
-        if (completed && userProvider.user?.quickAssessmentCompleted != true) {
-          await userProvider.loadProfile(userId);
-        }
-        routeName = destinationAfterAuthentication(
-          hasCompletedQuickAssessment: completed,
-        );
-      } catch (error) {
-        debugPrint('Unable to verify assessment status on startup: $error');
-        await authProvider.signOut();
-      }
+      routeName = RouteNames.assessmentStatus;
     }
     if (!mounted) return;
 

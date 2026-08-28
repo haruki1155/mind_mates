@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../models/user_model.dart';
-import '../../../models/profile_roles.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/sleep_provider.dart';
@@ -39,6 +38,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       label: 'Privacy settings',
       icon: Icons.privacy_tip_outlined,
     ),
+    ProfileActionItem(
+      label: 'Recovery email',
+      icon: Icons.mark_email_read_outlined,
+    ),
     ProfileActionItem(label: 'Reminders', icon: Icons.notifications),
     ProfileActionItem(label: 'Help', icon: Icons.help_outline),
     ProfileActionItem(label: 'About MindMate', icon: Icons.info),
@@ -59,7 +62,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (widget.data != null) return;
 
     final authProvider = _authProviderOrNull(context);
-    final userId = authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    final userId =
+        authProvider?.authenticatedUserId ??
+        (authProvider == null ? context.read<UserProvider>().user?.id : null);
     if (userId == null) return;
 
     final userProvider = context.read<UserProvider>();
@@ -172,6 +177,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                             child: _ActionListCard(
                               actions: _actions,
                               onActionTap: (action) {
+                                if (action.label == 'Recovery email') {
+                                  Navigator.of(
+                                    context,
+                                  ).pushNamed(RouteNames.recoveryEmail);
+                                  return;
+                                }
                                 if (action.label == 'Secret Chats profile') {
                                   Navigator.of(
                                     context,
@@ -205,6 +216,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                             delay: 300,
                             child: _DataProtectionCard(),
                           ),
+                          if (widget.data == null &&
+                              _authProviderOrNull(context) != null) ...[
+                            const SizedBox(height: 18),
+                            OutlinedButton.icon(
+                              onPressed: () => _signOut(context),
+                              icon: const Icon(Icons.logout),
+                              label: const Text('Sign out'),
+                            ),
+                          ],
                           const SizedBox(height: 26),
                           const _AnimatedProfileSection(
                             delay: 360,
@@ -290,7 +310,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     return ProfileViewData(
       displayName: effectiveUser.displayName,
       role: effectiveUser.roleLabel,
-      verificationLabel: effectiveUser.verificationStatus.label,
       avatarAssetName: effectiveUser.avatarAssetName,
       metrics: [
         ProfileMetricData(
@@ -339,13 +358,20 @@ class _ProfileScreenState extends State<ProfileScreen>
       context,
     ).push(MaterialPageRoute(builder: (_) => _BlankProfilePage(title: title)));
   }
+
+  Future<void> _signOut(BuildContext context) async {
+    await context.read<AuthProvider>().signOut();
+    if (!context.mounted) return;
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(RouteNames.login, (route) => false);
+  }
 }
 
 class ProfileViewData {
   const ProfileViewData({
     this.displayName,
     this.role,
-    this.verificationLabel,
     this.email,
     this.schoolId,
     this.department,
@@ -357,7 +383,6 @@ class ProfileViewData {
 
   final String? displayName;
   final String? role;
-  final String? verificationLabel;
   final String? email;
   final String? schoolId;
   final String? department;
@@ -493,14 +518,6 @@ class _ProfileSummaryCard extends StatelessWidget {
                             Text(displayName, style: _ProfileText.profileName),
                           if (role != null)
                             Text(role, style: _ProfileText.profileRole),
-                          if (data?.verificationLabel != null)
-                            Text(
-                              data!.verificationLabel!,
-                              style: _ProfileText.profileRole.copyWith(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
                         ],
                       )
                     : const Column(
@@ -840,7 +857,7 @@ class _AboutMindMateCard extends StatelessWidget {
           ),
           SizedBox(height: 10),
           Text(
-            'This app does not replace professional care. For urgent concerns, contact PACC Counseling Services.',
+            'This app does not replace professional care or automatically alert a counselor. For urgent concerns, use a locally verified emergency or professional support service.',
             style: _ProfileText.body,
           ),
         ],
@@ -1178,7 +1195,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final isSaving = context.watch<UserProvider>().isSaving;
+    final userProvider = context.watch<UserProvider>();
+    final isSaving = userProvider.isSaving;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
@@ -1247,16 +1265,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   ),
                   const SizedBox(height: 10),
                   InputDecorator(
-                    decoration: _editDecoration('Verified population role'),
+                    decoration: _editDecoration('Institutional role'),
                     child: Text(widget.user.roleLabel),
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: isSaving ? null : _requestRoleCorrection,
-                      icon: const Icon(Icons.swap_horiz),
-                      label: const Text('Request role correction'),
-                    ),
                   ),
                   const SizedBox(height: 18),
                   SizedBox(
@@ -1330,89 +1340,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           ),
         ),
       );
-  }
-
-  Future<void> _requestRoleCorrection() async {
-    final reasonController = TextEditingController();
-    var requested =
-        widget.user.effectivePopulationRole == PopulationRole.student
-        ? PopulationRole.teaching
-        : PopulationRole.student;
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Request role correction'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<PopulationRole>(
-                initialValue: requested,
-                items: PopulationRole.values
-                    .where(
-                      (role) => role != widget.user.effectivePopulationRole,
-                    )
-                    .map(
-                      (role) => DropdownMenuItem(
-                        value: role,
-                        child: Text(role.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => requested = value);
-                },
-                decoration: const InputDecoration(labelText: 'Requested role'),
-              ),
-              TextField(
-                controller: reasonController,
-                maxLength: 500,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Reason',
-                  hintText:
-                      'Explain why your institutional role needs correction.',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (reasonController.text.trim().length >= 10) {
-                  Navigator.pop(dialogContext, true);
-                }
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (submitted != true || !mounted) {
-      reasonController.dispose();
-      return;
-    }
-    final success = await context.read<UserProvider>().requestRoleCorrection(
-      requestedRole: requested,
-      reason: reasonController.text,
-    );
-    reasonController.dispose();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Role correction request submitted.'
-              : 'Unable to submit request.',
-        ),
-      ),
-    );
   }
 }
 

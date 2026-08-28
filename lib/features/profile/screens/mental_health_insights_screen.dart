@@ -166,13 +166,16 @@ class _MentalHealthInsightsScreenState
 
   String _currentUserId() {
     final authProvider = _readProviderOrNull<AuthProvider>(context);
-    final authUserId =
-        authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    final authUserId = authProvider?.authenticatedUserId;
     if (authUserId != null && authUserId.isNotEmpty) return authUserId;
 
-    final profileUserId = _readProviderOrNull<UserProvider>(context)?.user?.id;
-    if (profileUserId != null && profileUserId.isNotEmpty) {
-      return profileUserId;
+    if (authProvider == null) {
+      final profileUserId = _readProviderOrNull<UserProvider>(
+        context,
+      )?.user?.id;
+      if (profileUserId != null && profileUserId.isNotEmpty) {
+        return profileUserId;
+      }
     }
 
     return 'preview_user';
@@ -1830,7 +1833,7 @@ class _ArticleSupportPanel extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'If this feels familiar, PACC support is available. Reaching out early is a healthy support step.',
+              'If this feels familiar, consider viewing counseling options. Verify service availability and contact information through an approved local source.',
               style: TextStyle(
                 color: Colors.black,
                 fontSize: 13,
@@ -1972,7 +1975,7 @@ class _PaaccSupportCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  "PAACC counseling services are available 24/7 for students and faculty. You're never alone.",
+                  'Counseling may be helpful when you want direct support. Verify contact details and availability through an approved local source before relying on them.',
                   style: TextStyle(
                     color: theme.secondaryText,
                     fontSize: 14,
@@ -1996,7 +1999,7 @@ class _PaaccSupportCard extends StatelessWidget {
                     ),
                   ),
                   child: const Text(
-                    'Contact counselor',
+                    'View counseling options',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
                   ),
                 ),

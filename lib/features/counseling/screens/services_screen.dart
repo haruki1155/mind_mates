@@ -3,91 +3,76 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../routes/route_names.dart';
 import 'pacc_counseling_screen.dart';
+import 'service_detail_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
   static const List<_ServiceItemData> _services = [
     _ServiceItemData(
-      title: 'Information Services',
-      subtitle: 'Educational content, resources, and mental health guidance',
+      title: 'Information Service',
+      summary:
+          'Guidance and information that help students adjust, feel secure, and belong in the school community.',
       description:
-          'Information Services provide students and staff with educational, occupational, and personal guidance. This includes mental health awareness materials, self-help resources, wellness tips, and access to evidence-based information about mental health conditions and treatments.',
+          'This service provides adequate and substantial information related to personal, psychological, social, educational, and vocational fields and benefits new students by helping them acquire the necessary knowledge about the new school, its rules and regulations. Accordingly, this helps students make adjustments and feel a sense of security and belongingness.',
       iconAsset: '📚.png',
       headerColor: Color(0xFFFFCE3C),
-      features: [
-        'Mental health awareness materials',
-        'Educational articles and resources',
-        'Self-help guides and coping strategies',
-      ],
     ),
     _ServiceItemData(
-      title: 'Individual Inventory Services',
-      subtitle: 'Collect and organize student data, abilities, and concerns',
+      title: 'Individual Inventory Service',
+      summary:
+          'Student records and personal information that support self-understanding, decisions, and placement.',
       description:
-          'Individual Inventory Services collect and organize data about students\' abilities, interests, and concerns. We maintain comprehensive profiles, track progress over time, and organize personal information to support tailored counseling interventions.',
+          'It involves the collection of reliable and intensive information and records of students to facilitate students\' understanding of their own self and help them use such information in decision-making and placement.',
       iconAsset: '📋.png',
       headerColor: Color(0xFFB9C1D3),
-      features: [
-        'Student profile management',
-        'Personal information collection',
-        'Interest and abilities assessment',
-      ],
     ),
     _ServiceItemData(
-      title: 'Counseling Services',
-      subtitle: 'Professional mental health support and guidance',
+      title: 'Testing Service',
+      summary:
+          'Psychological and non-psychometric assessment of abilities, aptitude, interests, and personality.',
       description:
-          'Counseling Services provide professional support for personal and mental health concerns. Students and staff can book appointments with licensed counselors, receive one-on-one support, and access crisis intervention when needed. All sessions are confidential and conducted by trained professionals.',
-      iconAsset: '👥.png',
+          'Using psychological tests and non-psychometric devices, this service is designed to secure accurate information about each student\'s abilities, aptitude, interest, and personality in order to assist students in gaining increasing self-knowledge and understanding of their capacity in as many aspects of their life and career as possible.',
+      iconAsset: '🧪.png',
       headerColor: Color(0xFFB9C1D3),
-      showInquire: true,
-      features: [
-        'One-on-one counseling sessions',
-        'Crisis intervention support',
-        'Appointment booking system',
-      ],
     ),
     _ServiceItemData(
-      title: 'Career Guidance and Placement Services',
-      subtitle: 'Assist students in making informed career decisions',
+      title: 'Counseling Service',
+      summary:
+          'Professional support for personal-social, educational, and psychological concerns.',
       description:
-          'Career Guidance and Placement Services help students make informed career choices and connect with opportunities. We provide career assessments, academic and career path guidance, employer connections, and professional development resources.',
-      iconAsset: '🎯.png',
+          'This service is considered as the "heart" of the guidance program. Through a dynamic relationship between students and a professionally trained counselor, it is designed to facilitate students in their personal-social, educational, and psychological issues to enhance their intrapersonal and interpersonal development and competencies.',
+      iconAsset: '👥.png',
       headerColor: Color(0xFFD9AEAA),
-      showInquire: true,
-      features: [
-        'Career interest assessments',
-        'Academic and career path guidance',
-        'Job placement and employer connections',
-      ],
+      showAppointmentCta: true,
     ),
     _ServiceItemData(
-      title: 'Referral Services',
-      subtitle: 'Connect individuals with external specialists',
+      title: 'Follow-up Service',
+      summary:
+          'Continued contact and evaluation after students receive guidance assistance.',
       description:
-          'Referral Services connect individuals with external specialists and partner organizations when additional expertise is needed. This includes referrals to psychiatrists, specialized therapists, and medical professionals.',
-      iconAsset: '🤝.png',
-      headerColor: Color(0xFF83B797),
-      features: [
-        'Psychiatric referrals (medication management)',
-        'Specialized therapy referrals',
-        'Medical professional connections',
-      ],
-    ),
-    _ServiceItemData(
-      title: 'Follow-up Services',
-      subtitle: 'Monitor student progress after interventions',
-      description:
-          'Follow-up Services monitor students’ progress after interventions, ensuring continued support and tracking improvements over time. This includes mood tracking, progress check-ins, reassessments, and adjustments to treatment plans as needed.',
+          'This service helps determine the status of students who received assistance and maintains contact with graduates. It also determines the adequacy and sufficiency of the programs and services extended in meeting the needs of its clientele.',
       iconAsset: '🎯-1.png',
       headerColor: Color(0xFFD9AEAA),
-      showInquire: true,
-      features: [
-        'Progress check-ins',
-        'Reassessments and treatment adjustments',
-        'Mood tracking and ongoing support',
-      ],
+      showReactivationCta: true,
+    ),
+    _ServiceItemData(
+      title: 'Career Guidance and Placement Service',
+      summary:
+          'Support in choosing appropriate educational, occupational, or employment paths.',
+      description:
+          'It offers facilitation of students\' movement to the appropriate educational or occupational level or program in pursuit of further education or other employment upon leaving the organization.',
+      iconAsset: '🎯.png',
+      headerColor: Color(0xFFD9AEAA),
+    ),
+    _ServiceItemData(
+      title: 'Referral Service',
+      summary:
+          'Appropriate action and support for referrals from students, families, faculty, and staff.',
+      description:
+          'It involves responding and providing appropriate actions to referrals made by parents, faculty, other personnel, and students.',
+      iconAsset: '🤝.png',
+      headerColor: Color(0xFF83B797),
     ),
   ];
 
@@ -121,14 +106,8 @@ class ServicesScreen extends StatelessWidget {
                       delay: 70 + (index * 45),
                       child: _ServiceCard(
                         service: _services[index],
-                        onLearnMore: () => _openBlankPage(
-                          context,
-                          '${_services[index].title} Details',
-                        ),
-                        onInquire: () => _openBlankPage(
-                          context,
-                          'Inquire - ${_services[index].title}',
-                        ),
+                        onTap: () =>
+                            _openServiceDetails(context, _services[index]),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -143,6 +122,24 @@ class ServicesScreen extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  static void _openServiceDetails(
+    BuildContext context,
+    _ServiceItemData service,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ServiceDetailScreen(
+          title: service.title,
+          description: service.description,
+          iconAsset: service.iconAsset,
+          headerColor: service.headerColor,
+          showAppointmentCta: service.showAppointmentCta,
+          showReactivationCta: service.showReactivationCta,
         ),
       ),
     );
@@ -268,7 +265,7 @@ class _ServicesIntroCard extends StatelessWidget {
                 ),
                 SizedBox(height: 14),
                 Text(
-                  'Comprehensive mental health support services for the UCU community',
+                  'Explore the guidance services available to the UCU community.',
                   style: _ServicesText.introBody,
                 ),
               ],
@@ -281,102 +278,50 @@ class _ServicesIntroCard extends StatelessWidget {
 }
 
 class _ServiceCard extends StatelessWidget {
-  const _ServiceCard({
-    required this.service,
-    required this.onLearnMore,
-    required this.onInquire,
-  });
+  const _ServiceCard({required this.service, required this.onTap});
 
   final _ServiceItemData service;
-  final VoidCallback onLearnMore;
-  final VoidCallback onInquire;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: _ServicesDecor.card(radius: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 13),
-              color: service.headerColor,
-              child: Row(
-                children: [
-                  _ServicesAssetImage(
-                    assetName: service.iconAsset,
-                    width: 30,
-                    height: 30,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(service.title, style: _ServicesText.cardTitle),
-                        const SizedBox(height: 2),
-                        Text(
-                          service.subtitle,
-                          style: _ServicesText.cardSubtitle,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              color: _ServicesColors.cardBody,
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(service.description, style: _ServicesText.body),
-                  const SizedBox(height: 8),
-                  const Text('Key Features', style: _ServicesText.keyTitle),
-                  const SizedBox(height: 4),
-                  for (final feature in service.features)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('✓ ', style: _ServicesText.body),
-                          Expanded(
-                            child: Text(feature, style: _ServicesText.body),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: service.showInquire
-                        ? MainAxisAlignment.spaceBetween
-                        : MainAxisAlignment.center,
+    return Semantics(
+      button: true,
+      label: 'Open ${service.title} details',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            decoration: _ServicesDecor.card(
+              radius: 8,
+            ).copyWith(color: service.headerColor),
+            clipBehavior: Clip.antiAlias,
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(
+              children: [
+                _ServicesAssetImage(
+                  assetName: service.iconAsset,
+                  width: 30,
+                  height: 30,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ServiceActionButton(
-                        label: 'Learn More',
-                        icon: Icons.info_outline,
-                        isPrimary: false,
-                        onTap: onLearnMore,
-                      ),
-                      if (service.showInquire)
-                        _ServiceActionButton(
-                          label: 'Inquire',
-                          icon: Icons.chevron_right,
-                          isPrimary: true,
-                          onTap: onInquire,
-                        ),
+                      Text(service.title, style: _ServicesText.cardTitle),
+                      const SizedBox(height: 4),
+                      Text(service.summary, style: _ServicesText.cardSubtitle),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, color: Colors.black87),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -390,136 +335,54 @@ class _SupportServicesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Positioned(top: 22, right: -28, child: _SupportBubble(size: 54)),
-        const Positioned(
-          bottom: -25,
-          left: -30,
-          child: _SupportBubble(size: 44),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'PACC support services',
-              style: _ServicesText.supportTitle,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 26),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: _ServicesColors.sun, width: 1.5),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
+        const Text('PACC support services', style: _ServicesText.supportTitle),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 26),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: _ServicesColors.sun, width: 1.5),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            children: [
+              const Row(
                 children: [
-                  const Row(
-                    children: [
-                      _ServicesAssetImage(
-                        assetName: 'Yellow Heart.png',
-                        width: 42,
-                        height: 32,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Need Immediate Help?',
-                          style: _ServicesText.helpTitle,
-                        ),
-                      ),
-                    ],
+                  _ServicesAssetImage(
+                    assetName: 'Yellow Heart.png',
+                    width: 42,
+                    height: 32,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'PACC counselors are available to support you. Contact us for appointments or urgent assistance.',
-                    style: _ServicesText.helpBody,
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _RoundedYellowButton(
-                      label: 'Contact counselor',
-                      onTap: onContact,
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Need Immediate Help?',
+                      style: _ServicesText.helpTitle,
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _SupportBubble extends StatelessWidget {
-  const _SupportBubble({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Color(0xFFFFF4D8),
-      ),
-    );
-  }
-}
-
-class _ServiceActionButton extends StatelessWidget {
-  const _ServiceActionButton({
-    required this.label,
-    required this.icon,
-    required this.isPrimary,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool isPrimary;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: isPrimary ? _ServicesColors.sun : const Color(0xFFE1E1E1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: _ServicesColors.sun, width: isPrimary ? 0 : 1),
-      ),
-      elevation: 4,
-      shadowColor: const Color(0x33000000),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: SizedBox(
-          width: 112,
-          height: 31,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (!isPrimary) Icon(icon, size: 12, color: Colors.black87),
-              if (!isPrimary) const SizedBox(width: 5),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(label, style: _ServicesText.button),
+              const SizedBox(height: 12),
+              const Text(
+                'You can request an appointment here. For urgent assistance, use a locally verified urgent-support service rather than relying on this booking workflow.',
+                style: _ServicesText.helpBody,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: _RoundedYellowButton(
+                  label: 'Contact counselor',
+                  onTap: onContact,
                 ),
               ),
-              if (isPrimary) const SizedBox(width: 8),
-              if (isPrimary) Icon(icon, size: 18, color: Colors.black87),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -536,7 +399,6 @@ class _RoundedYellowButton extends StatelessWidget {
       color: _ServicesColors.sun,
       borderRadius: BorderRadius.circular(20),
       elevation: 4,
-      shadowColor: const Color(0x33000000),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
@@ -573,13 +435,11 @@ class _ServicesAssetImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
-      errorBuilder: (_, _, _) {
-        return SizedBox(
-          width: width,
-          height: height,
-          child: const Icon(Icons.image_not_supported_outlined),
-        );
-      },
+      errorBuilder: (_, _, _) => SizedBox(
+        width: width,
+        height: height,
+        child: const Icon(Icons.image_not_supported_outlined),
+      ),
     );
   }
 }
@@ -596,15 +456,13 @@ class _AnimatedServicesSection extends StatelessWidget {
       tween: Tween<double>(begin: 0, end: 1),
       duration: Duration(milliseconds: 360 + delay),
       curve: Curves.easeOutCubic,
-      builder: (context, value, animatedChild) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 16),
-            child: animatedChild,
-          ),
-        );
-      },
+      builder: (context, value, animatedChild) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 16),
+          child: animatedChild,
+        ),
+      ),
       child: child,
     );
   }
@@ -633,21 +491,21 @@ class _BlankServicesPage extends StatelessWidget {
 class _ServiceItemData {
   const _ServiceItemData({
     required this.title,
-    required this.subtitle,
+    required this.summary,
     required this.description,
     required this.iconAsset,
     required this.headerColor,
-    required this.features,
-    this.showInquire = false,
+    this.showAppointmentCta = false,
+    this.showReactivationCta = false,
   });
 
   final String title;
-  final String subtitle;
+  final String summary;
   final String description;
   final String iconAsset;
   final Color headerColor;
-  final List<String> features;
-  final bool showInquire;
+  final bool showAppointmentCta;
+  final bool showReactivationCta;
 }
 
 class _ServicesColors {
@@ -655,8 +513,6 @@ class _ServicesColors {
 
   static const background = Colors.white;
   static const sun = Color(0xFFFFCD3A);
-  static const cardBody = Color(0xFFE8E4E4);
-  static const text = Color(0xFF17120D);
 }
 
 class _ServicesText {
@@ -667,77 +523,49 @@ class _ServicesText {
     fontSize: 20,
     fontWeight: FontWeight.w900,
   );
-
   static const introTitle = TextStyle(
     color: _ServicesColors.sun,
     fontSize: 20,
     fontWeight: FontWeight.w900,
   );
-
   static const introSubtitle = TextStyle(
     color: _ServicesColors.sun,
     fontSize: 12,
     fontWeight: FontWeight.w700,
   );
-
   static const introBody = TextStyle(
     color: _ServicesColors.sun,
     fontSize: 12,
     height: 1.3,
     fontWeight: FontWeight.w600,
   );
-
   static const cardTitle = TextStyle(
     color: Colors.black,
     fontSize: 13,
     fontWeight: FontWeight.w900,
   );
-
   static const cardSubtitle = TextStyle(
     color: Colors.black,
-    fontSize: 9,
-    height: 1.15,
-    fontWeight: FontWeight.w700,
+    fontSize: 11,
+    height: 1.25,
+    fontWeight: FontWeight.w600,
   );
-
-  static const body = TextStyle(
-    color: _ServicesColors.text,
-    fontSize: 12,
-    height: 1.28,
-    fontWeight: FontWeight.w500,
-  );
-
-  static const keyTitle = TextStyle(
-    color: _ServicesColors.text,
-    fontSize: 12,
-    fontWeight: FontWeight.w900,
-  );
-
-  static const button = TextStyle(
-    color: Colors.black,
-    fontSize: 10,
-    fontWeight: FontWeight.w900,
-  );
-
   static const supportTitle = TextStyle(
     color: Colors.black,
     fontSize: 16,
     fontWeight: FontWeight.w900,
   );
-
   static const helpTitle = TextStyle(
     color: Colors.black,
     fontSize: 16,
     fontWeight: FontWeight.w900,
   );
-
   static const helpBody = TextStyle(
     color: Colors.black,
     fontSize: 16,
     height: 1.35,
     fontWeight: FontWeight.w500,
   );
-
   static const contactButton = TextStyle(
     color: Colors.white,
     fontSize: 12,

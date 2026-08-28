@@ -13,17 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter test test/app_bootstrap_test.dart
-      - name: Build admin web portal
-        run: flutter build web --release --target lib/admin_main.dart --dart-define=RECAPTCHA_V3_SITE_KEY=${{ secrets.RECAPTCHA_V3_SITE_KEY }}
+      - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MIND_MATES_CD2CF }}
-          projectId: mind-mates-cd2cf
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MINDMATE_DEV_4E91C }}
+          projectId: mindmate-dev-4e91c

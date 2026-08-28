@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../providers/assessment_provider.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/user_provider.dart';
 import '../../../repositories/assessment_repository.dart';
 import '../../../routes/route_names.dart';
 import '../models/quick_assessment_models.dart';
@@ -60,6 +59,136 @@ class QuickAssessmentCategoryScreen extends StatelessWidget {
   }
 }
 
+class _AssessmentFacts extends StatelessWidget {
+  const _AssessmentFacts();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: QuickAssessmentPalette.cream,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: QuickAssessmentPalette.softBorder),
+      ),
+      child: const Column(
+        children: [
+          _FactRow(
+            icon: Icons.format_list_numbered_rounded,
+            text: '40 core questions',
+          ),
+          SizedBox(height: 10),
+          _FactRow(
+            icon: Icons.call_split_rounded,
+            text: 'Some follow-up questions may appear',
+          ),
+          SizedBox(height: 10),
+          _FactRow(
+            icon: Icons.calendar_today_outlined,
+            text: 'Think about the past two weeks',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FactRow extends StatelessWidget {
+  const _FactRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 19, color: QuickAssessmentPalette.secondaryText),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: QuickAssessmentPalette.secondaryText,
+              fontSize: 13,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AgreementScale extends StatelessWidget {
+  const _AgreementScale();
+
+  static const labels = [
+    'Strongly Disagree',
+    'Disagree',
+    'Neutral',
+    'Agree',
+    'Strongly Agree',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Response scale',
+          style: TextStyle(
+            color: QuickAssessmentPalette.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final entry in labels.indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 7),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: QuickAssessmentPalette.optionFill,
+                    border: Border.all(
+                      color: QuickAssessmentPalette.softBorder,
+                    ),
+                  ),
+                  child: Text(
+                    '${entry.$1 + 1}',
+                    style: const TextStyle(
+                      color: QuickAssessmentPalette.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  entry.$2,
+                  style: const TextStyle(
+                    color: QuickAssessmentPalette.secondaryText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _DecisionContent extends StatelessWidget {
   const _DecisionContent({required this.provider, required this.role});
 
@@ -91,7 +220,7 @@ class _DecisionContent extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Full Assessment Optional',
+            'Full Wellness Assessment',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: QuickAssessmentPalette.text,
@@ -111,30 +240,30 @@ class _DecisionContent extends StatelessWidget {
               height: 1.42,
             ),
           ),
-          const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: QuickAssessmentPalette.cream,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: QuickAssessmentPalette.softBorder),
-            ),
-            child: Text(
-              'You can answer the full ${role.label.toLowerCase()} assessment now for deeper insights, or skip it and take it later from your dashboard.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: QuickAssessmentPalette.mutedText,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                height: 1.36,
+          if (provider.hasVerifiedQuickResult && provider.quickResult != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'Your quick check-in is complete: '
+                '${provider.quickResult!.overallLevel.label}. '
+                'This is an awareness signal, not a diagnosis.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: QuickAssessmentPalette.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  height: 1.36,
+                ),
               ),
             ),
-          ),
+          const SizedBox(height: 18),
+          const _AssessmentFacts(),
+          const SizedBox(height: 18),
+          const _AgreementScale(),
           const SizedBox(height: 26),
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 52,
             child: ElevatedButton(
               onPressed: () => _openFullAssessment(context),
               style: ElevatedButton.styleFrom(
@@ -156,7 +285,7 @@ class _DecisionContent extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            height: 44,
+            height: 48,
             child: TextButton(
               onPressed: () {
                 Navigator.of(
@@ -185,13 +314,18 @@ class _DecisionContent extends StatelessWidget {
     final name = provider.name.trim();
     final prefix = name.isEmpty ? 'Your' : '$name, your';
 
-    return '$prefix quick assessment is saved. Your ${role.label.toLowerCase()} answers will choose the right full assessment question set.';
+    return '$prefix quick assessment is saved. Continue for a more detailed ${role.label.toLowerCase()} assessment, or return later.';
   }
 
   Future<void> _openFullAssessment(BuildContext context) async {
-    final userId = _currentUserId(context);
+    final userId = await _currentUserId(context);
+    if (!context.mounted) return;
     if (userId == null || userId.isEmpty) {
-      Navigator.of(context).pushNamed(RouteNames.studentAssessment);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in before starting the full assessment.'),
+        ),
+      );
       return;
     }
 
@@ -210,11 +344,10 @@ class _DecisionContent extends StatelessWidget {
         ..showSnackBar(
           const SnackBar(
             content: Text(
-              'Unable to verify assessment limit. You can continue for now.',
+              'Unable to verify assessment eligibility. Please retry before continuing.',
             ),
           ),
         );
-      Navigator.of(context).pushNamed(RouteNames.studentAssessment);
       return;
     }
     if (!context.mounted) return;
@@ -227,17 +360,15 @@ class _DecisionContent extends StatelessWidget {
     Navigator.of(context).pushNamed(RouteNames.studentAssessment);
   }
 
-  String? _currentUserId(BuildContext context) {
+  Future<String?> _currentUserId(BuildContext context) async {
     try {
       final authProvider = context.read<AuthProvider>();
-      return authProvider.userId ?? authProvider.hydrateCurrentUser();
+      final liveUserId = await authProvider.resolveAuthenticatedUserId();
+      if (liveUserId != null && liveUserId.isNotEmpty) return liveUserId;
     } on ProviderNotFoundException {
-      try {
-        return context.read<UserProvider>().user?.id;
-      } on ProviderNotFoundException {
-        return null;
-      }
+      // Standalone previews do not provide a live authentication session.
     }
+    return null;
   }
 
   Future<void> _showAssessmentLimitDialog(

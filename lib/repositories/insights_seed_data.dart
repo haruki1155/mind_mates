@@ -133,7 +133,7 @@ const insightSeedContent = [
     'tags': ['stress', 'breathing', 'mindfulness'],
     'source': 'Mental Health Insights Categories.docx',
     'body':
-        'Stress can be reduced through physical activity, balanced meals, relaxation, enjoyable activities, trusted conversations, time management, sleep, journaling, and professional support when stress continues to affect school, work, or relationships.',
+        'Stress can be reduced through physical activity, balanced meals, relaxation, enjoyable activities, trusted conversations, time management, sleep, and professional support when stress continues to affect school, work, or relationships.',
   },
   {
     'id': 'understanding_anxiety',
@@ -303,7 +303,7 @@ const insightSeedContent = [
     'tags': ['anger', 'emotions', 'support'],
     'source': 'Mental Health Insights Categories.docx',
     'body':
-        'Anger is normal, but it should be expressed in healthy ways. Take deep breaths, pause before reacting, exercise, talk to someone trusted, or journal. Seek support if anger affects relationships, school, or daily life.',
+        'Anger is normal, but it should be expressed in healthy ways. Take deep breaths, pause before reacting, exercise, or talk to someone trusted. Seek support if anger affects relationships, school, or daily life.',
   },
   {
     'id': 'self_compassion',

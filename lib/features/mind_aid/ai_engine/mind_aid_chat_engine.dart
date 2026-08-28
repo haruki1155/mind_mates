@@ -2,6 +2,7 @@ import '../../../models/mind_aid_suggestion_model.dart';
 import '../domain/mind_aid_chat_models.dart';
 import '../domain/mind_aid_context.dart';
 import '../domain/mind_aid_dataset_models.dart';
+import '../domain/mind_aid_safety.dart';
 import 'mind_aid_dialogue_manager.dart';
 import 'mind_aid_knowledge_retriever.dart';
 import 'mind_aid_response_composer.dart';
@@ -23,7 +24,11 @@ class MindAidChatEngine {
   final MindAidDialogueManager _dialogueManager;
   final MindAidResponseComposer _responseComposer;
   final MindAidSafetyClassifier _safetyClassifier;
-  MindAidConversationState _state = const MindAidConversationState();
+  final Map<String, MindAidConversationState> _states = {};
+
+  void resetConversation({required String userId, String? conversationId}) {
+    _states.remove(_stateKey(userId, conversationId));
+  }
 
   Future<MindAidChatResponse> respond(
     MindAidChatRequest request,
@@ -33,7 +38,11 @@ class MindAidChatEngine {
     final requestState = MindAidConversationState.fromMessages(
       request.recentMessages,
     );
-    final state = _mergeState(_state, requestState);
+    final stateKey = _stateKey(request.userId, request.conversationId);
+    final state = _mergeState(
+      _states[stateKey] ?? const MindAidConversationState(),
+      requestState,
+    );
     final context = MindAidContext(
       recentMessages: request.recentMessages
           .map((message) => message.text)
@@ -44,7 +53,6 @@ class MindAidChatEngine {
       assessment: request.assessment,
       conversationSummary: request.conversationSummary,
       preferredSupportStyle: request.preferredSupportStyle,
-      journalText: request.journalText,
       wellnessSnapshot: request.wellnessSnapshot,
     );
 
@@ -62,6 +70,7 @@ class MindAidChatEngine {
       normalizedInput: normalizedInput,
       matches: matches,
       state: state,
+      safetyLevel: safety.level,
       activeFollowUpMatch: activeFollowUpMatch,
     );
     final responseText = await _responseComposer.compose(
@@ -74,7 +83,7 @@ class MindAidChatEngine {
       context: context,
       safetyLevel: safety.level,
     );
-    final severity = _highestSeverity(decision.matches);
+    final severity = _highestSeverity(decision.matches, safety.level);
     final followUps = _followUpsFor(decision, state);
     final nextState = state.updateFromResponse(
       matches: decision.matches,
@@ -82,7 +91,7 @@ class MindAidChatEngine {
       followUpQuestions: followUps,
       severity: severity,
     );
-    _state = nextState;
+    _states[stateKey] = nextState;
 
     return MindAidChatResponse(
       text: responseText,
@@ -91,15 +100,23 @@ class MindAidChatEngine {
       suggestions: _suggestionsFor(followUps, dataset, context, decision),
       followUpQuestions: followUps,
       recommendations: _recommendationsFor(decision.matches, dataset),
-      requiresEscalation:
-          decision.action == MindAidDialogueAction.escalate ||
-          decision.matches.any((match) => match.requiresEscalation),
+      requiresEscalation: decision.action == MindAidDialogueAction.escalate,
       conversationState: nextState,
       status: decision.action == MindAidDialogueAction.escalate
           ? 'urgent'
           : 'sent',
       safetyLevel: safety.level,
+      intentOverride: decision.matches.isEmpty && safety.level.blocksCloud
+          ? safety.level == MindAidSafetyLevel.crisisOrImmediateRisk
+                ? 'crisis_immediate_risk'
+                : 'high_distress'
+          : null,
     );
+  }
+
+  String _stateKey(String userId, String? conversationId) {
+    final conversation = conversationId?.trim();
+    return '${userId.trim()}:${conversation?.isNotEmpty == true ? conversation : 'default'}';
   }
 
   MindAidConversationState _mergeState(
@@ -126,7 +143,16 @@ class MindAidChatEngine {
     );
   }
 
-  MindAidSeverity _highestSeverity(List<MindAidIntentMatch> matches) {
+  MindAidSeverity _highestSeverity(
+    List<MindAidIntentMatch> matches,
+    MindAidSafetyLevel safetyLevel,
+  ) {
+    if (safetyLevel == MindAidSafetyLevel.crisisOrImmediateRisk) {
+      return MindAidSeverity.crisis;
+    }
+    if (safetyLevel == MindAidSafetyLevel.highDistress) {
+      return MindAidSeverity.high;
+    }
     if (matches.any(
       (match) => match.record.severity == MindAidSeverity.crisis,
     )) {

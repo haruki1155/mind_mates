@@ -9,7 +9,7 @@ void main() {
     expect(
       FirebaseErrorMessage.appCheckMessage(
         web: true,
-        webHost: 'mind-mates-cd2cf.web.app',
+        webHost: 'mindmate-dev-4e91c.web.app',
       ),
       contains('reCAPTCHA Enterprise'),
     );
@@ -43,6 +43,15 @@ void main() {
       ),
       allOf(contains('throttled'), contains('clear localhost site data')),
     );
+  });
+
+  test('maps Android App Check token throttling to recovery guidance', () {
+    final message = FirebaseErrorMessage.describe(
+      StateError('FirebaseException: Too many attempts.'),
+      fallback: 'fallback',
+    );
+
+    expect(message, contains('debug token'));
   });
   test('maps Firestore permission errors to an actionable message', () {
     final message = FirebaseErrorMessage.describe(
@@ -85,9 +94,27 @@ void main() {
     expect(
       FirebaseErrorMessage.describe(
         StateError('unknown'),
-        fallback: 'Unable to save journal.',
+        fallback: 'Unable to save this entry.',
       ),
-      'Unable to save journal.',
+      'Unable to save this entry.',
     );
+  });
+
+  test('shows an actionable assessment contract mismatch with reference', () {
+    final message = FirebaseErrorMessage.describe(
+      FirebaseFunctionsException(
+        code: 'failed-precondition',
+        message: 'Unsupported assessment contract.',
+        details: const {
+          'reason': 'assessment_contract_mismatch',
+          'correlationId': 'correlation-123',
+        },
+      ),
+      fallback: 'fallback',
+    );
+
+    expect(message, contains('Update MindMates'));
+    expect(message, contains('correlation-123'));
+    expect(message, isNot(contains('appointment')));
   });
 }

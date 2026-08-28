@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 import '../database/firestore_collections.dart';
 import '../features/sleep/models/sleep_models.dart';
 import '../features/sleep/services/sleep_local_store.dart';
+import '../features/sleep/services/sleep_cloud_service.dart';
 import '../services/firebase/firestore_service.dart';
 
 class SleepLoadResult {
@@ -20,11 +21,14 @@ class SleepRepository {
   SleepRepository({
     SleepLocalStore? localStore,
     FirestoreService? firestoreService,
+    SleepCloudService? cloudService,
   }) : _local = localStore ?? SleepLocalStore(),
-       _firestore = firestoreService ?? FirestoreService();
+       _firestore = firestoreService ?? FirestoreService(),
+       _cloud = cloudService ?? SleepCloudService();
 
   final SleepLocalStore _local;
   final FirestoreService _firestore;
+  final SleepCloudService _cloud;
 
   Future<SleepLoadResult> load(String userId) async {
     final consent = await _local.readConsent(userId);
@@ -32,7 +36,7 @@ class SleepRepository {
     var pending = (await _local.readPending(userId)).isNotEmpty;
     if (consent?.isCurrent == true && consent!.cloudEnabled) {
       try {
-        await _writeCloudPreference(userId);
+        await _cloud.setConsent();
         entries = await _mergeCloud(userId, entries);
         pending = false;
       } catch (_) {
@@ -56,7 +60,7 @@ class SleepRepository {
     await _local.writeConsent(userId, consent);
     if (choice == SleepConsentChoice.cloud) {
       try {
-        await _writeCloudPreference(userId);
+        await _cloud.setConsent();
         await _mergeCloud(userId, await _local.readEntries(userId));
       } catch (_) {
         // The local decision remains valid; refresh/retry completes cloud setup.
@@ -64,7 +68,7 @@ class SleepRepository {
     }
   }
 
-  Future<List<SleepEntry>> save(
+  Future<SleepSaveResult> save(
     SleepEntry entry, {
     required bool cloudEnabled,
   }) async {
@@ -75,21 +79,50 @@ class SleepRepository {
       contributors.remove('naps');
     }
     final normalized = entry.copyWith(contributorTags: contributors);
-    await _local.writeEntry(normalized);
+    var savedEntry = normalized;
+    try {
+      await _local.writeEntry(normalized);
+    } catch (_) {
+      return const SleepSaveResult(
+        status: SleepSaveStatus.localSaveFailed,
+        message:
+            'We could not save this entry on this device. Please try again.',
+      );
+    }
     if (cloudEnabled) {
       try {
-        await _writeCloud(normalized);
+        final canonical = await _cloud.save(normalized);
+        await _local.writeEntry(canonical);
+        savedEntry = canonical;
         final pending = await _local.readPending(entry.userId)
           ..remove('save:${entry.wakeDateKey}');
         await _local.writePending(entry.userId, pending);
+      } on SleepCloudConflict catch (error) {
+        await _local.writeEntry(normalized);
+        final pending = await _local.readPending(entry.userId)
+          ..remove('save:${entry.wakeDateKey}');
+        await _local.writePending(entry.userId, pending);
+        return SleepSaveResult(
+          status: SleepSaveStatus.conflict,
+          message:
+              'This entry changed on another device. Review the cloud version before replacing it.',
+          conflictingEntry: error.remoteEntry,
+        );
       } catch (_) {
         final pending = await _local.readPending(entry.userId)
           ..add('save:${entry.wakeDateKey}');
         await _local.writePending(entry.userId, pending);
-        rethrow;
+        return SleepSaveResult(
+          status: SleepSaveStatus.savedLocallySyncPending,
+          message: 'Saved on this device. Cloud sync is pending.',
+          savedEntry: savedEntry,
+        );
       }
     }
-    return _local.readEntries(entry.userId);
+    return SleepSaveResult(
+      status: SleepSaveStatus.savedLocallyAndSynced,
+      savedEntry: savedEntry,
+    );
   }
 
   Future<List<SleepEntry>> delete(
@@ -97,21 +130,22 @@ class SleepRepository {
     String wakeDateKey, {
     required bool cloudEnabled,
   }) async {
+    final existing = await _local.readEntries(userId);
+    final revision = existing
+        .where((entry) => entry.wakeDateKey == wakeDateKey)
+        .map((entry) => entry.revision)
+        .firstOrNull;
     await _local.deleteEntry(userId, wakeDateKey);
     if (cloudEnabled) {
       final pending = await _local.readPending(userId);
       Object? syncError;
       try {
-        await _firestore.deleteDocument(
-          FirestoreCollections.sleepEntries,
-          SleepEntry.documentId(
-            userId,
-            SleepEntry.dateFromWakeKey(wakeDateKey),
-          ),
+        await _cloud.delete(wakeDateKey, revision: revision ?? 0);
+        pending.removeWhere(
+          (value) => value.startsWith('delete:$wakeDateKey:'),
         );
-        pending.remove('delete:$wakeDateKey');
       } catch (_) {
-        pending.add('delete:$wakeDateKey');
+        pending.add('delete:$wakeDateKey:${revision ?? 0}');
         syncError = StateError('Sleep deletion is pending cloud sync.');
       }
       await _local.writePending(userId, pending);
@@ -121,16 +155,12 @@ class SleepRepository {
   }
 
   Future<void> deleteAll(String userId, {required bool cloudEnabled}) async {
-    if (cloudEnabled) await _deleteCloudEntries(userId);
+    if (cloudEnabled) await _cloud.deleteAll();
     await _local.clearEntries(userId);
   }
 
   Future<void> revokeCloud(String userId) async {
-    await _deleteCloudEntries(userId);
-    await _firestore.deleteDocument(
-      FirestoreCollections.sleepPreferences,
-      userId,
-    );
+    await _cloud.revoke();
     await _local.writeConsent(
       userId,
       SleepConsent(
@@ -143,31 +173,57 @@ class SleepRepository {
   }
 
   Future<List<SleepEntry>> retrySync(String userId) async {
-    await _writeCloudPreference(userId);
+    await _cloud.setConsent();
     return _mergeCloud(userId, await _local.readEntries(userId));
   }
+
+  Future<List<SleepEntry>> keepCloudVersion(SleepEntry entry) async {
+    await _local.writeEntry(entry);
+    return _local.readEntries(entry.userId);
+  }
+
+  Future<SleepShareGrant> createCounselorShare(int summaryWindowDays) =>
+      _cloud.createShare(summaryWindowDays);
+
+  Future<List<SleepShareGrant>> loadCounselorShares(String userId) async {
+    final docs = await _firestore.getDocuments(
+      FirestoreCollections.sleepSharedSummaries,
+      whereEquals: {'ownerId': userId},
+      orderBy: 'generatedAt',
+    );
+    return docs
+        .map((doc) => SleepShareGrant.fromJson(doc))
+        .toList(growable: false);
+  }
+
+  Future<void> revokeCounselorShare(String shareId) =>
+      _cloud.revokeShare(shareId);
 
   Future<List<SleepEntry>> _mergeCloud(
     String userId,
     List<SleepEntry> localEntries,
   ) async {
     final existingPending = await _local.readPending(userId);
-    final deleteKeys = existingPending
+    final deletePairs = existingPending
         .where((value) => value.startsWith('delete:'))
-        .map((value) => value.substring('delete:'.length))
-        .toSet();
+        .map((value) => value.substring('delete:'.length).split(':'))
+        .where((parts) => parts.length == 2)
+        .map((parts) => MapEntry(parts[0], int.tryParse(parts[1]) ?? 0));
+    final deleteOperations = <String, int>{
+      for (final pair in deletePairs) pair.key: pair.value,
+    };
+    final deleteKeys = deleteOperations.keys.toSet();
     final unresolvedDeletes = <String>{};
     for (final wakeDateKey in deleteKeys) {
       try {
-        await _firestore.deleteDocument(
-          FirestoreCollections.sleepEntries,
-          SleepEntry.documentId(
-            userId,
-            SleepEntry.dateFromWakeKey(wakeDateKey),
-          ),
+        await _cloud.delete(
+          wakeDateKey,
+          revision: deleteOperations[wakeDateKey] ?? 0,
         );
       } catch (_) {
-        unresolvedDeletes.add('delete:$wakeDateKey');
+        unresolvedDeletes.add(
+          'delete:$wakeDateKey:${deleteOperations[wakeDateKey] ?? 0}',
+        );
       }
     }
     final docs = await _firestore.getDocuments(
@@ -186,8 +242,7 @@ class SleepRepository {
     };
     for (final entry in cloud.values) {
       final local = merged[entry.wakeDateKey];
-      if (local == null ||
-          entry.clientUpdatedAt.isAfter(local.clientUpdatedAt)) {
+      if (local == null || entry.revision > local.revision) {
         merged[entry.wakeDateKey] = entry;
         await _local.writeEntry(entry);
       }
@@ -195,10 +250,11 @@ class SleepRepository {
     final pending = <String>{...unresolvedDeletes};
     for (final entry in merged.values) {
       final remote = cloud[entry.wakeDateKey];
-      if (remote == null ||
-          entry.clientUpdatedAt.isAfter(remote.clientUpdatedAt)) {
+      if (remote == null || entry.revision > remote.revision) {
         try {
-          await _writeCloud(entry);
+          final canonical = await _cloud.save(entry);
+          merged[entry.wakeDateKey] = canonical;
+          await _local.writeEntry(canonical);
         } catch (_) {
           pending.add('save:${entry.wakeDateKey}');
         }
@@ -211,70 +267,5 @@ class SleepRepository {
     final output = merged.values.toList()
       ..sort((a, b) => b.wakeDateKey.compareTo(a.wakeDateKey));
     return output;
-  }
-
-  Future<void> _writeCloud(SleepEntry entry) {
-    final data = entry.toJson()
-      ..remove('id')
-      ..update(
-        'attemptedSleepAt',
-        (_) => Timestamp.fromDate(
-          SleepEntry.manilaWallToInstant(entry.attemptedSleepAt),
-        ),
-      )
-      ..update(
-        'sleepOnsetAt',
-        (_) => Timestamp.fromDate(
-          SleepEntry.manilaWallToInstant(entry.sleepOnsetAt),
-        ),
-      )
-      ..update(
-        'finalWakeAt',
-        (_) => Timestamp.fromDate(
-          SleepEntry.manilaWallToInstant(entry.finalWakeAt),
-        ),
-      )
-      ..update(
-        'outOfBedAt',
-        (_) => Timestamp.fromDate(
-          SleepEntry.manilaWallToInstant(entry.outOfBedAt),
-        ),
-      )
-      ..update('createdAt', (_) => Timestamp.fromDate(entry.createdAt))
-      ..update(
-        'clientUpdatedAt',
-        (_) => Timestamp.fromDate(entry.clientUpdatedAt),
-      )
-      ..['updatedAt'] = FieldValue.serverTimestamp();
-    return _firestore.setDocument(
-      FirestoreCollections.sleepEntries,
-      entry.id,
-      data,
-    );
-  }
-
-  Future<void> _writeCloudPreference(String userId) {
-    return _firestore
-        .setDocument(FirestoreCollections.sleepPreferences, userId, {
-          'userId': userId,
-          'consentVersion': SleepConsent.currentVersion,
-          'cloudConsent': true,
-          'grantedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-  }
-
-  Future<void> _deleteCloudEntries(String userId) async {
-    final query = await _firestore.firestore
-        .collection(FirestoreCollections.sleepEntries)
-        .where('userId', isEqualTo: userId)
-        .get();
-    for (var offset = 0; offset < query.docs.length; offset += 450) {
-      final batch = _firestore.firestore.batch();
-      for (final doc in query.docs.skip(offset).take(450)) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-    }
   }
 }

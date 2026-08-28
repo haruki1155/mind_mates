@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../features/admin/screens/admin_status_dashboard_screen.dart';
 import '../features/authentication/screens/forgot_password_screen.dart';
+import '../features/authentication/screens/reset_password_screen.dart';
+import '../features/authentication/screens/recovery_email_screen.dart';
 import '../features/authentication/screens/login_screen.dart';
 import '../features/authentication/screens/signup_screen.dart';
+import '../features/authentication/screens/finish_account_setup_screen.dart';
+import '../features/authentication/screens/assessment_status_gate_screen.dart';
 import '../features/breathing/screens/mindful_breathing_screen.dart';
 import '../features/counseling/screens/services_screen.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/home/screens/home_appointment_calendar_screen.dart';
 import '../features/mood/screens/log_mood_screen.dart';
-import '../features/journal/screens/journal_screen.dart';
 import '../features/onboarding/screens/onboarding_screen.dart';
 import '../features/profile/screens/mental_health_insights_screen.dart';
 import '../features/profile/screens/mental_health_report_screen.dart';
@@ -35,7 +38,15 @@ class AppPages {
     RouteNames.onboarding: (_) => const OnboardingScreen(),
     RouteNames.login: (_) => const LoginScreen(),
     RouteNames.signup: (_) => const SignupScreen(),
+    RouteNames.finishAccountSetup: (_) => const FinishAccountSetupScreen(),
+    RouteNames.finishAccountSetupForm: (_) =>
+        const SignupScreen(recoveryMode: true),
     RouteNames.forgotPassword: (_) => const ForgotPasswordScreen(),
+    RouteNames.resetPassword: (_) => const ResetPasswordScreen(),
+    RouteNames.recoveryEmail: (_) => const RecoveryEmailScreen(),
+    RouteNames.verifyRecoveryEmail: (_) =>
+        const RecoveryEmailScreen(confirmLink: true),
+    RouteNames.assessmentStatus: (_) => const AssessmentStatusGateScreen(),
     RouteNames.quickAssessmentRole: (_) => const QuickAssessmentRoleScreen(),
     RouteNames.quickAssessmentName: (_) => const QuickAssessmentNameScreen(),
     RouteNames.quickAssessmentQuestions: (_) =>
@@ -57,7 +68,6 @@ class AppPages {
     RouteNames.mentalHealthReport: (_) => const MentalHealthReportScreen(),
     RouteNames.mentalHealthInsights: (_) => const MentalHealthInsightsScreen(),
     RouteNames.logMood: (_) => const LogMoodScreen(),
-    RouteNames.journal: (_) => const JournalScreen(),
     RouteNames.mindfulBreathing: (_) => const MindfulBreathingScreen(),
     RouteNames.sleepQuality: (_) => const SleepQualityScreen(),
     RouteNames.adminStatus: (_) => const AdminStatusDashboardScreen(),

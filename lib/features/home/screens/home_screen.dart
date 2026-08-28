@@ -8,7 +8,6 @@ import '../../../providers/mood_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../repositories/assessment_repository.dart';
-import '../../../repositories/user_repository.dart';
 import '../../../routes/route_names.dart';
 import '../../quick_assessment/models/quick_assessment_models.dart';
 import '../../counseling/screens/pacc_counseling_screen.dart';
@@ -74,9 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _notifications.initializeForUser(userId).catchError((_) {});
-        _readProviderOrNull<UserProvider>(
-          context,
-        )?.recordActivity(userId, UserActivityType.appOpen);
+        _readProviderOrNull<UserProvider>(context)?.recordAppOpen(userId);
         _readProviderOrNull<MoodProvider>(context)?.loadRecentMoods(userId);
         final reportProvider = _readProviderOrNull<ReportProvider>(context);
         if (reportProvider == null) return;
@@ -155,12 +152,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: HomeWelcomeCard(
                           user: user,
                           streak: data.streak,
+                          currentMood: context.watch<MoodProvider>().todayMood,
                           onNotificationTap: _openNotifications,
                           onStreakTap: () => _openPlaceholder('Streak Details'),
                           onMoodTap: _openLogMood,
                           actionLabel:
                               (context.watch<MoodProvider>().hasCheckedInToday)
-                              ? 'View today’s mood'
+                              ? 'Already Logged'
                               : 'Log your mood',
                         ),
                       ),
@@ -298,9 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 null => 'Complete your profile for a tailored assessment',
               },
               description:
-                  user.verificationStatus == VerificationStatus.verified
-                  ? 'Your questions are personalized for your verified ${user.roleLabel.toLowerCase()} role.'
-                  : '${user.verificationStatus.label}. You can still use your declared role and all support services.',
+                  'Your questions are personalized for your ${user.roleLabel.toLowerCase()} role.',
               actionLabel: base.assessment.actionLabel,
               attemptsUsedThisMonth: base.assessment.attemptsUsedThisMonth,
               maxAttemptsPerMonth: base.assessment.maxAttemptsPerMonth,
@@ -316,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Start with one check-in today'
                   : 'Keep your wellness rhythm going',
               linkLabel: 'View',
-              lastActiveAt: user.lastActiveAt,
+              lastActiveAt: user.lastQualifyingActivityAt ?? user.lastActiveAt,
             ),
       days: activityDates.isEmpty
           ? base.days
@@ -541,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             content: const Text(
-              'This will open your role-based assessment questions. You can skip questions while answering.',
+              'This will open your role-based assessment questions. You may leave the assessment at any time; only answered questions are included in the result.',
               style: TextStyle(
                 color: HomePalette.blueText,
                 fontSize: 13,
@@ -603,7 +599,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _currentUserId() {
     try {
       final authProvider = context.read<AuthProvider>();
-      final authId = authProvider.userId ?? authProvider.hydrateCurrentUser();
+      final authId = authProvider.authenticatedUserId;
       if (authId != null && authId.isNotEmpty) return authId;
     } on ProviderNotFoundException {
       // Tests and previews may provide only UserProvider.
@@ -730,13 +726,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (title == 'Sleep Quality') {
       Navigator.of(context).pushNamed(RouteNames.sleepQuality);
-      return;
-    }
-
-    if (title == 'Quiet reflection' ||
-        title == 'Journal' ||
-        title == 'My Journal') {
-      Navigator.of(context).pushNamed(RouteNames.journal);
       return;
     }
 

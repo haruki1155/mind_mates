@@ -17,6 +17,7 @@ import {
   limit,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
   Timestamp,
   where,
@@ -199,6 +200,52 @@ test("post owners cannot bypass the trusted delete backend", async () => {
       doc(environment.authenticatedContext("other").firestore(), "secret_chats/post_1"),
     ),
   );
+});
+
+test("authenticated comments persist only on active posts with the caller as author", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "secret_chats/post_1"), {
+      authorId: "owner",
+      message: "I feel stressed and need support.",
+      category: "Stress",
+      categories: ["Stress"],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      likeCount: 0,
+      commentCount: 0,
+      readCount: 0,
+      moderationStatus: "active",
+      safetyLabels: ["stress"],
+      isAnonymous: true,
+    });
+  });
+
+  const commenterDb = environment.authenticatedContext("commenter").firestore();
+  const commentRef = doc(commenterDb, "secret_chat_comments/comment_1");
+  const validComment = {
+    postId: "post_1",
+    authorId: "commenter",
+    message: "Thank you for sharing this.",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    moderationStatus: "active",
+    safetyLabels: [],
+    isAnonymous: true,
+  };
+
+  await assertSucceeds(setDoc(commentRef, validComment));
+  const saved = await assertSucceeds(getDoc(commentRef));
+  if (!saved.exists() || saved.data()?.message !== validComment.message) {
+    throw new Error("The accepted Secret Chat comment was not persisted.");
+  }
+  await assertFails(setDoc(
+    doc(commenterDb, "secret_chat_comments/forged_author"),
+    {...validComment, authorId: "owner"},
+  ));
+  await assertFails(setDoc(
+    doc(commenterDb, "secret_chat_comments/missing_post"),
+    {...validComment, postId: "missing"},
+  ));
 });
 
 test("Storage accepts only owned valid profile images", async () => {

@@ -193,7 +193,7 @@ class _LogMoodScreenState extends State<LogMoodScreen>
     setState(() => _isSaving = true);
     final referenceNow = _now;
 
-    final success = await moodProvider.logDailyMood(
+    final saveResult = await moodProvider.logDailyMood(
       userId: userId,
       level: mood.level,
       label: mood.label,
@@ -203,7 +203,7 @@ class _LogMoodScreenState extends State<LogMoodScreen>
 
     if (!mounted) return;
 
-    if (!success) {
+    if (saveResult == null) {
       setState(() => _isSaving = false);
       _showSnack('Unable to save mood.');
       return;
@@ -228,7 +228,9 @@ class _LogMoodScreenState extends State<LogMoodScreen>
       _todayError = null;
     });
     _showSnack(
-      reportRefreshed
+      !saveResult.created
+          ? 'You already logged your mood today.'
+          : reportRefreshed
           ? 'Mood check-in saved.'
           : 'Mood saved. Summary will update later.',
     );
@@ -255,12 +257,15 @@ class _LogMoodScreenState extends State<LogMoodScreen>
 
   String? _currentUserId() {
     final authProvider = _readProviderOrNull<AuthProvider>();
-    final authUserId =
-        authProvider?.userId ?? authProvider?.hydrateCurrentUser();
+    final authUserId = authProvider?.authenticatedUserId;
     if (authUserId != null && authUserId.isNotEmpty) return authUserId;
 
-    final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
-    if (profileUserId != null && profileUserId.isNotEmpty) return profileUserId;
+    if (authProvider == null) {
+      final profileUserId = _readProviderOrNull<UserProvider>()?.user?.id;
+      if (profileUserId != null && profileUserId.isNotEmpty) {
+        return profileUserId;
+      }
+    }
 
     return null;
   }

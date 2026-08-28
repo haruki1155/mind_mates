@@ -6,6 +6,7 @@ class MoodModel {
     required this.level,
     required this.createdAt,
     this.userId,
+    this.moodKey,
     this.label,
     this.note,
     this.dateKey,
@@ -16,6 +17,7 @@ class MoodModel {
   final int level;
   final DateTime createdAt;
   final String? userId;
+  final String? moodKey;
   final String? label;
   final String? note;
   final String? dateKey;
@@ -25,6 +27,7 @@ class MoodModel {
     return MoodModel(
       id: (json['id'] ?? id ?? '').toString(),
       userId: json['userId']?.toString(),
+      moodKey: json['moodKey']?.toString(),
       level: intFromFirestore(json['level']),
       label: json['label']?.toString(),
       note: json['note']?.toString(),
@@ -37,6 +40,7 @@ class MoodModel {
   Map<String, dynamic> toJson({String? userId}) {
     return {
       'userId': userId ?? this.userId,
+      'moodKey': moodKey ?? '',
       'level': level,
       'label': label ?? '',
       'note': note ?? '',

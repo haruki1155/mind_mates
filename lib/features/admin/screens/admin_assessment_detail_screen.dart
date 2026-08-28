@@ -84,6 +84,13 @@ class _AssessmentCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
+              'Verification: ${assessment['verificationStatus'] ?? 'legacy_unverified'} · '
+              'Algorithm: ${assessment['serverAlgorithmVersion'] ?? assessment['algorithmVersion'] ?? 'unavailable'} · '
+              'Question set: ${assessment['serverQuestionSetVersion'] ?? assessment['questionSetVersion'] ?? 'unavailable'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
               interpretation['supportPriorityLabel']?.toString() ??
                   interpretation['supportPriority']?.toString() ??
                   'Assessment interpretation',
@@ -91,6 +98,14 @@ class _AssessmentCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(interpretation['counselorSummary']?.toString() ?? ''),
+            const SizedBox(height: 12),
+            if ((interpretation['priorityRationale']?.toString() ?? '')
+                .trim()
+                .isNotEmpty)
+              Text(
+                'Support guidance rationale: ${interpretation['priorityRationale']}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             const SizedBox(height: 12),
             Text(
               'Response confidence: '

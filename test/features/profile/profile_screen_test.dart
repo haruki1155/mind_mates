@@ -46,6 +46,37 @@ void main() {
     expect(find.text('--/10'), findsNWidgets(2));
   });
 
+  testWidgets('edit profile shows the immutable signup role without review', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = _FakeUserRepository();
+    final user = UserModel.fromJson({
+      'id': 'user_1',
+      'email': 'leo@example.com',
+      'firstName': 'Leonardo',
+      'lastName': 'Molar',
+      'schoolId': '2026-001',
+      'department': 'CITE',
+      'populationRole': 'student',
+      'declaredRole': 'student',
+      'verificationStatus': 'pending',
+    });
+    final provider = UserProvider(repository)..setUser(user);
+
+    await tester.pumpWidget(_profileApp(provider, data: _dataFrom(user)));
+    await tester.tap(find.byTooltip('Edit profile'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Institutional role'), findsOneWidget);
+    expect(find.text('Student'), findsWidgets);
+    expect(find.textContaining('Pending verification'), findsNothing);
+    expect(find.textContaining('Verified'), findsNothing);
+    expect(find.text('Request role correction'), findsNothing);
+  });
+
   testWidgets('mental health summary buttons and routes are ready', (
     tester,
   ) async {

@@ -5,7 +5,7 @@ import {
   mapLegacyPopulationRole,
   resolveProjectId,
 } from "./backfill_profiles";
-import {canAccessClinicalData, canManageAccess, canReviewVerification} from "./index";
+import {canAccessClinicalData, canManageAccess} from "./index";
 
 test("migration maps every supported legacy population spelling", () => {
   assert.equal(mapLegacyPopulationRole("student"), "student");
@@ -17,12 +17,10 @@ test("migration maps every supported legacy population spelling", () => {
 });
 
 test("migration resolves the repository Firebase project", () => {
-  assert.equal(resolveProjectId(), "mind-mates-cd2cf");
+  assert.equal(resolveProjectId(), "mindmate-dev-4e91c");
 });
 
 test("least-privilege access policy separates every portal role", () => {
-  assert.equal(canReviewVerification("appUser"), false);
-  assert.equal(canReviewVerification("portalStaff"), true);
   assert.equal(canAccessClinicalData("portalStaff"), false);
   assert.equal(canAccessClinicalData("counselor"), true);
   assert.equal(canManageAccess("counselor"), false);

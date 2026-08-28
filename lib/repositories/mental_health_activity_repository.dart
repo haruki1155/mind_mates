@@ -249,8 +249,6 @@ class MentalHealthActivityRepository {
         return 'Completed quick assessment';
       case 'fullAssessment':
         return 'Completed full assessment';
-      case 'journalEntry':
-        return 'Added journal entry';
       default:
         return 'Recorded activity';
     }

@@ -6,6 +6,7 @@ import '../features/quick_assessment/models/quick_assessment_models.dart';
 import '../services/auth/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
 import '../services/firebase/firebase_app_check_service.dart';
+import '../services/firebase/firebase_callable_router.dart';
 import '../services/firebase/firebase_runtime_diagnostics.dart';
 
 class AuthRepository {
@@ -223,7 +224,7 @@ class AuthRepository {
     await FirebaseAppCheckService.refreshToken();
     await FirebaseAppCheckService.requireToken();
     final response = await FirebaseFunctions.instanceFor(region: 'us-central1')
-        .httpsCallable('provisionAppUserProfile')
+        .routedCallable('provisionAppUserProfile')
         .call({
           'firstName': firstName.trim(),
           'middleName': middleName?.trim() ?? '',

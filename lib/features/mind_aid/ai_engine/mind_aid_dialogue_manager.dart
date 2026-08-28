@@ -1,6 +1,8 @@
 import '../domain/mind_aid_chat_models.dart';
+import '../domain/mind_aid_safety.dart';
+import 'mind_aid_small_talk.dart';
 
-enum MindAidDialogueAction { answer, clarify, followUp, escalate }
+enum MindAidDialogueAction { answer, clarify, followUp, smallTalk, escalate }
 
 class MindAidDialogueDecision {
   const MindAidDialogueDecision({
@@ -21,19 +23,31 @@ class MindAidDialogueManager {
     required String normalizedInput,
     required List<MindAidIntentMatch> matches,
     required MindAidConversationState state,
+    required MindAidSafetyLevel safetyLevel,
     MindAidIntentMatch? activeFollowUpMatch,
   }) {
-    final escalationMatches = matches
-        .where((match) {
-          return match.requiresEscalation ||
-              match.record.severity.name == 'high';
-        })
-        .toList(growable: false);
-    if (escalationMatches.isNotEmpty) {
+    if (safetyLevel.blocksCloud) {
       return MindAidDialogueDecision(
         action: MindAidDialogueAction.escalate,
-        matches: [escalationMatches.first],
+        matches: matches
+            .where(
+              (match) =>
+                  match.requiresEscalation ||
+                  match.record.severity.name == 'high' ||
+                  match.record.severity.name == 'crisis',
+            )
+            .take(1)
+            .toList(growable: false),
         reason: 'safety_override',
+      );
+    }
+
+    final smallTalk = MindAidSmallTalk.classify(normalizedInput);
+    if (smallTalk != null) {
+      return MindAidDialogueDecision(
+        action: MindAidDialogueAction.smallTalk,
+        matches: const [],
+        reason: smallTalk.name,
       );
     }
 

@@ -1,4 +1,5 @@
 import '../models/student_assessment_models.dart';
+import '../config/assessment_policy.dart';
 import 'assessment_interpretation_engine.dart';
 
 enum AssessmentUserType { student, faculty, staff }
@@ -6,8 +7,9 @@ enum AssessmentUserType { student, faculty, staff }
 class StudentAssessmentCalculator {
   const StudentAssessmentCalculator._();
 
-  static const double minimumDomainCompletion = 0.70;
-  static const int minimumDomainAnswers = 3;
+  static const double minimumDomainCompletion =
+      AssessmentPolicy.minimumDomainCompletion;
+  static const int minimumDomainAnswers = AssessmentPolicy.minimumDomainAnswers;
 
   static double riskScore({
     required LikertAnswer answer,
@@ -39,8 +41,8 @@ class StudentAssessmentCalculator {
               question.direction == AssessmentDirection.risk,
         )
         .toList();
-    var alwaysCount = 0;
-    var oftenOrAlwaysCount = 0;
+    var stronglyAgreeCount = 0;
+    var agreeOrStronglyAgreeCount = 0;
     final coreScores = <double>[];
 
     // A corrected answer may be represented more than once by callers that
@@ -56,19 +58,20 @@ class StudentAssessmentCalculator {
           .where((question) => question.id == answer.questionId)
           .firstOrNull;
       if (question == null) continue;
-      if (answer.answer == LikertAnswer.always) alwaysCount++;
-      if (answer.answer == LikertAnswer.often ||
-          answer.answer == LikertAnswer.always) {
-        oftenOrAlwaysCount++;
+      if (answer.answer == LikertAnswer.stronglyAgree) stronglyAgreeCount++;
+      if (answer.answer == LikertAnswer.agree ||
+          answer.answer == LikertAnswer.stronglyAgree) {
+        agreeOrStronglyAgreeCount++;
       }
       coreScores.add(
         riskScore(answer: answer.answer, direction: question.direction),
       );
     }
 
-    return alwaysCount >= 1 ||
-        oftenOrAlwaysCount >= 2 ||
-        _average(coreScores) >= 50;
+    return stronglyAgreeCount >= AssessmentPolicy.deeperStronglyAgreeCount ||
+        agreeOrStronglyAgreeCount >=
+            AssessmentPolicy.deeperAgreeOrStronglyAgreeCount ||
+        _average(coreScores) >= AssessmentPolicy.deeperAverageScore;
   }
 
   static StudentAssessmentResult calculate({
@@ -122,7 +125,7 @@ class StudentAssessmentCalculator {
       overallScore: overallScore,
       status: status,
       subscaleScores: domainScores,
-      mainConcernAreas: getMainConcernAreas(domainScores),
+      mainConcernAreas: getMainConcernAreas(domainScores, weights: weights),
       message: overallScore == null
           ? 'Some wellness categories did not have enough responses for a dependable summary. Review the category results that are available.'
           : getMessage(status),
@@ -133,10 +136,14 @@ class StudentAssessmentCalculator {
   }
 
   static String getStatus(double score) {
-    if (score <= 20) return 'Low Concern';
-    if (score <= 40) return 'Watchful';
-    if (score <= 60) return 'Moderate Concern';
-    if (score <= 80) return 'Elevated Concern';
+    if (score <= AssessmentPolicy.lowConcernMaximum) return 'Low Concern';
+    if (score <= AssessmentPolicy.watchfulMaximum) return 'Watchful';
+    if (score <= AssessmentPolicy.moderateConcernMaximum) {
+      return 'Moderate Concern';
+    }
+    if (score <= AssessmentPolicy.elevatedConcernMaximum) {
+      return 'Elevated Concern';
+    }
     return 'High Concern';
   }
 
@@ -154,11 +161,25 @@ class StudentAssessmentCalculator {
     _ => 'Your category results are ready to review.',
   };
 
-  static List<String> getMainConcernAreas(Map<String, double> scores) => scores
-      .entries
-      .where((entry) => entry.value > 60)
-      .map((entry) => entry.key)
-      .toList();
+  static List<String> getMainConcernAreas(
+    Map<String, double> scores, {
+    Map<String, double> weights = const {},
+  }) {
+    final ranked =
+        scores.entries
+            .where((entry) => entry.value > AssessmentPolicy.mainConcernScore)
+            .toList()
+          ..sort((left, right) {
+            final scoreOrder = right.value.compareTo(left.value);
+            if (scoreOrder != 0) return scoreOrder;
+            final weightOrder = (weights[right.key] ?? 0).compareTo(
+              weights[left.key] ?? 0,
+            );
+            if (weightOrder != 0) return weightOrder;
+            return left.key.compareTo(right.key);
+          });
+    return ranked.map((entry) => entry.key).toList(growable: false);
+  }
 
   static _DomainScore _scoreDomain({
     required List<StudentAssessmentQuestion> questions,
@@ -196,8 +217,7 @@ class StudentAssessmentCalculator {
 
   static double _round(double value) => double.parse(value.toStringAsFixed(2));
 
-  static const _pilotDisclaimer =
-      'This is an experimental university wellness-awareness screener, not a formally validated instrument or a diagnosis. It is designed to support reflection and conversation, not replace professional judgment. If you feel unsafe or need immediate help, contact your university support office, a trusted person, or a qualified mental health professional.';
+  static const _pilotDisclaimer = AssessmentPolicy.disclosure;
 }
 
 class _DomainScore {
@@ -225,7 +245,7 @@ class _RoleConfig {
   final List<_DomainConfig> domains;
 
   static _RoleConfig forType(AssessmentUserType type) => switch (type) {
-    AssessmentUserType.student => const _RoleConfig('Student', [
+    AssessmentUserType.student => _RoleConfig('Student', [
       _DomainConfig(
         label: 'Academic Stress',
         scoredSections: {AssessmentSection.academicCore},
@@ -233,34 +253,34 @@ class _RoleConfig {
           AssessmentSection.academicCore,
           AssessmentSection.academicDeeper,
         },
-        weight: .25,
+        weight: AssessmentPolicy.weight('student', 'Academic Stress'),
       ),
       _DomainConfig(
         label: 'Financial Well-Being',
         scoredSections: {AssessmentSection.financialConcern},
         allSections: {AssessmentSection.financialConcern},
-        weight: .15,
+        weight: AssessmentPolicy.weight('student', 'Financial Well-Being'),
       ),
       _DomainConfig(
         label: 'Social Adjustment',
         scoredSections: {AssessmentSection.socialAdjustment},
         allSections: {AssessmentSection.socialAdjustment},
-        weight: .10,
+        weight: AssessmentPolicy.weight('student', 'Social Adjustment'),
       ),
       _DomainConfig(
         label: 'Sleep and Rest',
         scoredSections: {AssessmentSection.sleepRest},
         allSections: {AssessmentSection.sleepRest},
-        weight: .20,
+        weight: AssessmentPolicy.weight('student', 'Sleep and Rest'),
       ),
       _DomainConfig(
         label: 'Emotional Well-Being',
         scoredSections: {AssessmentSection.emotionalWellBeing},
         allSections: {AssessmentSection.emotionalWellBeing},
-        weight: .30,
+        weight: AssessmentPolicy.weight('student', 'Emotional Well-Being'),
       ),
     ]),
-    AssessmentUserType.faculty => const _RoleConfig('Teaching Personnel', [
+    AssessmentUserType.faculty => _RoleConfig('Teaching Personnel', [
       _DomainConfig(
         label: 'Workplace Stress',
         scoredSections: {AssessmentSection.workplaceStressCore},
@@ -268,34 +288,34 @@ class _RoleConfig {
           AssessmentSection.workplaceStressCore,
           AssessmentSection.workplaceStressDeeper,
         },
-        weight: .30,
+        weight: AssessmentPolicy.weight('faculty', 'Workplace Stress'),
       ),
       _DomainConfig(
         label: 'Professional Support',
         scoredSections: {AssessmentSection.professionalSupport},
         allSections: {AssessmentSection.professionalSupport},
-        weight: .15,
+        weight: AssessmentPolicy.weight('faculty', 'Professional Support'),
       ),
       _DomainConfig(
         label: 'Professional Well-Being',
         scoredSections: {AssessmentSection.professionalWellBeing},
         allSections: {AssessmentSection.professionalWellBeing},
-        weight: .15,
+        weight: AssessmentPolicy.weight('faculty', 'Professional Well-Being'),
       ),
       _DomainConfig(
         label: 'Sleep and Rest',
         scoredSections: {AssessmentSection.sleepRest},
         allSections: {AssessmentSection.sleepRest},
-        weight: .15,
+        weight: AssessmentPolicy.weight('faculty', 'Sleep and Rest'),
       ),
       _DomainConfig(
         label: 'Emotional Well-Being',
         scoredSections: {AssessmentSection.emotionalWellBeing},
         allSections: {AssessmentSection.emotionalWellBeing},
-        weight: .25,
+        weight: AssessmentPolicy.weight('faculty', 'Emotional Well-Being'),
       ),
     ]),
-    AssessmentUserType.staff => const _RoleConfig('Non-Teaching Personnel', [
+    AssessmentUserType.staff => _RoleConfig('Non-Teaching Personnel', [
       _DomainConfig(
         label: 'Workplace Responsibilities',
         scoredSections: {AssessmentSection.workplaceResponsibilityCore},
@@ -303,31 +323,31 @@ class _RoleConfig {
           AssessmentSection.workplaceResponsibilityCore,
           AssessmentSection.workplaceResponsibilityDeeper,
         },
-        weight: .30,
+        weight: AssessmentPolicy.weight('staff', 'Workplace Responsibilities'),
       ),
       _DomainConfig(
         label: 'Workplace Support',
         scoredSections: {AssessmentSection.workplaceSupport},
         allSections: {AssessmentSection.workplaceSupport},
-        weight: .15,
+        weight: AssessmentPolicy.weight('staff', 'Workplace Support'),
       ),
       _DomainConfig(
         label: 'Workplace Well-Being',
         scoredSections: {AssessmentSection.workplaceWellBeing},
         allSections: {AssessmentSection.workplaceWellBeing},
-        weight: .15,
+        weight: AssessmentPolicy.weight('staff', 'Workplace Well-Being'),
       ),
       _DomainConfig(
         label: 'Sleep and Rest',
         scoredSections: {AssessmentSection.sleepRest},
         allSections: {AssessmentSection.sleepRest},
-        weight: .15,
+        weight: AssessmentPolicy.weight('staff', 'Sleep and Rest'),
       ),
       _DomainConfig(
         label: 'Emotional Well-Being',
         scoredSections: {AssessmentSection.emotionalWellBeing},
         allSections: {AssessmentSection.emotionalWellBeing},
-        weight: .25,
+        weight: AssessmentPolicy.weight('staff', 'Emotional Well-Being'),
       ),
     ]),
   };

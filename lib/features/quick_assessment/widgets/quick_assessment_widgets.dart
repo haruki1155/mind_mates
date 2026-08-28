@@ -129,55 +129,62 @@ class QuickProgressHeader extends StatelessWidget {
     super.key,
     required this.step,
     required this.label,
+    this.total = 5,
   });
 
   final int step;
   final String label;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
-    final fill = step.clamp(1, 6) / 6;
+    final safeTotal = total < 1 ? 1 : total;
+    final fill = step.clamp(0, safeTotal) / safeTotal;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(26, 20, 20, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 6,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: QuickAssessmentPalette.softBorder,
-                  width: 0.8,
+    return Semantics(
+      label: label,
+      value: '${(fill * 100).round()} percent',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(26, 20, 20, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: QuickAssessmentPalette.softBorder,
+                    width: 0.8,
+                  ),
                 ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedFractionallySizedBox(
-                    duration: const Duration(milliseconds: 260),
-                    curve: Curves.easeOutCubic,
-                    widthFactor: fill,
-                    heightFactor: 1,
-                    child: Container(color: QuickAssessmentPalette.primary),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: AnimatedFractionallySizedBox(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      widthFactor: fill,
+                      heightFactor: 1,
+                      child: Container(color: QuickAssessmentPalette.primary),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: QuickAssessmentPalette.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: QuickAssessmentPalette.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -197,7 +204,7 @@ class QuickNextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 216,
-      height: 38,
+      height: 52,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(

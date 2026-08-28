@@ -1,5 +1,25 @@
 {
   "projects": {
-    "default": "mind-mates-cd2cf"
-  }
+    "default": "mind-mates-cd2cf",
+    "development": "mindmate-dev-4e91c",
+    "staging": "mindmate-staging",
+    "production": "mind-mates-cd2cf"
+  },
+  "targets": {
+    "mind-mates-cd2cf": {
+      "hosting": {
+        "admin": [
+          "mind-mates-cd2cf"
+        ]
+      }
+    },
+    "mindmate-staging": {
+      "hosting": {
+        "admin": [
+          "mindmate-staging"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

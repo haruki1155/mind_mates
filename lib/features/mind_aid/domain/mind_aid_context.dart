@@ -102,13 +102,11 @@ class MindAidWellnessSnapshot {
   bool get hasElevatedAssessment {
     final status = assessmentStatus?.toLowerCase() ?? '';
     final signal = mentalStatusSignal?.toLowerCase() ?? '';
-    final score = assessmentScore;
     return status.contains('high') ||
         status.contains('severe') ||
         signal == 'watchful' ||
         signal == 'elevated' ||
-        signal == 'highsupport' ||
-        (score != null && score >= 70);
+        signal == 'highsupport';
   }
 
   bool get hasNoRecentCheckIn {
@@ -216,7 +214,6 @@ class MindAidContext {
     this.assessment,
     this.conversationSummary,
     this.preferredSupportStyle,
-    this.journalText,
     this.wellnessSnapshot,
   });
 
@@ -227,7 +224,6 @@ class MindAidContext {
   final MindAidAssessmentContext? assessment;
   final String? conversationSummary;
   final MindAidSupportStyle? preferredSupportStyle;
-  final String? journalText;
   final MindAidWellnessSnapshot? wellnessSnapshot;
 
   int? get effectiveAssessmentScore {
@@ -254,7 +250,6 @@ class MindAidContext {
     MindAidAssessmentContext? assessment,
     String? conversationSummary,
     MindAidSupportStyle? preferredSupportStyle,
-    String? journalText,
     MindAidWellnessSnapshot? wellnessSnapshot,
   }) {
     return MindAidContext(
@@ -266,7 +261,6 @@ class MindAidContext {
       conversationSummary: conversationSummary ?? this.conversationSummary,
       preferredSupportStyle:
           preferredSupportStyle ?? this.preferredSupportStyle,
-      journalText: journalText ?? this.journalText,
       wellnessSnapshot: wellnessSnapshot ?? this.wellnessSnapshot,
     );
   }

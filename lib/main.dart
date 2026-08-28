@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'app_bootstrap.dart';
-import 'firebase_options.dart';
+import 'firebase_options_selector.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/appointment_provider.dart';
 import 'providers/auth_provider.dart';
@@ -14,7 +15,6 @@ import 'providers/breathing_provider.dart';
 import 'providers/insights_provider.dart';
 import 'providers/mental_health_activity_provider.dart';
 import 'providers/mind_aid_provider.dart';
-import 'providers/journal_provider.dart';
 import 'providers/mood_provider.dart';
 import 'providers/report_provider.dart';
 import 'providers/secret_chat_provider.dart';
@@ -25,7 +25,6 @@ import 'repositories/appointment_repository.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/breathing_repository.dart';
 import 'repositories/insights_repository.dart';
-import 'repositories/journal_repository.dart';
 import 'repositories/mental_health_activity_repository.dart';
 import 'repositories/mind_aid_repository_screen.dart';
 import 'repositories/mood_repository.dart';
@@ -35,10 +34,23 @@ import 'repositories/sleep_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/auth/auth_service.dart';
 import 'services/firebase/firebase_app_check_service.dart';
+import 'services/firebase/firebase_callable_router.dart';
+import 'core/config/app_environment.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  AppEnvironmentConfig.validate();
+  AppEnvironmentConfig.validateFirebaseIdentity(
+    environment: AppEnvironmentConfig.current,
+    projectId: MindMatesFirebaseOptions.currentPlatform.projectId,
+    callableRegion: AppEnvironmentConfig.functionsRegion,
+  );
+  await Firebase.initializeApp(
+    options: MindMatesFirebaseOptions.currentPlatform,
+  );
+  FirebaseCallableRouter.configure(
+    FirebaseFunctions.instanceFor(region: 'us-central1'),
+  );
   try {
     await FirebaseAppCheckService.activate();
   } catch (error) {
@@ -54,19 +66,20 @@ Future<void> main() async {
     ),
   );
 
+  final userProvider = UserProvider(UserRepository());
+  final authProvider = AuthProvider(
+    AuthRepository(AuthService()),
+    onSessionCleared: userProvider.clear,
+  )..monitorAuthState();
   final mobileApp = MultiProvider(
     providers: [
-      ChangeNotifierProvider(
-        create: (_) => AuthProvider(AuthRepository(AuthService())),
-      ),
-      ChangeNotifierProvider(create: (_) => UserProvider(UserRepository())),
+      ChangeNotifierProvider(create: (_) => authProvider),
+      ChangeNotifierProvider(create: (_) => userProvider),
       ChangeNotifierProvider(create: (_) => MoodProvider(MoodRepository())),
       ChangeNotifierProvider(
         create: (_) => AppointmentProvider(AppointmentRepository()),
       ),
-      ChangeNotifierProvider(
-        create: (_) => JournalProvider(JournalRepository()),
-      ),
+
       ChangeNotifierProvider(create: (_) => ReportProvider(ReportRepository())),
       ChangeNotifierProvider(
         create: (_) =>
@@ -92,5 +105,11 @@ Future<void> main() async {
     child: const MindMateApp(),
   );
 
-  runApp(selectMindMateRoot(isWeb: kIsWeb, mobileApp: mobileApp));
+  runApp(
+    selectMindMateRoot(
+      isWeb: kIsWeb,
+      mobileApp: mobileApp,
+      appCheckStatus: FirebaseAppCheckService.status,
+    ),
+  );
 }

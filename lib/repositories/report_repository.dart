@@ -408,6 +408,8 @@ class ReportRepository {
       'mentalStatusLabel': mentalStatus.label,
       'latestAssessmentStatus': latestAssessmentStatus ?? '',
       'latestAssessmentSource': latestAssessmentSource ?? '',
+      'latestAssessmentVerificationStatus':
+          assessmentSummary.verificationStatus ?? 'legacy_unverified',
       'mentalStatusSignal': mentalStatusSignal ?? '',
       'topConcernAreas': topConcernAreas,
       'recommendedNextActions': _recommendedActions(
@@ -477,15 +479,23 @@ class ReportRepository {
 
     for (final assessment in sortedAssessments) {
       final type = assessment['type']?.toString().trim().toLowerCase();
+      final isVerified = _isVerified(assessment);
       if (type == 'quick') {
-        latestQuick ??= assessment;
-      } else {
-        latestFull ??= assessment;
+        if (latestQuick == null || (!_isVerified(latestQuick) && isVerified)) {
+          latestQuick = assessment;
+        }
+      } else if (latestFull == null ||
+          (!_isVerified(latestFull) && isVerified)) {
+        latestFull = assessment;
       }
-      if (latestQuick != null && latestFull != null) break;
     }
 
     return _AssessmentSummary(latestQuick: latestQuick, latestFull: latestFull);
+  }
+
+  bool _isVerified(Map<String, dynamic> assessment) {
+    final status = assessment['verificationStatus']?.toString();
+    return status == 'verified' || status == 'verified_legacy_recomputed';
   }
 
   Future<int> _countMindAidMessages({
@@ -859,8 +869,6 @@ class ReportRepository {
     final fullStatus = (assessmentSummary.fullStatus ?? '').toLowerCase();
     final quickStatus = (assessmentSummary.quickStatus ?? '').toLowerCase();
     final quickSignal = (assessmentSummary.quickSignal ?? '').toLowerCase();
-    final fullScore = assessmentSummary.fullScore;
-    final quickScore = assessmentSummary.quickScore;
     final averageMood = moodSummary.average;
 
     final severe =
@@ -869,8 +877,6 @@ class ReportRepository {
         quickStatus.contains('very high') ||
         quickSignal == 'elevated' ||
         quickSignal == 'highsupport' ||
-        (fullScore != null && fullScore >= 70) ||
-        (quickScore != null && quickScore >= 75) ||
         (averageMood != null && averageMood <= 2.0);
     if (severe) {
       return const _MentalStatusSummary(
@@ -883,7 +889,6 @@ class ReportRepository {
         _isModerateConcernStatus(fullStatus) ||
         quickStatus.contains('moderate') ||
         quickSignal == 'watchful' ||
-        (quickScore != null && quickScore >= 50) ||
         (averageMood != null && averageMood <= 2.7) ||
         (!hasEnoughActivity &&
             (assessmentSummary.hasAssessment || moodSummary.count > 0));
@@ -970,7 +975,22 @@ class _AssessmentSummary {
 
   bool get hasAssessment => latestQuick != null || latestFull != null;
 
-  Map<String, dynamic>? get preferredAssessment => latestFull ?? latestQuick;
+  Map<String, dynamic>? get preferredAssessment {
+    if (latestFull == null) return latestQuick;
+    if (latestQuick == null) return latestFull;
+    final fullDate = _date(latestFull!['createdAt']);
+    final quickDate = _date(latestQuick!['createdAt']);
+    return fullDate.isAfter(quickDate) ? latestFull : latestQuick;
+  }
+
+  String? get verificationStatus =>
+      preferredAssessment?['verificationStatus']?.toString();
+
+  static DateTime _date(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.tryParse('$value') ?? DateTime(1970);
+  }
 
   int? get quickScore => _score(latestQuick);
   int? get fullScore => _score(latestFull);

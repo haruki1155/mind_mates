@@ -7,24 +7,38 @@ import '../../../models/admin_mind_aid_analytics_model.dart';
 import '../../../models/appointment_model.dart';
 import '../../../models/user_model.dart';
 import '../../../models/profile_roles.dart';
+import '../domain/admin_auth_failure.dart';
 import '../domain/admin_management_models.dart';
 import '../../../repositories/admin_portal_repository.dart';
+import '../../../services/firebase/firebase_error_message.dart';
+import '../../../services/firebase/firebase_runtime_diagnostics.dart';
 import 'admin_status_dashboard_screen.dart';
 import 'staff_registration_screen.dart';
 import 'user_management_page.dart';
 import 'admin_change_password_screen.dart';
+import '../domain/admin_colors.dart';
+import 'service_monitoring_page.dart';
 
-const _yellow = Color(0xFFF6B900);
-const _orange = Color(0xFFFF9700);
-const _cream = Color(0xFFFFF9E8);
-const _purple = Color(0xFFAAA7FA);
+const _yellow = AdminColors.primary;
+const _orange = AdminColors.primaryPressed;
+const _cream = AdminColors.background;
+const _purple = AdminColors.info;
+const _softAmber = AdminColors.softSurface;
+const _success = AdminColors.success;
+const _error = AdminColors.error;
+const _adminBuildId = String.fromEnvironment(
+  'ADMIN_BUILD_ID',
+  defaultValue: 'development',
+);
 
 enum AdminPortalPage {
   dashboard,
+  services,
   users,
   appointments,
   inquiries,
   assessments,
+  sleepSummaries,
   profile,
   status,
 }
@@ -32,20 +46,24 @@ enum AdminPortalPage {
 extension on AdminPortalPage {
   String get label => switch (this) {
     AdminPortalPage.dashboard => 'Dashboard',
+    AdminPortalPage.services => 'Service Monitoring',
     AdminPortalPage.users => 'User Management',
     AdminPortalPage.appointments => 'Appointments',
     AdminPortalPage.inquiries => 'Inquiries',
     AdminPortalPage.assessments => 'Assessments',
+    AdminPortalPage.sleepSummaries => 'Shared Sleep Summaries',
     AdminPortalPage.profile => 'Profile',
     AdminPortalPage.status => 'Admin Status',
   };
 
   IconData get icon => switch (this) {
     AdminPortalPage.dashboard => Icons.home_outlined,
+    AdminPortalPage.services => Icons.monitor_heart_outlined,
     AdminPortalPage.users => Icons.group_outlined,
     AdminPortalPage.appointments => Icons.calendar_month_outlined,
     AdminPortalPage.inquiries => Icons.chat_bubble_outline_rounded,
     AdminPortalPage.assessments => Icons.assignment_outlined,
+    AdminPortalPage.sleepSummaries => Icons.bedtime_outlined,
     AdminPortalPage.profile => Icons.account_circle_outlined,
     AdminPortalPage.status => Icons.monitor_heart_outlined,
   };
@@ -95,11 +113,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
-      );
+      final message = error is AdminAuthenticationException
+          ? error.userMessage
+          : 'Unable to sign in to the Admin portal. Try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -107,7 +126,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFFFF4CF),
+    backgroundColor: AdminColors.background,
     body: SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Center(
@@ -120,7 +139,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(40, 38, 40, 52),
+              padding: const EdgeInsets.fromLTRB(32, 32, 32, 36),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -134,14 +153,18 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     'MindMate',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Counseling Management System',
-                    style: TextStyle(fontSize: 12),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AdminColors.textMuted,
+                    ),
                   ),
                   const SizedBox(height: 34),
                   _LoginField(
@@ -160,11 +183,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _yellow,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                      ),
                       onPressed: _submitting ? null : _signIn,
                       child: Text(
                         _submitting ? 'Signing in...' : 'Sign in',
@@ -207,13 +225,29 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       );
       return;
     }
-    await (widget.repository ?? AdminPortalRepository()).sendPasswordReset(
-      _schoolId.text,
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent.')),
+    try {
+      await (widget.repository ?? AdminPortalRepository()).sendPasswordReset(
+        _schoolId.text,
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'If that administrator account exists, Firebase sent a password reset email.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to request a password reset. Check the connection and try again.',
+            ),
+          ),
+        );
+      }
     }
   }
 }
@@ -263,6 +297,14 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
       widget.repository ?? AdminPortalRepository();
   AdminPortalPage _page = AdminPortalPage.dashboard;
   @override
+  void initState() {
+    super.initState();
+    if (_repository.currentAccessRole == AccessRole.portalStaff) {
+      _page = AdminPortalPage.users;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final compact = constraints.maxWidth < 840;
@@ -294,7 +336,7 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
             Expanded(
               child: Column(
                 children: [
-                  Container(height: 20, color: _yellow),
+                  Container(height: 4, color: _yellow),
                   _PortalHeader(
                     compact: compact,
                     page: _page,
@@ -317,10 +359,14 @@ class _AdminPortalHomeState extends State<AdminPortalHome> {
 
   Widget _buildPage() => switch (_page) {
     AdminPortalPage.dashboard => _DashboardPage(repository: _repository),
+    AdminPortalPage.services => ServiceMonitoringPage(repository: _repository),
     AdminPortalPage.users => UserManagementPage(repository: _repository),
     AdminPortalPage.appointments => _AppointmentsPage(repository: _repository),
     AdminPortalPage.inquiries => _InquiriesPage(repository: _repository),
     AdminPortalPage.assessments => _AssessmentsPage(repository: _repository),
+    AdminPortalPage.sleepSummaries => _SleepSummariesPage(
+      repository: _repository,
+    ),
     AdminPortalPage.profile => _ProfilePage(repository: _repository),
     AdminPortalPage.status => const AdminStatusDashboardScreen(embedded: true),
   };
@@ -341,7 +387,14 @@ class _Nav extends StatelessWidget {
   final bool isSuperAdmin;
 
   bool _allowed(AdminPortalPage page) => switch (page) {
-    AdminPortalPage.users => isSuperAdmin,
+    _ when accessRole == AccessRole.portalStaff =>
+      page == AdminPortalPage.users || page == AdminPortalPage.appointments,
+    AdminPortalPage.users => accessRole.canUsePortal,
+    AdminPortalPage.dashboard =>
+      accessRole == AccessRole.counselor || accessRole == AccessRole.admin,
+    AdminPortalPage.services =>
+      accessRole == AccessRole.counselor || accessRole == AccessRole.admin,
+    AdminPortalPage.sleepSummaries => accessRole == AccessRole.counselor,
     AdminPortalPage.assessments ||
     AdminPortalPage.status => accessRole.canAccessClinicalData,
     _ => accessRole.canUsePortal || accessRole == AccessRole.admin,
@@ -360,7 +413,7 @@ class _Nav extends StatelessWidget {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
               ),
             ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 24),
           for (final item in AdminPortalPage.values.where(_allowed))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -379,7 +432,7 @@ class _Nav extends StatelessWidget {
                   ),
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 selected: page == item,
                 selectedTileColor: _orange,
@@ -390,6 +443,174 @@ class _Nav extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _SleepSummariesPage extends StatelessWidget {
+  const _SleepSummariesPage({required this.repository});
+  final AdminPortalRepository repository;
+
+  @override
+  Widget build(BuildContext context) {
+    final counselorId = FirebaseAuth.instance.currentUser?.uid;
+    if (counselorId == null) {
+      return const Center(
+        child: Text('Sign in to view shared sleep summaries.'),
+      );
+    }
+    return StreamBuilder<List<CounselorSleepSummaryRecord>>(
+      stream: repository.watchCounselorSleepSummaries(counselorId),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text('Shared sleep summaries are unavailable.'),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final summaries = snapshot.data!;
+        if (summaries.isEmpty) {
+          return const Center(
+            child: Text('No active sleep summaries have been shared with you.'),
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Shared Sleep Summaries',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _manageAssignment(context, counselorId),
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  label: const Text('Manage assignment'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Self-reported wellness information. It is not diagnostic and is available only while the user’s sharing permission remains active.',
+            ),
+            const SizedBox(height: 16),
+            for (final summary in summaries)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${summary.loggedDays}/${summary.windowDays} days recorded',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Estimated sleep: ${summary.averageSleepMinutes == null ? 'Not enough entries' : '${(summary.averageSleepMinutes! / 60).toStringAsFixed(1)} h'}',
+                      ),
+                      Text(
+                        'Sleep quality: ${summary.averageQuality?.toStringAsFixed(1) ?? '--'}/5',
+                      ),
+                      Text(
+                        'Daytime sleepiness: ${summary.averageSleepiness?.toStringAsFixed(1) ?? '--'}/5',
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _discussionPrompt(summary),
+                        style: const TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                      if (summary.guidanceShown['dangerousSleepiness'] ==
+                              true ||
+                          summary.guidanceShown['breathingConcern'] ==
+                              true) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'The user reported a safety-related sleep observation and was shown guidance to consider appropriate professional support.',
+                          style: TextStyle(color: Colors.deepOrange),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _discussionPrompt(CounselorSleepSummaryRecord summary) {
+    if ((summary.averageSleepiness ?? 0) >= 3.5) {
+      return 'Discussion prompt: You reported more daytime sleepiness during this period. How has that affected classes or daily activities?';
+    }
+    if ((summary.averageSleepMinutes ?? 999) < 7 * 60) {
+      return 'Discussion prompt: Your recent entries describe shorter estimated sleep. What was happening with your routine during this period?';
+    }
+    return 'Discussion prompt: How has your current routine affected the sleep pattern you recorded during this period?';
+  }
+
+  Future<void> _manageAssignment(
+    BuildContext context,
+    String counselorId,
+  ) async {
+    final controller = TextEditingController();
+    final active = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Counselor assignment'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Student account ID',
+            helperText: 'A confirmed appointment is required to start access.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('End assignment'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Start assignment'),
+          ),
+        ],
+      ),
+    );
+    final studentId = controller.text.trim();
+    controller.dispose();
+    if (active == null || studentId.isEmpty || !context.mounted) return;
+    try {
+      await repository.setCounselorSleepAssignment(
+        studentId: studentId,
+        counselorId: counselorId,
+        active: active,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              active
+                  ? 'Counselor assignment started.'
+                  : 'Counselor assignment ended.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to update the counselor assignment.'),
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _PortalHeader extends StatelessWidget {
@@ -439,6 +660,10 @@ class _PortalHeader extends StatelessWidget {
                 ),
               ],
             ),
+            Text(
+              'Build $_adminBuildId',
+              style: const TextStyle(fontSize: 10, color: Colors.black45),
+            ),
           ],
         ),
         const SizedBox(width: 12),
@@ -483,10 +708,17 @@ class _Page extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 3),
-        Text(subtitle, style: const TextStyle(fontSize: 16)),
+        Text(
+          subtitle,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: AdminColors.textMuted),
+        ),
         const SizedBox(height: 24),
         child,
       ],
@@ -501,23 +733,26 @@ class _DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) => _Page(
     title: 'Analytics Dashboard',
     subtitle: 'Overview of System usage and statistics',
-    child: StreamBuilder<List<UserModel>>(
-      stream: repository.watchUsers(),
-      builder: (context, users) => StreamBuilder<List<AdminInquiryModel>>(
+    child: FutureBuilder<AdminDashboardSummary>(
+      future: repository.getAppUserDashboardSummary(),
+      builder: (context, summarySnapshot) => StreamBuilder<List<AdminInquiryModel>>(
         stream: repository.watchInquiries(),
         builder: (context, inquiries) => StreamBuilder<List<AdminAssessmentRecord>>(
           stream: repository.watchAssessments(),
           builder: (context, assessments) {
-            if (users.hasError || inquiries.hasError || assessments.hasError) {
+            if (summarySnapshot.hasError ||
+                inquiries.hasError ||
+                assessments.hasError) {
               return const _AccessPanel();
             }
-            final userList = users.data ?? const <UserModel>[];
+            if (!summarySnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final summary = summarySnapshot.data!;
             final inquiryList = inquiries.data ?? const <AdminInquiryModel>[];
             final assessmentList =
                 assessments.data ?? const <AdminAssessmentRecord>[];
-            final studentCount = userList
-                .where((u) => (u.role ?? '').toLowerCase() == 'student')
-                .length;
+            final studentCount = summary.populationCounts['student'] ?? 0;
             return Column(
               children: [
                 LayoutBuilder(
@@ -526,11 +761,11 @@ class _DashboardPage extends StatelessWidget {
                     runSpacing: 14,
                     children: [
                       _StatCard(
-                        label: 'Total Active Users',
-                        value: '${userList.length}',
+                        label: 'Total App Users',
+                        value: '${summary.totalAppUsers}',
                         note: '$studentCount students',
                         icon: Icons.groups_outlined,
-                        color: const Color(0xFFFFE8A5),
+                        color: _softAmber,
                       ),
                       _StatCard(
                         label: 'Total Inquiries',
@@ -546,19 +781,27 @@ class _DashboardPage extends StatelessWidget {
                         note:
                             '${assessmentList.where((a) => a.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 7)))).length} this week',
                         icon: Icons.assignment_outlined,
-                        color: const Color(0xFFD4FFD1),
+                        color: _success.withValues(alpha: .18),
                       ),
                       _StatCard(
                         label: 'Engagement Rate',
-                        value: userList.isEmpty
+                        value: summary.totalAppUsers == 0
                             ? '0%'
-                            : '${((userList.where((u) => u.lastActiveAt != null).length / userList.length) * 100).round()}%',
-                        note: 'Users with activity',
+                            : '${((summary.activeAppUsers / summary.totalAppUsers) * 100).round()}%',
+                        note: 'App users with activity',
                         icon: Icons.trending_up,
                         color: const Color(0xFFFFE8A5),
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 18),
+                _SummaryRow(
+                  values: {
+                    'Portal Staff': summary.portalCounts['portalStaff'] ?? 0,
+                    'Counselors': summary.portalCounts['counselor'] ?? 0,
+                    'Administrators': summary.portalCounts['admin'] ?? 0,
+                  },
                 ),
                 const SizedBox(height: 18),
                 LayoutBuilder(
@@ -571,8 +814,10 @@ class _DashboardPage extends StatelessWidget {
                             ? (box.maxWidth - 24) / 2
                             : box.maxWidth,
                         child: _ChartCard(
-                          title: 'Monthly Active Users',
-                          child: _ActivityChart(users: userList),
+                          title: 'Monthly App Activity',
+                          child: _ActivityChart(
+                            values: summary.monthlyActiveUsers,
+                          ),
                         ),
                       ),
                       SizedBox(
@@ -581,7 +826,9 @@ class _DashboardPage extends StatelessWidget {
                             : box.maxWidth,
                         child: _ChartCard(
                           title: 'User Distribution',
-                          child: _DistributionChart(users: userList),
+                          child: _DistributionChart(
+                            counts: summary.populationCounts,
+                          ),
                         ),
                       ),
                     ],
@@ -674,26 +921,26 @@ class _MindAidQualityPanel extends StatelessWidget {
               spacing: 10,
               runSpacing: 10,
               children: [
-                _Tag(label: '$turns turns', color: const Color(0xFFFFE8A5)),
+                _Tag(label: '$turns turns', color: _softAmber),
                 _Tag(
                   label: '$fallbacks fallbacks',
-                  color: const Color(0xFFD4FFD1),
+                  color: _success.withValues(alpha: .18),
                 ),
                 _Tag(
                   label: turns == 0
                       ? 'No latency data'
                       : '${(latency / turns).round()} ms average',
-                  color: const Color(0xFFC1BFFF),
+                  color: AdminColors.info.withValues(alpha: .18),
                 ),
                 _Tag(
                   label: '$helpful helpful / $unhelpful needs improvement',
-                  color: const Color(0xFFD9F5E1),
+                  color: _success.withValues(alpha: .12),
                 ),
                 if ((safety['crisisOrImmediateRisk'] ?? 0) > 0)
                   _Tag(
                     label:
                         '${safety['crisisOrImmediateRisk']} crisis intercepts',
-                    color: const Color(0xFFFFC7C7),
+                    color: _error.withValues(alpha: .16),
                   ),
               ],
             ),
@@ -707,7 +954,7 @@ class _MindAidQualityPanel extends StatelessWidget {
                     .map(
                       (entry) => _Tag(
                         label: '${entry.key}: ${entry.value}',
-                        color: const Color(0xFFFFF2C8),
+                        color: _softAmber,
                       ),
                     )
                     .toList(growable: false),
@@ -801,7 +1048,7 @@ class _LiveActivityPanelState extends State<_LiveActivityPanel> {
                     .map(
                       (entry) => _Tag(
                         label: '${entry.key}: ${entry.value}',
-                        color: const Color(0xFFFFE8A5),
+                        color: _softAmber,
                       ),
                     )
                     .toList(),
@@ -885,40 +1132,30 @@ class _ChartCard extends StatelessWidget {
 }
 
 class _ActivityChart extends StatelessWidget {
-  const _ActivityChart({required this.users});
-  final List<UserModel> users;
+  const _ActivityChart({required this.values});
+  final Map<String, int> values;
   @override
   Widget build(BuildContext context) {
-    final values = List<int>.generate(6, (index) {
-      final month = DateTime(
-        DateTime.now().year,
-        DateTime.now().month - 5 + index,
-      );
-      return users
-          .where(
-            (u) =>
-                u.lastActiveAt != null &&
-                u.lastActiveAt!.year == month.year &&
-                u.lastActiveAt!.month == month.month,
-          )
-          .length;
-    });
-    final max = values.fold(1, (a, b) => a > b ? a : b);
+    final entries = values.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final points = entries.map((entry) => entry.value).toList();
+    final max = points.fold(1, (a, b) => a > b ? a : b);
     return CustomPaint(
-      painter: _LinePainter(values.map((v) => v / max).toList()),
+      painter: _LinePainter(points.map((v) => v / max).toList()),
       child: const SizedBox.expand(),
     );
   }
 }
 
 class _DistributionChart extends StatelessWidget {
-  const _DistributionChart({required this.users});
-  final List<UserModel> users;
+  const _DistributionChart({required this.counts});
+  final Map<String, int> counts;
   @override
   Widget build(BuildContext context) {
-    final students = users
-        .where((u) => (u.role ?? '').toLowerCase() == 'student')
-        .length;
+    final students = counts['student'] ?? 0;
+    final teaching = counts['teaching'] ?? 0;
+    final nonTeaching = counts['nonTeaching'] ?? 0;
+    final total = students + teaching + nonTeaching + (counts['unknown'] ?? 0);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -927,14 +1164,12 @@ class _DistributionChart extends StatelessWidget {
             width: 150,
             height: 150,
             child: CustomPaint(
-              painter: _PiePainter(
-                users.isEmpty ? .0 : students / users.length,
-              ),
+              painter: _PiePainter(total == 0 ? .0 : students / total),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Students: $students  •  Others: ${users.length - students}',
+            'Students: $students  •  Teaching: $teaching  •  Non-Teaching: $nonTeaching',
             style: const TextStyle(color: _yellow, fontWeight: FontWeight.w700),
           ),
         ],
@@ -997,7 +1232,6 @@ class _UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<_UsersPage> {
   String query = '';
-  VerificationStatus? verificationFilter;
   @override
   Widget build(BuildContext context) => _Page(
     title: 'User Management',
@@ -1010,17 +1244,13 @@ class _UsersPageState extends State<_UsersPage> {
             .where(
               (u) =>
                   (u.displayName.toLowerCase().contains(query.toLowerCase()) ||
-                      u.email.toLowerCase().contains(query.toLowerCase())) &&
-                  (verificationFilter == null ||
-                      u.verificationStatus == verificationFilter),
+                  u.email.toLowerCase().contains(query.toLowerCase())),
             )
             .toList();
         return Container(
           decoration: _box,
           child: Column(
             children: [
-              if (widget.repository.currentAccessRole.canManageAccess)
-                _RoleCorrectionQueue(repository: widget.repository),
               if (widget.repository.currentAccessRole.canManageAccess)
                 _OrganizationDirectoryPanel(repository: widget.repository),
               Padding(
@@ -1037,22 +1267,6 @@ class _UsersPageState extends State<_UsersPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    DropdownButton<VerificationStatus?>(
-                      value: verificationFilter,
-                      hint: const Text('All verification states'),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('All')),
-                        ...VerificationStatus.values.map(
-                          (status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status.label),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => verificationFilter = value),
-                    ),
                   ],
                 ),
               ),
@@ -1064,7 +1278,6 @@ class _UsersPageState extends State<_UsersPage> {
                   'Account',
                   'Department',
                   'College / Course',
-                  'Status',
                   'Last Active',
                   'Join Date',
                   'Actions',
@@ -1080,7 +1293,7 @@ class _UsersPageState extends State<_UsersPage> {
                           color:
                               u.staffAccountStatus ==
                                   StaffAccountStatus.approved
-                              ? const Color(0xFF8DD78B)
+                              ? _success
                               : Colors.orange.shade200,
                         ),
                         u.departmentId ?? u.department ?? '—',
@@ -1094,27 +1307,11 @@ class _UsersPageState extends State<_UsersPage> {
                                   .whereType<String>()
                                   .where((e) => e.isNotEmpty)
                                   .join(' / '),
-                        _Tag(
-                          label: u.verificationStatus.label,
-                          color:
-                              u.verificationStatus ==
-                                  VerificationStatus.verified
-                              ? const Color(0xFF8DD78B)
-                              : Colors.orange.shade200,
-                        ),
                         _date(u.lastActiveAt),
                         _date(u.createdAt),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              tooltip: 'Review verification',
-                              onPressed: () => _reviewVerification(u),
-                              icon: const Icon(
-                                Icons.verified_user_outlined,
-                                color: _yellow,
-                              ),
-                            ),
                             if (u.staffAccountStatus ==
                                     StaffAccountStatus.pending &&
                                 widget
@@ -1185,66 +1382,6 @@ class _UsersPageState extends State<_UsersPage> {
       },
     ),
   );
-
-  Future<void> _reviewVerification(UserModel user) async {
-    var decision = VerificationStatus.verified;
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Review ${user.displayName}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<VerificationStatus>(
-                initialValue: decision,
-                items: const [
-                  DropdownMenuItem(
-                    value: VerificationStatus.verified,
-                    child: Text('Verify'),
-                  ),
-                  DropdownMenuItem(
-                    value: VerificationStatus.rejected,
-                    child: Text('Reject'),
-                  ),
-                  DropdownMenuItem(
-                    value: VerificationStatus.needsReview,
-                    child: Text('Needs review'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => decision = value);
-                },
-              ),
-              TextField(
-                controller: reason,
-                decoration: const InputDecoration(labelText: 'Decision reason'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed == true && reason.text.trim().length >= 3) {
-      await widget.repository.reviewProfileVerification(
-        userId: user.id,
-        decision: decision,
-        reason: reason.text,
-      );
-    }
-    reason.dispose();
-  }
 
   Future<void> _manageAccess(UserModel user) async {
     var access = user.accessRole;
@@ -1608,86 +1745,6 @@ class _OrganizationDirectoryPanel extends StatelessWidget {
   }
 }
 
-class _RoleCorrectionQueue extends StatelessWidget {
-  const _RoleCorrectionQueue({required this.repository});
-  final AdminPortalRepository repository;
-
-  @override
-  Widget build(BuildContext context) =>
-      StreamBuilder<List<AdminRoleCorrectionRequest>>(
-        stream: repository.watchRoleCorrectionRequests(),
-        builder: (context, snapshot) {
-          final requests =
-              snapshot.data ?? const <AdminRoleCorrectionRequest>[];
-          if (requests.isEmpty) return const SizedBox.shrink();
-          return ExpansionTile(
-            initiallyExpanded: true,
-            title: Text('Role correction requests (${requests.length})'),
-            children: requests
-                .map(
-                  (request) => ListTile(
-                    title: Text(
-                      '${request.currentRole} → ${request.requestedRole}',
-                    ),
-                    subtitle: Text(request.reason),
-                    trailing: Wrap(
-                      children: [
-                        TextButton(
-                          onPressed: () => _review(context, request, false),
-                          child: const Text('Reject'),
-                        ),
-                        FilledButton(
-                          onPressed: () => _review(context, request, true),
-                          child: const Text('Approve'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                .toList(),
-          );
-        },
-      );
-
-  Future<void> _review(
-    BuildContext context,
-    AdminRoleCorrectionRequest request,
-    bool approve,
-  ) async {
-    final controller = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          approve ? 'Approve role correction' : 'Reject role correction',
-        ),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Decision reason'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && controller.text.trim().length >= 3) {
-      await repository.reviewRoleCorrection(
-        requestId: request.id,
-        approve: approve,
-        reason: controller.text,
-      );
-    }
-    controller.dispose();
-  }
-}
-
 class _AppointmentsPage extends StatefulWidget {
   const _AppointmentsPage({required this.repository});
   final AdminPortalRepository repository;
@@ -1697,6 +1754,7 @@ class _AppointmentsPage extends StatefulWidget {
 
 class _AppointmentsPageState extends State<_AppointmentsPage> {
   String filter = 'All status';
+  int view = 0;
   @override
   Widget build(BuildContext context) => _Page(
     title: 'Appointments',
@@ -1704,48 +1762,114 @@ class _AppointmentsPageState extends State<_AppointmentsPage> {
     child: StreamBuilder<List<AppointmentModel>>(
       stream: widget.repository.watchAppointments(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         if (snapshot.hasError) return const _AccessPanel();
         final all = snapshot.data ?? const <AppointmentModel>[];
+        final active = all.where((a) => a.lifecycleStatus.isActive).toList();
+        final archived = all
+            .where(
+              (a) =>
+                  a.lifecycleStatus.isTerminal ||
+                  a.lifecycleStatus == AppointmentLifecycleStatus.unknown,
+            )
+            .toList();
         final items = filter == 'All status'
             ? all
             : all
-                  .where((a) => a.status.toLowerCase() == filter.toLowerCase())
+                  .where(
+                    (a) =>
+                        a.lifecycleStatus.storedValue == filter.toLowerCase(),
+                  )
                   .toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SummaryRow(
               values: {
-                'Total Active Users': all.length,
-                'Pending': all
-                    .where((a) => a.status.toLowerCase() == 'pending')
+                'Active queue': active.length,
+                'Pending': active
+                    .where(
+                      (a) =>
+                          a.lifecycleStatus ==
+                          AppointmentLifecycleStatus.pending,
+                    )
                     .length,
-                'Confirmed': all
-                    .where((a) => a.status.toLowerCase() == 'confirmed')
+                'Ongoing': active
+                    .where(
+                      (a) =>
+                          a.lifecycleStatus ==
+                          AppointmentLifecycleStatus.ongoing,
+                    )
                     .length,
-                'Complete': all
-                    .where((a) => a.status.toLowerCase() == 'complete')
-                    .length,
+                'Archive': archived.length,
               },
             ),
             const SizedBox(height: 22),
-            _Filter(
-              label: 'Filter:',
-              value: filter,
-              values: const [
-                'All status',
-                'pending',
-                'confirmed',
-                'declined',
-                'reschedule_proposed',
-                'completed',
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  icon: Icon(Icons.inbox_outlined),
+                  label: Text('Active queue'),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  icon: Icon(Icons.calendar_month_outlined),
+                  label: Text('Calendar'),
+                ),
+                ButtonSegment(
+                  value: 2,
+                  icon: Icon(Icons.inventory_2_outlined),
+                  label: Text('History / Archive'),
+                ),
               ],
-              onChanged: (v) => setState(() => filter = v!),
+              selected: {view},
+              onSelectionChanged: (values) =>
+                  setState(() => view = values.first),
             ),
-            const SizedBox(height: 22),
-            ...items.map(
-              (a) => _AppointmentCard(item: a, repository: widget.repository),
-            ),
+            const SizedBox(height: 18),
+            if (view == 0) ...[
+              _Filter(
+                label: 'Filter:',
+                value: filter,
+                values: const [
+                  'All status',
+                  'pending',
+                  'confirmed',
+                  'ongoing',
+                  'reschedule_proposed',
+                ],
+                onChanged: (v) => setState(() => filter = v!),
+              ),
+              const SizedBox(height: 22),
+              if (!items.any((a) => a.lifecycleStatus.isActive))
+                const _EmptyPanel(
+                  message: 'No active appointments match this filter.',
+                ),
+              ...items
+                  .where((a) => a.lifecycleStatus.isActive)
+                  .map(
+                    (a) => _AppointmentCard(
+                      item: a,
+                      repository: widget.repository,
+                    ),
+                  ),
+            ] else if (view == 1)
+              _AppointmentCalendar(items: active, repository: widget.repository)
+            else ...[
+              const Text(
+                'Completed, declined, and cancelled appointments are retained in the archive.',
+              ),
+              const SizedBox(height: 12),
+              if (archived.isEmpty)
+                const _EmptyPanel(message: 'No archived appointments yet.'),
+              ...archived.map(
+                (a) => _AppointmentCard(item: a, repository: widget.repository),
+              ),
+            ],
           ],
         );
       },
@@ -1758,94 +1882,174 @@ class _AppointmentCard extends StatelessWidget {
   final AppointmentModel item;
   final AdminPortalRepository repository;
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(28),
-    decoration: _box,
-    child: Row(
+  Widget build(BuildContext context) {
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    item.fullName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _Tag(
-                    label: item.course ?? 'User',
-                    color: const Color(0xFFE3A9DF),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(item.email, style: const TextStyle(color: Colors.black54)),
-              const SizedBox(height: 9),
-              Text(item.concern),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 12,
-                children: [
-                  _Tag(label: item.status, color: _statusColor(item.status)),
-                  Text(
-                    _date(item.scheduledAt),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    item.scheduledTime,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              item.fullName,
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+            ),
+            _Tag(label: item.course ?? 'User', color: AdminColors.highlight),
+          ],
         ),
-        TextButton.icon(
-          onPressed: () => _showReviewDialog(context),
-          icon: const Icon(Icons.rate_review_outlined),
-          label: const Text('Review'),
-          style: TextButton.styleFrom(foregroundColor: _yellow),
+        const SizedBox(height: 5),
+        Text(item.email, style: const TextStyle(color: Colors.black54)),
+        const SizedBox(height: 9),
+        Text(item.concern),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 12,
+          children: [
+            _Tag(
+              label: item.lifecycleStatus.label,
+              color: _statusColor(item.lifecycleStatus.storedValue),
+            ),
+            Text(
+              _date(item.scheduledAt),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text(
+              item.scheduledTime,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text('Location: ${item.location}'),
+            Text('Requested: ${_dateTime(item.createdAt)}'),
+            Text('Assignee: ${item.counselorName ?? 'Unassigned'}'),
+            if (item.parentAppointmentId != null)
+              Text('Follow-up of ${item.parentAppointmentId}'),
+          ],
         ),
       ],
-    ),
-  );
+    );
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        TextButton.icon(
+          onPressed: () => _showTimeline(context),
+          icon: const Icon(Icons.history_outlined),
+          label: const Text('Timeline'),
+        ),
+        ..._lifecycleActions(context),
+        if (item.lifecycleStatus == AppointmentLifecycleStatus.completed)
+          FilledButton.icon(
+            onPressed: () => _showFollowUpDialog(context),
+            icon: const Icon(Icons.event_repeat_outlined),
+            label: const Text('Schedule follow-up'),
+          ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.all(compact ? 18 : 28),
+          decoration: _box,
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [details, const SizedBox(height: 14), actions],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: details),
+                    const SizedBox(width: 12),
+                    actions,
+                  ],
+                ),
+        );
+      },
+    );
+  }
 
-  Future<void> _showReviewDialog(BuildContext context) async {
-    var action = 'confirmed';
+  List<Widget> _lifecycleActions(BuildContext context) =>
+      switch (item.lifecycleStatus) {
+        AppointmentLifecycleStatus.pending => [
+          FilledButton.icon(
+            onPressed: () => _showActionDialog(context, action: 'confirmed'),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Confirm'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () =>
+                _showActionDialog(context, action: 'reschedule_proposed'),
+            icon: const Icon(Icons.edit_calendar_outlined),
+            label: const Text('Propose reschedule'),
+          ),
+          TextButton.icon(
+            onPressed: () => _showActionDialog(context, action: 'declined'),
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Decline'),
+          ),
+        ],
+        AppointmentLifecycleStatus.confirmed => [
+          FilledButton.icon(
+            onPressed: () => _showActionDialog(context, action: 'ongoing'),
+            icon: const Icon(Icons.play_circle_outline),
+            label: const Text('Start session'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () =>
+                _showActionDialog(context, action: 'reschedule_proposed'),
+            icon: const Icon(Icons.edit_calendar_outlined),
+            label: const Text('Propose reschedule'),
+          ),
+          TextButton.icon(
+            onPressed: () => _showActionDialog(context, action: 'declined'),
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Decline'),
+          ),
+        ],
+        AppointmentLifecycleStatus.ongoing => [
+          FilledButton.icon(
+            onPressed: () => _showActionDialog(context, action: 'completed'),
+            icon: const Icon(Icons.task_alt_outlined),
+            label: const Text('Complete session'),
+          ),
+        ],
+        AppointmentLifecycleStatus.rescheduleProposed => [
+          OutlinedButton.icon(
+            onPressed: () =>
+                _showActionDialog(context, action: 'reschedule_proposed'),
+            icon: const Icon(Icons.edit_calendar_outlined),
+            label: const Text('Replace proposal'),
+          ),
+          TextButton.icon(
+            onPressed: () =>
+                _showActionDialog(context, action: 'withdraw_reschedule'),
+            icon: const Icon(Icons.undo_outlined),
+            label: const Text('Withdraw proposal'),
+          ),
+        ],
+        _ => const [],
+      };
+
+  Future<void> _showActionDialog(
+    BuildContext context, {
+    required String action,
+  }) async {
     final reply = TextEditingController();
     final proposedTime = TextEditingController();
     DateTime? proposedDate;
+    final operationId = AdminPortalRepository.newOperationId();
+    var saving = false;
+    String? saveError;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text('Review ${item.fullName}'),
+          title: Text('${_actionTitle(action)}: ${item.fullName}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: action,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'confirmed',
-                      child: Text('Accept / confirm'),
-                    ),
-                    DropdownMenuItem(value: 'declined', child: Text('Decline')),
-                    DropdownMenuItem(
-                      value: 'reschedule_proposed',
-                      child: Text('Propose new time'),
-                    ),
-                  ],
-                  onChanged: (value) => setDialogState(() => action = value!),
-                ),
-                const SizedBox(height: 12),
                 TextField(
                   controller: reply,
                   minLines: 3,
@@ -1890,51 +2094,289 @@ class _AppointmentCard extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () async {
-                if (reply.text.trim().isEmpty ||
-                    (action == 'reschedule_proposed' &&
-                        (proposedDate == null ||
-                            proposedTime.text.trim().isEmpty))) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Enter a reply and all proposed time details.',
-                      ),
-                    ),
-                  );
-                  return;
-                }
-                try {
-                  await repository.reviewAppointment(
-                    appointmentId: item.id,
-                    action: action,
-                    reply: reply.text.trim(),
-                    proposedScheduledAt: proposedDate,
-                    proposedScheduledTime: proposedTime.text.trim(),
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                } catch (_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Unable to update the appointment.'),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Send decision'),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (reply.text.trim().isEmpty ||
+                          (action == 'reschedule_proposed' &&
+                              (proposedDate == null ||
+                                  proposedTime.text.trim().isEmpty))) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Enter a reply and all proposed time details.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      try {
+                        setDialogState(() {
+                          saving = true;
+                          saveError = null;
+                        });
+                        await repository.reviewAppointment(
+                          appointmentId: item.id,
+                          action: action,
+                          reply: reply.text.trim(),
+                          proposedScheduledAt: proposedDate,
+                          proposedScheduledTime: proposedTime.text.trim(),
+                          operationId: operationId,
+                        );
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          setDialogState(() {
+                            saving = false;
+                            saveError = _appointmentError(error);
+                          });
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Saving…' : _actionTitle(action)),
             ),
+            if (saveError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  saveError!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
           ],
         ),
       ),
     );
     reply.dispose();
     proposedTime.dispose();
+  }
+
+  String _actionTitle(String action) => switch (action) {
+    'confirmed' => 'Confirm appointment',
+    'ongoing' => 'Start session',
+    'completed' => 'Complete session',
+    'declined' => 'Decline appointment',
+    'reschedule_proposed' => 'Propose reschedule',
+    'withdraw_reschedule' => 'Withdraw proposal',
+    _ => 'Update appointment',
+  };
+
+  Future<void> _showTimeline(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Appointment timeline'),
+      content: SizedBox(
+        width: 500,
+        child: StreamBuilder<List<AppointmentHistoryEvent>>(
+          stream: repository.watchAppointmentHistory(item.id),
+          builder: (context, snapshot) {
+            final events = snapshot.data ?? const <AppointmentHistoryEvent>[];
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                Text(
+                  'Requested: ${_date(item.createdAt)}\nScheduled session: ${_date(item.scheduledAt)} ${item.scheduledTime}\nCurrent status: ${item.lifecycleStatus.label}',
+                ),
+                const Divider(),
+                if (events.isEmpty) const Text('No recorded changes yet.'),
+                ...events.map(
+                  (event) => ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.history),
+                    title: Text(event.eventType.replaceAll('_', ' ')),
+                    subtitle: Text(
+                      [
+                        if (event.actorName != null) event.actorName!,
+                        if (event.previousStatus != null)
+                          '${event.previousStatus} → ${event.status}',
+                        if (event.createdAt != null)
+                          _dateTime(event.createdAt!),
+                        if (event.reply.isNotEmpty) event.reply,
+                        if (event.proposedScheduledAt != null)
+                          'Proposed: ${_dateTime(event.proposedScheduledAt!)} ${event.proposedScheduledTime ?? ''}',
+                        if (event.linkedAppointmentId != null)
+                          'Linked: ${event.linkedAppointmentId}',
+                      ].join('\n'),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _showFollowUpDialog(BuildContext context) async {
+    final time = TextEditingController();
+    final location = TextEditingController(text: item.location);
+    final reply = TextEditingController();
+    DateTime? date;
+    var saving = false;
+    String? saveError;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          title: const Text('Schedule follow-up'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: dialogContext,
+                    initialDate: DateTime.now().add(const Duration(days: 7)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) setDialogState(() => date = picked);
+                },
+                child: Text(date == null ? 'Choose session date' : _date(date)),
+              ),
+              TextField(
+                controller: time,
+                decoration: const InputDecoration(labelText: 'Scheduled time'),
+              ),
+              TextField(
+                controller: location,
+                decoration: const InputDecoration(labelText: 'Location'),
+              ),
+              TextField(
+                controller: reply,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Message to app user',
+                ),
+              ),
+              if (saveError != null)
+                Text(
+                  saveError!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (saving ||
+                    date == null ||
+                    time.text.trim().isEmpty ||
+                    location.text.trim().isEmpty ||
+                    reply.text.trim().isEmpty) {
+                  return;
+                }
+                setDialogState(() {
+                  saving = true;
+                  saveError = null;
+                });
+                try {
+                  await repository.scheduleAppointmentFollowUp(
+                    sourceAppointmentId: item.id,
+                    scheduledAt: date!,
+                    scheduledTime: time.text,
+                    location: location.text,
+                    reply: reply.text,
+                  );
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                } catch (error) {
+                  if (dialogContext.mounted) {
+                    setDialogState(() {
+                      saving = false;
+                      saveError = _appointmentError(error);
+                    });
+                  }
+                }
+              },
+              child: Text(saving ? 'Creating…' : 'Create follow-up'),
+            ),
+          ],
+        ),
+      ),
+    );
+    time.dispose();
+    location.dispose();
+    reply.dispose();
+  }
+}
+
+class _AppointmentCalendar extends StatefulWidget {
+  const _AppointmentCalendar({required this.items, required this.repository});
+  final List<AppointmentModel> items;
+  final AdminPortalRepository repository;
+  @override
+  State<_AppointmentCalendar> createState() => _AppointmentCalendarState();
+}
+
+class _AppointmentCalendarState extends State<_AppointmentCalendar> {
+  late DateTime selectedDate = widget.items.isEmpty
+      ? DateUtils.dateOnly(DateTime.now())
+      : DateUtils.dateOnly(widget.items.first.scheduledAt);
+  @override
+  Widget build(BuildContext context) {
+    final agenda =
+        widget.items
+            .where(
+              (item) => DateUtils.isSameDay(item.scheduledAt, selectedDate),
+            )
+            .toList()
+          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    if (widget.items.isEmpty) {
+      return const Text('No active scheduled sessions.');
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final calendar = CalendarDatePicker(
+          initialDate: selectedDate,
+          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+          lastDate: DateTime.now().add(const Duration(days: 730)),
+          onDateChanged: (value) => setState(() => selectedDate = value),
+        );
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sessions on ${_date(selectedDate)}',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+            const SizedBox(height: 10),
+            if (agenda.isEmpty)
+              const Text('No sessions scheduled for this day.'),
+            ...agenda.map(
+              (item) =>
+                  _AppointmentCard(item: item, repository: widget.repository),
+            ),
+          ],
+        );
+        if (constraints.maxWidth < 850) {
+          return Column(children: [calendar, details]);
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 380, child: calendar),
+            const SizedBox(width: 20),
+            Expanded(child: details),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -2008,8 +2450,8 @@ class _AssessmentsPageState extends State<_AssessmentsPage> {
                         _Tag(
                           label: a.status ?? 'Pending',
                           color: (a.status ?? '').isEmpty
-                              ? const Color(0xFFFFE9AD)
-                              : const Color(0xFF8DD78B),
+                              ? _softAmber
+                              : _success,
                         ),
                         const Icon(Icons.visibility_outlined, color: _yellow),
                       ],
@@ -2159,7 +2601,7 @@ class _InquiryList extends StatelessWidget {
                     padding: const EdgeInsets.all(24),
                     decoration: _box.copyWith(
                       color: item.id == selected?.id
-                          ? const Color(0xFFFFFDF6)
+                          ? AdminColors.surface
                           : Colors.white,
                     ),
                     child: Column(
@@ -2465,7 +2907,7 @@ class _SummaryRow extends StatelessWidget {
             value: '${e.value}',
             note: '',
             icon: Icons.assignment_outlined,
-            color: const Color(0xFFFFEDBB),
+            color: _softAmber,
           ),
         )
         .toList(),
@@ -2613,11 +3055,24 @@ class _EmptyPanel extends StatelessWidget {
 String _date(DateTime? date) => date == null
     ? '-'
     : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+String _appointmentError(Object error) {
+  final message = FirebaseErrorMessage.describe(
+    error,
+    fallback:
+        'The appointment change was not confirmed. Check your connection and retry.',
+  );
+  final correlationId = FirebaseRuntimeDiagnostics.correlationIdFrom(error);
+  return correlationId == null ? message : '$message Reference: $correlationId';
+}
+
+String _dateTime(DateTime date) =>
+    '${_date(date)} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 Color _statusColor(String status) =>
     switch (status.toLowerCase().replaceAll(' ', '_')) {
-      'resolved' || 'complete' => const Color(0xFF8ED77B),
+      'resolved' || 'complete' => _success,
       'in_progress' || 'confirmed' => _purple,
-      _ => const Color(0xFFFFE8A7),
+      _ => _softAmber,
     };
 final _box = BoxDecoration(
   color: Colors.white,
@@ -2681,7 +3136,7 @@ class _PiePainter extends CustomPainter {
       -1.5708 + 6.283 * ratio,
       6.283 * (1 - ratio),
       true,
-      Paint()..color = const Color(0xFF7568FF),
+      Paint()..color = AdminColors.highlight,
     );
   }
 

@@ -187,10 +187,10 @@ class _HomeAppointmentCalendarScreenState
 
   String? _currentUserId() {
     final auth = _readProvider<AuthProvider>();
-    final authId = auth?.userId ?? auth?.hydrateCurrentUser();
+    final authId = auth?.authenticatedUserId;
     if (authId != null && authId.isNotEmpty) return authId;
-    final profileId = _readProvider<UserProvider>()?.user?.id;
-    return profileId == null || profileId.isEmpty ? null : profileId;
+    if (auth == null) return _readProvider<UserProvider>()?.user?.id;
+    return null;
   }
 
   T? _readProvider<T>() {

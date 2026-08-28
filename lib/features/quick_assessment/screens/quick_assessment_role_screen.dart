@@ -25,10 +25,7 @@ class QuickAssessmentRoleScreen extends StatelessWidget {
 
     return QuickAssessmentScaffold(
       showBottomBubble: false,
-      topClusters: const [
-        BubbleCluster(top: -6, left: -22),
-        BubbleCluster(top: -12, right: -28, mirrored: true),
-      ],
+      topClusters: const [],
       child: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -143,33 +140,40 @@ class _RoleContent extends StatelessWidget {
         const SizedBox(height: 28),
         _RoleCard(
           role: AssessmentRole.student,
-          icon: '🎓',
+          icon: Icons.school_outlined,
           onTap: () => _selectRole(context, AssessmentRole.student),
         ),
         const SizedBox(height: 16),
         _RoleCard(
           role: AssessmentRole.faculty,
-          icon: '👩‍🏫',
+          icon: Icons.co_present_outlined,
           onTap: () => _selectRole(context, AssessmentRole.faculty),
         ),
         const SizedBox(height: 16),
         _RoleCard(
           role: AssessmentRole.staff,
-          icon: '🧑‍🤝‍🧑',
+          icon: Icons.badge_outlined,
           onTap: () => _selectRole(context, AssessmentRole.staff),
         ),
-        const SizedBox(height: 48),
-        const _LikertLegend(),
-        const SizedBox(height: 28),
-        const Text(
-          '🔒 Your responses are completely confidential and will only be used\nto provide personalized mental health insights',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: QuickAssessmentPalette.mutedText,
-            fontSize: 10.5,
-            fontWeight: FontWeight.w500,
-            height: 1.35,
-          ),
+        const SizedBox(height: 32),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline, size: 14),
+            SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                'Your responses are handled securely and used to provide your assessment experience.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: QuickAssessmentPalette.mutedText,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -189,7 +193,7 @@ class _RoleCard extends StatelessWidget {
   });
 
   final AssessmentRole role;
-  final String icon;
+  final IconData icon;
   final VoidCallback onTap;
 
   @override
@@ -209,7 +213,10 @@ class _RoleCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              QuickPlaceholderIcon(icon: icon, size: 28),
+              CircleAvatar(
+                backgroundColor: QuickAssessmentPalette.softBorder,
+                child: Icon(icon, color: QuickAssessmentPalette.text),
+              ),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
@@ -245,107 +252,6 @@ class _RoleCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _LikertLegend extends StatelessWidget {
-  const _LikertLegend();
-
-  static const _items = [
-    (1, 'Strongly Disagree', Color(0xFFFF1010)),
-    (2, 'Disagree', Color(0xFFFF7A00)),
-    (3, 'Neutral', Color(0xFFFFC400)),
-    (4, 'Agree', Color(0xFFA6FF00)),
-    (5, 'Strongly Agree', Color(0xFF00D326)),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(13, 10, 13, 13),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF2C24A), width: 0.8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '5-Point Likert Scale',
-            style: TextStyle(
-              color: QuickAssessmentPalette.text,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (final item in _items)
-                _LegendItem(number: item.$1, label: item.$2, color: item.$3),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({
-    required this.number,
-    required this.label,
-    required this.color,
-  });
-
-  final int number;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 19,
-            height: 19,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                color: QuickAssessmentPalette.text,
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(height: 7),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              maxLines: 1,
-              style: const TextStyle(
-                color: QuickAssessmentPalette.text,
-                fontSize: 7.5,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -158,12 +158,15 @@ class _SleepRepository extends SleepRepository {
   );
 
   @override
-  Future<List<SleepEntry>> save(
+  Future<SleepSaveResult> save(
     SleepEntry entry, {
     required bool cloudEnabled,
   }) async {
     _entries = [..._entries.where((value) => value.id != entry.id), entry];
-    return _entries;
+    return SleepSaveResult(
+      status: SleepSaveStatus.savedLocallyAndSynced,
+      savedEntry: entry,
+    );
   }
 }
 

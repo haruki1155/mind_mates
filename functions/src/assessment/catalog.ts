@@ -190,8 +190,13 @@ export const QUICK_QUESTIONS: QuickQuestion[] = [
 
 // No documented validation source was found. These are internal experimental
 // product rules retained for compatibility and requiring professional review.
-export const ALGORITHM_VERSION = "internal_wellness_policy_v1";
-export const FULL_QUESTION_SET_VERSION = "experimental_role_based_v1";
+export const QUICK_ALGORITHM_VERSION = "internal_wellness_policy_v1";
+export const FULL_ALGORITHM_VERSION = "internal_wellness_policy_v2_agreement";
+export const FULL_QUESTION_SET_VERSION = "experimental_role_based_v2_agreement";
+export const LEGACY_FULL_ALGORITHM_VERSION = "internal_wellness_policy_v1";
+export const LEGACY_FULL_QUESTION_SET_VERSION = "experimental_role_based_v1";
+export const FULL_RESPONSE_SCALE_VERSION = "agreement5_v2";
+export const LEGACY_FULL_RESPONSE_SCALE_VERSION = "frequency5_v1";
 export const QUICK_QUESTION_SET_VERSION = "experimental_quick_v1";
 export const POLICY_SOURCE = "internally_defined_product_rule";
 export const POLICY_VALIDATION_STATUS = "requires_professional_review";
@@ -201,7 +206,7 @@ export const SCORE_BOUNDARIES = {low: 20, watchful: 40, moderate: 60, elevated: 
 export const QUICK_BOUNDARIES = {moderate: 30, high: 55, veryHigh: 75} as const;
 export const RESPONSE_COMPLETION = {usable: 70, high: 90} as const;
 export const INDICATOR_BOUNDARIES = {elevated: 75, protectiveMaximum: 25, focus: 40} as const;
-export const CONDITIONAL_RULE = {always: 1, oftenOrAlways: 2, average: 50} as const;
+export const CONDITIONAL_RULE = {stronglyAgree: 1, agreeOrStronglyAgree: 2, average: 50} as const;
 export const PRIORITY_RULES = {
   prompt: {highDomains: 1, elevatedDomains: 2, functionalImpacts: 3},
   followUp: {elevatedDomains: 1, moderateDomains: 2, functionalImpacts: 2},

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../providers/breathing_provider.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../models/breathing_models.dart';
@@ -20,7 +21,7 @@ class MindfulBreathingScreen extends StatefulWidget {
 }
 
 class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _gaugeController;
   final AudioPlayer _musicPlayer = AudioPlayer();
   final AudioPlayer _cuePlayer = AudioPlayer();
@@ -28,7 +29,11 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   _BreathingMood _selectedMood = _breathingMoods.first;
   _BreathingMood? _activeMood;
   Timer? _timer;
+  Duration _elapsedDuration = Duration.zero;
+  Duration? _lastTickTimestamp;
   DateTime? _startedAt;
+  String? _sessionId;
+  String? _lastPhaseLabel;
   int _selectedMinutes = 3;
   int _elapsedSeconds = 0;
   bool _isPaused = false;
@@ -41,6 +46,7 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _gaugeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -52,6 +58,7 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _gaugeController.dispose();
     _musicPlayer.dispose();
@@ -59,8 +66,19 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      if (_activeTechnique != null && !_isPaused && !_isCompleted) {
+        _pauseSession();
+      }
+    }
+  }
+
   Future<void> _prepareAudio() async {
-    const ambientAsset = 'assets/audio/breathing/ambient_calm.mp3';
+    const ambientAsset = 'assets/audio/breathing/ambient_calm_loop.mp3';
     try {
       _availableAudioAssets = await _loadAvailableAudioAssets();
       _audioAssetsChecked = true;
@@ -112,8 +130,15 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
                       technique: active,
                       mood: _activeMood ?? _selectedMood,
                       isSaving: context.watch<BreathingProvider>().isSaving,
-                      onDone: () => Navigator.of(context).pop(),
-                      onRestart: () => _startSession(active, mood: _activeMood),
+                      errorMessage: context
+                          .watch<BreathingProvider>()
+                          .errorMessage,
+                      onDone: context.watch<BreathingProvider>().isSaving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      onRestart: context.watch<BreathingProvider>().isSaving
+                          ? null
+                          : () => _startSession(active, mood: _activeMood),
                     )
                   : active == null
                   ? _BreathingSetup(
@@ -125,6 +150,7 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
                           setState(() => _selectedMood = mood),
                       onMinutesChanged: (minutes) =>
                           setState(() => _selectedMinutes = minutes),
+                      onBrowseTechniques: _showTechniquePicker,
                       onStart: () {
                         final technique = _selectedMood.toTechnique(
                           minutes: _selectedMinutes,
@@ -161,19 +187,46 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     final shouldStart = await _confirmStart(technique);
     if (shouldStart != true || !mounted) return;
 
+    final auth = _readProviderOrNull<AuthProvider>();
+    final userId =
+        auth?.authenticatedUserId ??
+        (auth == null ? context.read<UserProvider>().user?.id : null);
+    if (userId == null || userId.trim().isEmpty) {
+      _showMessage('Please sign in before starting a breathing session.');
+      return;
+    }
+    final sessionId = _newSessionId();
+    final started = await context.read<BreathingProvider>().startSession(
+      userId: userId,
+      sessionId: sessionId,
+      technique: technique,
+    );
+    if (!mounted) return;
+    if (!started) {
+      _showMessage(
+        context.read<BreathingProvider>().errorMessage ??
+            'Unable to start the breathing session.',
+      );
+      return;
+    }
+
     _timer?.cancel();
     setState(() {
       _activeTechnique = technique;
       _activeMood = mood ?? _activeMood ?? _selectedMood;
       _startedAt = DateTime.now();
+      _sessionId = sessionId;
       _elapsedSeconds = 0;
       _isPaused = false;
       _isCompleted = false;
+      _lastPhaseLabel = null;
     });
+    _elapsedDuration = Duration.zero;
+    _lastTickTimestamp = WidgetsBinding.instance.currentSystemFrameTimeStamp;
     _gaugeController.repeat();
     unawaited(_playMusicIfEnabled());
-    unawaited(_playCue('soft_chime.mp3'));
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    unawaited(_playCue('session_start.ogg'));
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
   }
 
   Future<bool?> _confirmStart(BreathingTechnique technique) {
@@ -188,7 +241,8 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
         ),
         title: const Text('Ready to begin?'),
         content: Text(
-          'Find a comfortable position before starting ${technique.title}. You can pause or leave anytime.',
+          'Find a comfortable position before starting ${technique.title}. You can pause or leave anytime.'
+          '${technique.hasBreathHold ? ' Skip breath holds or stop if you feel uncomfortable, dizzy, or short of breath.' : ''}',
         ),
         actions: [
           TextButton(
@@ -213,7 +267,22 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     final technique = _activeTechnique;
     if (technique == null || _isPaused || _isCompleted) return;
 
-    final next = _elapsedSeconds + 1;
+    final now = WidgetsBinding.instance.currentSystemFrameTimeStamp;
+    final previous = _lastTickTimestamp;
+    if (previous != null) {
+      // Some platforms do not advance a frame timestamp while the app is idle.
+      // Use the scheduled interval only in that case; otherwise use elapsed time.
+      _elapsedDuration += now > previous
+          ? now - previous
+          : const Duration(milliseconds: 250);
+    }
+    _lastTickTimestamp = now;
+    final next = _elapsedDuration.inSeconds;
+    final phase = BreathingPlan.phaseFor(technique, next);
+    if (phase.label != _lastPhaseLabel) {
+      _lastPhaseLabel = phase.label;
+      unawaited(_playPhaseCue(phase.label));
+    }
     if (next >= technique.durationSeconds) {
       setState(() {
         _elapsedSeconds = technique.durationSeconds;
@@ -227,9 +296,18 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
 
   Future<void> _completeSession() async {
     final technique = _activeTechnique;
-    final userId = context.read<UserProvider>().user?.id;
+    final auth = _readProviderOrNull<AuthProvider>();
+    final userId =
+        auth?.authenticatedUserId ??
+        (auth == null ? context.read<UserProvider>().user?.id : null);
     final startedAt = _startedAt;
-    if (technique == null || startedAt == null || _isCompleted) return;
+    final sessionId = _sessionId;
+    if (technique == null ||
+        startedAt == null ||
+        sessionId == null ||
+        _isCompleted) {
+      return;
+    }
 
     _timer?.cancel();
     setState(() {
@@ -242,9 +320,8 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     if (userId == null || userId.trim().isEmpty) return;
     final saved = await context.read<BreathingProvider>().completeSession(
       userId: userId,
+      sessionId: sessionId,
       technique: technique,
-      completedSeconds: technique.durationSeconds,
-      startedAt: startedAt,
     );
     if (!mounted || !saved) return;
     await _refreshProfileAndReport(userId);
@@ -269,14 +346,69 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
   }
 
   Future<void> _togglePause() async {
-    setState(() => _isPaused = !_isPaused);
     if (_isPaused) {
-      _gaugeController.stop();
-      await _musicPlayer.pause();
-    } else {
+      setState(() => _isPaused = false);
+      _lastTickTimestamp = WidgetsBinding.instance.currentSystemFrameTimeStamp;
       _gaugeController.repeat();
       unawaited(_playMusicIfEnabled());
+      return;
     }
+    await _pauseSession();
+  }
+
+  Future<void> _showTechniquePicker() async {
+    final technique = await showModalBottomSheet<BreathingTechnique>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          itemCount: BreathingPlan.techniques.length + 1,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'All breathing exercises',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              );
+            }
+            final item = BreathingPlan.techniques[index - 1];
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(vertical: 6),
+              title: Text(item.title),
+              subtitle: Text('${item.durationLabel} • ${item.bestFor}'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(sheetContext).pop(item),
+            );
+          },
+        ),
+      ),
+    );
+    if (technique != null && mounted) _startSession(technique);
+  }
+
+  Future<void> _pauseSession() async {
+    if (_isPaused) return;
+    setState(() => _isPaused = true);
+    _lastTickTimestamp = null;
+    _gaugeController.stop();
+    await _musicPlayer.pause();
+  }
+
+  String _newSessionId() {
+    final seed = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    final random = math.Random.secure().nextInt(1 << 32).toRadixString(36);
+    return 'breathing_${seed}_$random';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _confirmExit() async {
@@ -306,10 +438,13 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     );
     if (shouldExit != true || !mounted) return;
     _timer?.cancel();
+    _lastTickTimestamp = null;
     await _musicPlayer.pause();
     setState(() {
       _activeTechnique = null;
       _activeMood = null;
+      _sessionId = null;
+      _lastPhaseLabel = null;
       _elapsedSeconds = 0;
       _isPaused = false;
     });
@@ -339,6 +474,14 @@ class _MindfulBreathingScreenState extends State<MindfulBreathingScreen>
     } catch (_) {}
   }
 
+  Future<void> _playPhaseCue(String label) {
+    final normalized = label.toLowerCase();
+    if (normalized.contains('inhale')) return _playCue('inhale_cue.ogg');
+    if (normalized.contains('exhale')) return _playCue('exhale_cue.ogg');
+    if (normalized.contains('hold')) return _playCue('hold_cue.ogg');
+    return Future<void>.value();
+  }
+
   Future<void> _playCue(String fileName) async {
     if (!_soundEnabled || !_audioAssetsChecked) return;
     final asset = 'assets/audio/breathing/$fileName';
@@ -358,6 +501,7 @@ class _BreathingSetup extends StatelessWidget {
     required this.animation,
     required this.onMoodChanged,
     required this.onMinutesChanged,
+    required this.onBrowseTechniques,
     required this.onStart,
   });
 
@@ -366,6 +510,7 @@ class _BreathingSetup extends StatelessWidget {
   final Animation<double> animation;
   final ValueChanged<_BreathingMood> onMoodChanged;
   final ValueChanged<int> onMinutesChanged;
+  final VoidCallback onBrowseTechniques;
   final VoidCallback onStart;
 
   @override
@@ -420,6 +565,14 @@ class _BreathingSetup extends StatelessWidget {
                     selectedMinutes: selectedMinutes,
                     onChanged: onMinutesChanged,
                   ),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: onBrowseTechniques,
+                      icon: const Icon(Icons.menu_book_outlined),
+                      label: const Text('Explore all exercises'),
+                    ),
+                  ),
                   const SizedBox(height: 34),
                   const Spacer(),
                   _GoldActionButton(
@@ -472,6 +625,11 @@ class _BreathingPlayer extends StatelessWidget {
         .clamp(0, 1)
         .toDouble();
     final phase = BreathingPlan.phaseFor(technique, elapsedSeconds);
+    final phaseProgress = phase.stepSeconds == 0
+        ? 0.0
+        : (1 - (phase.remainingStepSeconds / phase.stepSeconds))
+              .clamp(0, 1)
+              .toDouble();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -516,6 +674,7 @@ class _BreathingPlayer extends StatelessWidget {
                     animation: gaugeAnimation,
                     progress: progress,
                     phase: _phaseTitle(phase.label),
+                    phaseProgress: phaseProgress,
                     subtitle: 'Follow the sphere',
                   ),
                   SizedBox(height: compact ? 16 : 26),
@@ -891,6 +1050,7 @@ class _BreathingSphere extends StatelessWidget {
     required this.animation,
     this.progress = 0,
     this.phase,
+    this.phaseProgress = 0,
     this.subtitle,
   });
 
@@ -898,6 +1058,7 @@ class _BreathingSphere extends StatelessWidget {
   final Animation<double> animation;
   final double progress;
   final String? phase;
+  final double phaseProgress;
   final String? subtitle;
 
   @override
@@ -910,8 +1071,9 @@ class _BreathingSphere extends StatelessWidget {
         child: AnimatedBuilder(
           animation: animation,
           builder: (context, _) {
-            final breath = math.sin(animation.value * math.pi * 2);
-            final scale = phase == null ? 1.0 : .94 + ((breath + 1) * .045);
+            final scale = phase == null
+                ? 1.0
+                : _phaseScale(phase!, phaseProgress);
             return Transform.scale(
               scale: scale,
               child: CustomPaint(
@@ -955,6 +1117,13 @@ class _BreathingSphere extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static double _phaseScale(String phase, double progress) {
+    final normalized = phase.toLowerCase();
+    if (normalized.contains('inhale')) return .93 + (.14 * progress);
+    if (normalized.contains('exhale')) return 1.07 - (.14 * progress);
+    return 1.0;
   }
 }
 
@@ -1061,6 +1230,7 @@ class _CompletionView extends StatelessWidget {
     required this.technique,
     required this.mood,
     required this.isSaving,
+    this.errorMessage,
     required this.onDone,
     required this.onRestart,
   });
@@ -1068,8 +1238,9 @@ class _CompletionView extends StatelessWidget {
   final BreathingTechnique technique;
   final _BreathingMood mood;
   final bool isSaving;
-  final VoidCallback onDone;
-  final VoidCallback onRestart;
+  final String? errorMessage;
+  final VoidCallback? onDone;
+  final VoidCallback? onRestart;
 
   @override
   Widget build(BuildContext context) {
@@ -1151,6 +1322,18 @@ class _CompletionView extends StatelessWidget {
                     minHeight: 4,
                     color: _BreathingPalette.gold,
                   ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF9B3A2E),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 Row(
                   children: [

@@ -46,6 +46,7 @@ class _CapturingFirestoreService extends FirestoreService {
     String? orderBy,
     bool descending = true,
     int? limit,
+    bool requiresAuthentication = true,
   }) async {
     this.collection = collection;
     this.whereEquals = whereEquals;

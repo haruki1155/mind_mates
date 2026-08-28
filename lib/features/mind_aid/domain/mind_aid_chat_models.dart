@@ -27,6 +27,7 @@ class MindAidChatRequest {
   const MindAidChatRequest({
     required this.userId,
     required this.text,
+    this.conversationId,
     this.recentMessages = const [],
     this.moodLevel,
     this.assessmentScore,
@@ -34,12 +35,12 @@ class MindAidChatRequest {
     this.assessment,
     this.conversationSummary,
     this.preferredSupportStyle,
-    this.journalText,
     this.wellnessSnapshot,
   });
 
   final String userId;
   final String text;
+  final String? conversationId;
   final List<MindAidMessageModel> recentMessages;
   final int? moodLevel;
   final int? assessmentScore;
@@ -47,7 +48,6 @@ class MindAidChatRequest {
   final MindAidAssessmentContext? assessment;
   final String? conversationSummary;
   final MindAidSupportStyle? preferredSupportStyle;
-  final String? journalText;
   final MindAidWellnessSnapshot? wellnessSnapshot;
 }
 
@@ -77,12 +77,21 @@ class MindAidConversationState {
   factory MindAidConversationState.fromMessages(
     List<MindAidMessageModel> messages,
   ) {
-    final assistantMessages = messages
+    final assistants = messages
         .where((message) => message.sender == 'assistant')
+        .toList(growable: false);
+    final assistantMessages = assistants
         .map((message) => message.text)
+        .toList(growable: false);
+    final intents = assistants.reversed
+        .map((message) => message.primaryIntent?.trim())
+        .whereType<String>()
+        .where((intent) => intent.isNotEmpty && intent != 'general_support')
         .toList(growable: false);
 
     return MindAidConversationState(
+      activeIntent: intents.isEmpty ? null : intents.first,
+      recentIntents: intents.take(8).toList(growable: false),
       lastQuestion: _lastQuestionFrom(assistantMessages),
       recentResponses: assistantMessages.take(6).toList(growable: false),
       awaitingFollowUp:

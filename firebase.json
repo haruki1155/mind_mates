@@ -2,6 +2,11 @@
   "functions": {
     "source": "functions"
   },
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
@@ -10,6 +15,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "target": "admin",
     "public": "build/web",
     "ignore": [
       "firebase.json",
@@ -21,6 +27,58 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "**/*.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0, must-revalidate"
+          }
+        ]
+      }
     ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "mind-mates-cd2cf",
+          "appId": "1:842251480963:android:ed62272c31f74f2beb50b6",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mind-mates-cd2cf",
+          "configurations": {
+            "android": "1:842251480963:android:ed62272c31f74f2beb50b6",
+            "ios": "1:842251480963:ios:e21397ce5d424f8deb50b6",
+            "macos": "1:842251480963:ios:e21397ce5d424f8deb50b6",
+            "web": "1:842251480963:web:e03a5de3a6484757eb50b6",
+            "windows": "1:842251480963:web:2c4a1e0fabde9bf1eb50b6"
+          }
+        }
+      }
+    }
   }
 }

@@ -10,20 +10,23 @@ import '../../../providers/user_provider.dart';
 import '../../../repositories/auth_repository.dart';
 import '../auth_flow_routes.dart';
 import '../data/registration_organization_catalog.dart';
+import '../password_policy.dart';
 
 class SignupScreen extends StatelessWidget {
-  const SignupScreen({super.key});
+  const SignupScreen({super.key, this.recoveryMode = false});
+
+  final bool recoveryMode;
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: _SignupColors.background,
       body: SafeArea(
         child: Stack(
           children: [
             _BubbleCluster(top: -27, left: -14, mirror: false),
             _BubbleCluster(top: -16, right: -12, mirror: true),
-            _SignupBody(),
+            _SignupBody(recoveryMode: recoveryMode),
           ],
         ),
       ),
@@ -32,7 +35,9 @@ class SignupScreen extends StatelessWidget {
 }
 
 class _SignupBody extends StatefulWidget {
-  const _SignupBody();
+  const _SignupBody({required this.recoveryMode});
+
+  final bool recoveryMode;
 
   @override
   State<_SignupBody> createState() => _SignupBodyState();
@@ -52,6 +57,8 @@ class _SignupBodyState extends State<_SignupBody> {
   String? _selectedCourse;
   String? _selectedSector;
   bool _acceptedTerms = false;
+  bool _passwordObscured = true;
+  bool _confirmPasswordObscured = true;
 
   @override
   void dispose() {
@@ -81,6 +88,8 @@ class _SignupBodyState extends State<_SignupBody> {
     if (value != _passwordController.text) {
       return 'Passwords do not match';
     }
+    final passwordError = validateNewPassword(_passwordController.text);
+    if (passwordError != null) return passwordError;
     return null;
   }
 
@@ -105,22 +114,40 @@ class _SignupBodyState extends State<_SignupBody> {
     final authProvider = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
     final role = assessmentProvider.selectedRole;
-    final usesSector = role == AssessmentRole.staff;
     final isStudent = role == AssessmentRole.student;
-    final userId = await authProvider.signUp(
-      password: _passwordController.text,
-      firstName: _firstNameController.text,
-      lastName: _lastNameController.text,
-      schoolId: _schoolIdController.text,
-      department: usesSector ? '' : _selectedDepartment ?? '',
-      course: isStudent ? _selectedCourse ?? '' : '',
-      sector: usesSector ? _selectedSector : null,
-      employeeId: isStudent ? null : _schoolIdController.text,
-      yearLevel: isStudent ? _yearLevelController.text : null,
-      position: isStudent ? null : _positionController.text,
-      middleName: _middleNameController.text,
-      role: role,
-    );
+    final isStaff = role == AssessmentRole.staff;
+    final userId = widget.recoveryMode
+        ? await authProvider.completeProfileSetup(
+            firstName: _firstNameController.text,
+            lastName: _lastNameController.text,
+            schoolId: _schoolIdController.text,
+            department: isStaff ? '' : (_selectedDepartment ?? ''),
+            course: isStudent ? (_selectedCourse ?? '') : '',
+            sector: isStaff ? _selectedSector : null,
+            employeeId: isStudent ? null : _schoolIdController.text,
+            yearLevel: isStudent ? _yearLevelController.text : null,
+            position: _positionController.text.trim().isEmpty
+                ? null
+                : _positionController.text,
+            middleName: _middleNameController.text,
+            role: role,
+          )
+        : await authProvider.signUp(
+            password: _passwordController.text,
+            firstName: _firstNameController.text,
+            lastName: _lastNameController.text,
+            schoolId: _schoolIdController.text,
+            department: isStaff ? '' : (_selectedDepartment ?? ''),
+            course: isStudent ? (_selectedCourse ?? '') : '',
+            sector: isStaff ? _selectedSector : null,
+            employeeId: isStudent ? null : _schoolIdController.text,
+            yearLevel: isStudent ? _yearLevelController.text : null,
+            position: _positionController.text.trim().isEmpty
+                ? null
+                : _positionController.text,
+            middleName: _middleNameController.text,
+            role: role,
+          );
 
     if (!mounted) return;
 
@@ -143,19 +170,22 @@ class _SignupBodyState extends State<_SignupBody> {
     await userProvider.loadProfile(userId);
 
     if (!mounted) return;
-    final destination = destinationAfterAuthentication(
-      hasCompletedQuickAssessment: false,
+    final state = resolveAccountState(
+      isAuthenticated: userId.isNotEmpty,
+      profile: userProvider.user,
+      assessmentCompleted: false,
+      onboardingComplete: false,
     );
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(destination, (route) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      destinationForAccountState(state),
+      (route) => false,
+    );
   }
 
   UserModel _localProfileFromRegistration({
     required String userId,
     required AssessmentRole? role,
   }) {
-    final usesSector = role == AssessmentRole.staff;
     final isStudent = role == AssessmentRole.student;
     final populationRole = role?.populationRole;
     return UserModel(
@@ -166,16 +196,19 @@ class _SignupBodyState extends State<_SignupBody> {
       lastName: _lastNameController.text.trim(),
       schoolId: _schoolIdController.text.trim(),
       employeeId: isStudent ? null : _schoolIdController.text.trim(),
-      department: usesSector ? null : _selectedDepartment?.trim(),
+      department: role == AssessmentRole.staff
+          ? null
+          : _selectedDepartment?.trim(),
       course: isStudent ? _selectedCourse?.trim() : null,
       yearLevel: isStudent ? _yearLevelController.text.trim() : null,
-      sector: usesSector ? _selectedSector?.trim() : null,
-      position: isStudent ? null : _positionController.text.trim(),
+      sector: role == AssessmentRole.staff ? _selectedSector?.trim() : null,
+      position: _positionController.text.trim().isEmpty
+          ? null
+          : _positionController.text.trim(),
       role: role?.name,
       populationRole: populationRole,
       declaredRole: populationRole,
       accessRole: AccessRole.appUser,
-      verificationStatus: VerificationStatus.pending,
       profileVersion: 2,
       createdAt: DateTime.now(),
       dayStreak: 0,
@@ -216,6 +249,25 @@ class _SignupBodyState extends State<_SignupBody> {
                     selectedSector: _selectedSector,
                     acceptedTerms: _acceptedTerms,
                     isLoading: authProvider.isLoading,
+                    signupActionLabel: widget.recoveryMode
+                        ? 'Complete setup'
+                        : authProvider.hasPendingProfileSetup
+                        ? 'Retry profile setup'
+                        : authProvider.hasPendingProfileLookup
+                        ? 'Retry account check'
+                        : 'Sign Up',
+                    onRoleChanged: (value) {
+                      if (value != null) {
+                        context.read<AssessmentProvider>().selectRole(value);
+                        setState(() {
+                          _selectedDepartment = null;
+                          _selectedCourse = null;
+                          _selectedSector = null;
+                          _yearLevelController.clear();
+                          _positionController.clear();
+                        });
+                      }
+                    },
                     onDepartmentChanged: (value) {
                       setState(() {
                         _selectedDepartment = value;
@@ -234,6 +286,15 @@ class _SignupBodyState extends State<_SignupBody> {
                     onSignUp: _handleSignUp,
                     requiredValidator: _requiredValidator,
                     confirmPasswordValidator: _confirmPasswordValidator,
+                    recoveryMode: widget.recoveryMode,
+                    passwordObscured: _passwordObscured,
+                    confirmPasswordObscured: _confirmPasswordObscured,
+                    onTogglePassword: () =>
+                        setState(() => _passwordObscured = !_passwordObscured),
+                    onToggleConfirmPassword: () => setState(
+                      () =>
+                          _confirmPasswordObscured = !_confirmPasswordObscured,
+                    ),
                   );
                 },
               ),
@@ -300,6 +361,8 @@ class _SignupFormCard extends StatelessWidget {
     required this.selectedSector,
     required this.acceptedTerms,
     required this.isLoading,
+    required this.signupActionLabel,
+    required this.onRoleChanged,
     required this.onDepartmentChanged,
     required this.onCourseChanged,
     required this.onSectorChanged,
@@ -307,6 +370,11 @@ class _SignupFormCard extends StatelessWidget {
     required this.onSignUp,
     required this.requiredValidator,
     required this.confirmPasswordValidator,
+    required this.passwordObscured,
+    required this.confirmPasswordObscured,
+    required this.onTogglePassword,
+    required this.onToggleConfirmPassword,
+    required this.recoveryMode,
   });
 
   final GlobalKey<FormState> formKey;
@@ -324,6 +392,8 @@ class _SignupFormCard extends StatelessWidget {
   final String? selectedSector;
   final bool acceptedTerms;
   final bool isLoading;
+  final String signupActionLabel;
+  final ValueChanged<AssessmentRole?> onRoleChanged;
   final ValueChanged<String?> onDepartmentChanged;
   final ValueChanged<String?> onCourseChanged;
   final ValueChanged<String?> onSectorChanged;
@@ -331,14 +401,19 @@ class _SignupFormCard extends StatelessWidget {
   final Future<void> Function() onSignUp;
   final String? Function(String?, String) requiredValidator;
   final String? Function(String?) confirmPasswordValidator;
+  final bool passwordObscured;
+  final bool confirmPasswordObscured;
+  final VoidCallback onTogglePassword;
+  final VoidCallback onToggleConfirmPassword;
+  final bool recoveryMode;
 
   @override
   Widget build(BuildContext context) {
     final selectedCourses = registrationCoursesForDepartment(
       selectedDepartment,
     );
-    final usesSector = role == AssessmentRole.staff;
     final isStudent = role == AssessmentRole.student;
+    final isStaff = role == AssessmentRole.staff;
 
     return Container(
       width: 346,
@@ -359,19 +434,38 @@ class _SignupFormCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SignupField(
-              controller: firstNameController,
-              label: 'First Name',
-              icon: Icons.person_outline,
-              textInputAction: TextInputAction.next,
-              validator: (value) => requiredValidator(value, 'First name'),
+            DropdownButtonFormField<AssessmentRole>(
+              initialValue: role,
+              decoration: const InputDecoration(
+                labelText: 'Institutional Role',
+                prefixIcon: Icon(Icons.groups_outlined),
+              ),
+              items: AssessmentRole.values
+                  .map(
+                    (item) =>
+                        DropdownMenuItem(value: item, child: Text(item.label)),
+                  )
+                  .toList(growable: false),
+              onChanged: onRoleChanged,
+              validator: (value) =>
+                  value == null ? 'Institutional role is required' : null,
             ),
             const SizedBox(height: 7),
-            _SignupField(
-              controller: middleNameController,
-              label: 'Middle Name',
-              textInputAction: TextInputAction.next,
-            ),
+            if (!recoveryMode)
+              _SignupField(
+                controller: firstNameController,
+                label: 'First Name',
+                icon: Icons.person_outline,
+                textInputAction: TextInputAction.next,
+                validator: (value) => requiredValidator(value, 'First name'),
+              ),
+            if (!recoveryMode) const SizedBox(height: 7),
+            if (!recoveryMode)
+              _SignupField(
+                controller: middleNameController,
+                label: 'Middle Name',
+                textInputAction: TextInputAction.next,
+              ),
             const SizedBox(height: 7),
             _SignupField(
               controller: lastNameController,
@@ -382,26 +476,27 @@ class _SignupFormCard extends StatelessWidget {
             const SizedBox(height: 7),
             _SignupField(
               controller: schoolIdController,
-              label: isStudent ? 'School ID' : 'Employee ID',
+              label: isStudent ? 'Student ID' : 'Employee ID',
               icon: Icons.badge_outlined,
               keyboardType: TextInputType.text,
               textInputAction: TextInputAction.next,
               validator: (value) => requiredValidator(
                 value,
-                isStudent ? 'School ID' : 'Employee ID',
+                isStudent ? 'Student ID' : 'Employee ID',
               ),
             ),
             const SizedBox(height: 7),
-            if (usesSector) ...[
+            if (isStaff)
               _SignupDropdownField(
-                label: 'Sector',
-                icon: Icons.business_center_outlined,
+                label: 'Sector or Office',
+                icon: Icons.business_outlined,
                 value: selectedSector,
                 items: staffDepartmentOptions,
                 onChanged: onSectorChanged,
-                validator: (value) => requiredValidator(value, 'Sector'),
-              ),
-            ] else ...[
+                validator: (value) =>
+                    requiredValidator(value, 'Sector or office'),
+              )
+            else
               _SignupDropdownField(
                 label: 'College or Department',
                 icon: Icons.account_balance_outlined,
@@ -413,31 +508,30 @@ class _SignupFormCard extends StatelessWidget {
                 validator: (value) =>
                     requiredValidator(value, 'College or department'),
               ),
-              if (isStudent) ...[
-                const SizedBox(height: 7),
-                _SignupDropdownField(
-                  label: 'Course or Program',
-                  icon: Icons.school_outlined,
-                  value: selectedCourse,
-                  items: selectedCourses,
-                  onChanged: selectedDepartment == null
-                      ? null
-                      : onCourseChanged,
-                  validator: (value) =>
-                      requiredValidator(value, 'Course or program'),
-                ),
-              ],
-            ],
             const SizedBox(height: 7),
-            if (isStudent)
+            if (isStudent) ...[
+              _SignupDropdownField(
+                label: 'Course or Program',
+                icon: Icons.school_outlined,
+                value: selectedCourse,
+                items: selectedCourses,
+                onChanged: selectedDepartment == null ? null : onCourseChanged,
+                validator: (value) =>
+                    requiredValidator(value, 'Course or program'),
+              ),
+              const SizedBox(height: 7),
+            ],
+            if (isStudent) ...[
               _SignupField(
                 controller: yearLevelController,
                 label: 'Year Level',
                 icon: Icons.timeline_outlined,
                 textInputAction: TextInputAction.next,
                 validator: (value) => requiredValidator(value, 'Year level'),
-              )
-            else
+              ),
+              const SizedBox(height: 7),
+            ],
+            if (!isStudent) ...[
               _SignupField(
                 controller: positionController,
                 label: 'Position or Designation',
@@ -446,31 +540,53 @@ class _SignupFormCard extends StatelessWidget {
                 validator: (value) =>
                     requiredValidator(value, 'Position or designation'),
               ),
-            const SizedBox(height: 7),
+              const SizedBox(height: 7),
+            ],
             _SignupField(
               controller: passwordController,
               label: 'Password',
               icon: Icons.lock_outline,
-              obscureText: true,
+              obscureText: passwordObscured,
+              suffixIcon: IconButton(
+                tooltip: passwordObscured ? 'Show password' : 'Hide password',
+                onPressed: onTogglePassword,
+                icon: Icon(
+                  passwordObscured ? Icons.visibility : Icons.visibility_off,
+                ),
+              ),
               textInputAction: TextInputAction.next,
-              validator: (value) => requiredValidator(value, 'Password'),
+              validator: validateNewPassword,
             ),
             const SizedBox(height: 7),
             _SignupField(
               controller: confirmPasswordController,
               label: 'Confirm Password',
               icon: Icons.lock_outline,
-              obscureText: true,
+              obscureText: confirmPasswordObscured,
+              suffixIcon: IconButton(
+                tooltip: confirmPasswordObscured
+                    ? 'Show password'
+                    : 'Hide password',
+                onPressed: onToggleConfirmPassword,
+                icon: Icon(
+                  confirmPasswordObscured
+                      ? Icons.visibility
+                      : Icons.visibility_off,
+                ),
+              ),
               textInputAction: TextInputAction.done,
               validator: confirmPasswordValidator,
             ),
-            const SizedBox(height: 9),
+            if (!recoveryMode) const SizedBox(height: 9),
             _TermsCheckbox(
               acceptedTerms: acceptedTerms,
               onChanged: onTermsChanged,
             ),
             const SizedBox(height: 23),
-            _SignUpButton(onPressed: isLoading ? null : onSignUp),
+            _SignUpButton(
+              onPressed: isLoading ? null : onSignUp,
+              label: signupActionLabel,
+            ),
           ],
         ),
       ),
@@ -486,6 +602,7 @@ class _SignupField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.obscureText = false,
+    this.suffixIcon,
     this.validator,
   });
 
@@ -495,6 +612,7 @@ class _SignupField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final bool obscureText;
+  final Widget? suffixIcon;
   final String? Function(String?)? validator;
 
   @override
@@ -549,6 +667,7 @@ class _SignupField extends StatelessWidget {
               minWidth: 44,
               minHeight: 44,
             ),
+            suffixIcon: suffixIcon,
             errorStyle: const TextStyle(
               fontSize: 9,
               height: 0.9,
@@ -759,9 +878,10 @@ class _TermsCheckbox extends StatelessWidget {
 }
 
 class _SignUpButton extends StatelessWidget {
-  const _SignUpButton({required this.onPressed});
+  const _SignUpButton({required this.onPressed, required this.label});
 
   final Future<void> Function()? onPressed;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -785,7 +905,7 @@ class _SignUpButton extends StatelessWidget {
                   color: _SignupColors.text,
                 ),
               )
-            : const Text('Sign Up'),
+            : Text(label),
       ),
     );
   }

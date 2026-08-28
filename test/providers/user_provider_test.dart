@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mind_mates/models/profile_roles.dart';
 import 'package:mind_mates/models/user_model.dart';
 import 'package:mind_mates/providers/user_provider.dart';
 import 'package:mind_mates/repositories/user_repository.dart';
@@ -40,27 +41,53 @@ void main() {
     });
 
     test(
-      'missing backend profile does not clear existing local user',
+      'updated profile reloads server values without changing protected fields',
       () async {
-        final repository = _FakeUserRepository();
-        final provider = UserProvider(repository);
-        provider.setUser(
-          const UserModel(
+        final repository = _FakeUserRepository(
+          user: const UserModel(
             id: 'user_1',
             email: 'leo@example.com',
-            firstName: 'Leonardo',
+            firstName: 'Leo',
             lastName: 'Molar',
+            schoolId: '2026-001',
             role: 'student',
+            populationRole: PopulationRole.student,
           ),
         );
+        final provider = UserProvider(repository)..setUser(repository.user);
 
+        final success = await provider.updateProfile(
+          repository.user!.copyWith(firstName: 'Leonardo'),
+        );
+        provider.clear();
         await provider.loadProfile('user_1');
 
-        expect(provider.user?.displayName, 'Leonardo Molar');
-        expect(provider.user?.roleLabel, 'Student');
-        expect(provider.isLoading, isFalse);
+        expect(success, isTrue);
+        expect(provider.user?.firstName, 'Leonardo');
+        expect(provider.user?.schoolId, '2026-001');
+        expect(provider.user?.populationRole, PopulationRole.student);
+        expect(provider.user?.role, 'student');
       },
     );
+
+    test('missing backend profile clears existing local user', () async {
+      final repository = _FakeUserRepository();
+      final provider = UserProvider(repository);
+      provider.setUser(
+        const UserModel(
+          id: 'user_1',
+          email: 'leo@example.com',
+          firstName: 'Leonardo',
+          lastName: 'Molar',
+          role: 'student',
+        ),
+      );
+
+      await provider.loadProfile('user_1');
+
+      expect(provider.user, isNull);
+      expect(provider.isLoading, isFalse);
+    });
 
     test(
       'missing backend profile stays null when there is no local user',
@@ -92,86 +119,6 @@ void main() {
       expect(provider.errorMessage, 'Unable to update profile.');
       expect(provider.isSaving, isFalse);
     });
-
-    test('marks activity and increments local day streak', () async {
-      final repository = _FakeUserRepository(
-        user: const UserModel(
-          id: 'user_1',
-          email: 'leo@example.com',
-          dayStreak: 2,
-          longestStreak: 2,
-        ),
-      );
-      final provider = UserProvider(repository)..setUser(repository.user);
-
-      await provider.markActivity('user_1');
-
-      expect(repository.markedActivityUid, 'user_1');
-      expect(provider.user?.dayStreak, 3);
-      expect(provider.user?.longestStreak, 3);
-      expect(provider.user?.activeDateKeys, contains('2026-07-03'));
-    });
-  });
-
-  group('StreakCalculator', () {
-    test('first activity creates streak one', () {
-      final update = StreakCalculator.calculate(
-        occurredAt: DateTime(2026, 7, 3),
-      );
-
-      expect(update.dayStreak, 1);
-      expect(update.longestStreak, 1);
-      expect(update.lastActivityDateKey, '2026-07-03');
-    });
-
-    test('same-day activity does not increment', () {
-      final update = StreakCalculator.calculate(
-        occurredAt: DateTime(2026, 7, 3, 18),
-        previousDateKey: '2026-07-03',
-        currentStreak: 4,
-        longestStreak: 5,
-      );
-
-      expect(update.dayStreak, 4);
-      expect(update.longestStreak, 5);
-    });
-
-    test('yesterday activity increments streak', () {
-      final update = StreakCalculator.calculate(
-        occurredAt: DateTime(2026, 7, 3),
-        previousDateKey: '2026-07-02',
-        currentStreak: 4,
-        longestStreak: 4,
-      );
-
-      expect(update.dayStreak, 5);
-      expect(update.longestStreak, 5);
-    });
-
-    test('missed day resets streak', () {
-      final update = StreakCalculator.calculate(
-        occurredAt: DateTime(2026, 7, 3),
-        previousDateKey: '2026-07-01',
-        currentStreak: 4,
-        longestStreak: 8,
-      );
-
-      expect(update.dayStreak, 1);
-      expect(update.longestStreak, 8);
-      expect(update.wasReset, isTrue);
-    });
-
-    test('longest streak updates only when exceeded', () {
-      final update = StreakCalculator.calculate(
-        occurredAt: DateTime(2026, 7, 3),
-        previousDateKey: '2026-07-02',
-        currentStreak: 2,
-        longestStreak: 10,
-      );
-
-      expect(update.dayStreak, 3);
-      expect(update.longestStreak, 10);
-    });
   });
 }
 
@@ -180,7 +127,6 @@ class _FakeUserRepository extends UserRepository {
 
   UserModel? user;
   UserModel? updatedUser;
-  String? markedActivityUid;
   bool failUpdate;
 
   @override
@@ -191,27 +137,5 @@ class _FakeUserRepository extends UserRepository {
     if (failUpdate) throw StateError('failed');
     updatedUser = user;
     this.user = user;
-  }
-
-  @override
-  Future<UserModel?> markUserActivity(String uid) async {
-    markedActivityUid = uid;
-    user = user?.copyWith(
-      dayStreak: user!.dayStreak + 1,
-      longestStreak: user!.dayStreak + 1,
-      lastActivityDateKey: '2026-07-03',
-      lastActiveAt: DateTime(2026, 7, 3),
-      activeDateKeys: ['2026-07-03'],
-    );
-    return user;
-  }
-
-  @override
-  Future<UserModel?> recordActivity(
-    String uid,
-    UserActivityType type, {
-    DateTime? occurredAt,
-  }) {
-    return markUserActivity(uid);
   }
 }

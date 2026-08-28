@@ -48,18 +48,14 @@ void main() {
     final repository = _FakeBreathingRepository();
     final provider = BreathingProvider(repository);
     final technique = BreathingPlan.techniques.first;
-    final startedAt = DateTime(2026, 7, 3, 8);
-
     final saved = await provider.completeSession(
       userId: 'user_1',
+      sessionId: 'breathing_test_session_12345',
       technique: technique,
-      completedSeconds: technique.durationSeconds,
-      startedAt: startedAt,
-      completedAt: startedAt.add(Duration(seconds: technique.durationSeconds)),
     );
 
     expect(saved, isTrue);
-    expect(repository.savedRecord?.userId, 'user_1');
+    expect(repository.savedRecord?.sessionId, 'breathing_test_session_12345');
     expect(repository.savedRecord?.technique.id, technique.id);
   });
 
@@ -104,6 +100,9 @@ void main() {
 
 class _FakeBreathingRepository extends BreathingRepository {
   BreathingSessionRecord? savedRecord;
+
+  @override
+  Future<void> startSession(BreathingSessionRecord record) async {}
 
   @override
   Future<String> completeSession(BreathingSessionRecord record) async {

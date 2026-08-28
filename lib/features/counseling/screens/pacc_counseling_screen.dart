@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/config/support_contact_config.dart';
+
 import '../../../models/appointment_model.dart';
 import '../../../providers/appointment_provider.dart';
 import '../../../providers/auth_provider.dart';
@@ -61,6 +63,13 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
   ];
 
   DateTime get _today => DateUtils.dateOnly(widget._nowProvider());
+
+  List<String> _availableTimesFor(DateTime date) {
+    final now = widget._nowProvider();
+    return _availableTimes
+        .where((time) => _scheduledAt(date, time).isAfter(now))
+        .toList(growable: false);
+  }
 
   @override
   void initState() {
@@ -196,6 +205,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         key: const ValueKey('calendar'),
         visibleMonth: _visibleMonth,
         minimumDate: _today,
+        isDateAvailable: (date) => _availableTimesFor(date).isNotEmpty,
         selectedDate: _selectedDate,
         onBack: () => setState(() => _step = _PaccAppointmentStep.intake),
         onPreviousMonth: () => setState(() {
@@ -207,6 +217,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         onDateSelected: (date) {
           setState(() {
             _selectedDate = date;
+            _selectedTime = null;
             _step = _PaccAppointmentStep.time;
           });
         },
@@ -215,7 +226,9 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
         key: const ValueKey('time'),
         selectedDate: _selectedDate,
         selectedTime: _selectedTime,
-        availableTimes: _availableTimes,
+        availableTimes: _selectedDate == null
+            ? const []
+            : _availableTimesFor(_selectedDate!),
         isSaving: appointmentProvider?.isSaving ?? false,
         onBack: () => setState(() => _step = _PaccAppointmentStep.calendar),
         onTimeSelected: (time) => setState(() => _selectedTime = time),
@@ -334,7 +347,7 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
       bestTime: _bestTimeController.text.trim(),
       scheduledAt: _scheduledAt(_selectedDate!, _selectedTime!),
       scheduledTime: _selectedTime!,
-      location: 'PACC Office, 2nd Floor, Main Building',
+      location: 'Location to be confirmed by counseling staff',
       status: 'pending',
       createdAt: DateTime.now(),
     );
@@ -375,9 +388,10 @@ class _PaccCounselingScreenState extends State<PaccCounselingScreen> {
 
   String? _currentUserId() {
     final auth = _readProviderOrNull<AuthProvider>();
-    final authId = auth?.userId ?? auth?.hydrateCurrentUser();
+    final authId = auth?.authenticatedUserId;
     if (authId != null && authId.isNotEmpty) return authId;
-    return _readProviderOrNull<UserProvider>()?.user?.id;
+    if (auth == null) return _readProviderOrNull<UserProvider>()?.user?.id;
+    return null;
   }
 
   static DateTime _scheduledAt(DateTime date, String time) {
@@ -682,60 +696,19 @@ class _EmergencyHelpCard extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(left: 48),
             child: Text(
-              'PACC Crisis Hotline available 24/7',
+              'Verified direct contact details are unavailable',
               style: _PaccText.body,
             ),
           ),
-          SizedBox(height: 14),
           Padding(
             padding: EdgeInsets.only(left: 48),
-            child: _ContactRow(
-              icon: Icons.call_outlined,
-              text: '+63 912 345 6789',
-            ),
-          ),
-          SizedBox(height: 8),
-          Padding(
-            padding: EdgeInsets.only(left: 48),
-            child: _ContactRow(
-              icon: Icons.mail_outline,
-              text: 'pacc@ucu.edu.ph',
-              underline: true,
+            child: Text(
+              SupportContactConfig.safeFallback,
+              style: _PaccText.body,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ContactRow extends StatelessWidget {
-  const _ContactRow({
-    required this.icon,
-    required this.text,
-    this.underline = false,
-  });
-
-  final IconData icon;
-  final String text;
-  final bool underline;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.black),
-        const SizedBox(width: 10),
-        Text(
-          text,
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            decoration: underline ? TextDecoration.underline : null,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -848,6 +821,7 @@ class _CalendarView extends StatelessWidget {
     super.key,
     required this.visibleMonth,
     required this.minimumDate,
+    required this.isDateAvailable,
     required this.selectedDate,
     required this.onBack,
     required this.onPreviousMonth,
@@ -857,6 +831,7 @@ class _CalendarView extends StatelessWidget {
 
   final DateTime visibleMonth;
   final DateTime minimumDate;
+  final bool Function(DateTime date) isDateAvailable;
   final DateTime? selectedDate;
   final VoidCallback onBack;
   final VoidCallback onPreviousMonth;
@@ -943,7 +918,9 @@ class _CalendarView extends StatelessWidget {
               final day = index - leadingSlots + 1;
               if (day < 1 || day > daysInMonth) return const SizedBox.shrink();
               final date = DateTime(visibleMonth.year, visibleMonth.month, day);
-              final enabled = !date.isBefore(DateUtils.dateOnly(minimumDate));
+              final enabled =
+                  !date.isBefore(DateUtils.dateOnly(minimumDate)) &&
+                  isDateAvailable(date);
               final selected =
                   selectedDate != null &&
                   DateUtils.isSameDay(selectedDate, date);
@@ -1011,6 +988,14 @@ class _TimeSelectionView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 22),
+        if (availableTimes.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No appointment times remain for this date. Please choose another date.',
+              style: _PaccText.body,
+            ),
+          ),
         LayoutBuilder(
           builder: (context, constraints) {
             final itemWidth = constraints.maxWidth >= 430

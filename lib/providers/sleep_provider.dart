@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../features/sleep/models/sleep_models.dart';
 import '../repositories/sleep_repository.dart';
+import '../services/firebase/firebase_error_message.dart';
 
 class SleepProvider extends ChangeNotifier {
   SleepProvider(this._repository);
@@ -13,6 +14,7 @@ class SleepProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
+  SleepEntry? _conflictingEntry;
   String? _loadedUserId;
 
   List<SleepEntry> get entries => List.unmodifiable(_entries);
@@ -21,6 +23,7 @@ class SleepProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   String? get errorMessage => _errorMessage;
+  SleepEntry? get conflictingEntry => _conflictingEntry;
   bool get needsConsent => _consent == null || !_consent!.isCurrent;
   bool get cloudEnabled =>
       _consent?.isCurrent == true && _consent!.cloudEnabled;
@@ -44,8 +47,16 @@ class SleepProvider extends ChangeNotifier {
       _syncState = result.pendingSync
           ? SleepSyncState.pending
           : SleepSyncState.idle;
-    } catch (_) {
-      _errorMessage = 'Unable to load your sleep diary.';
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Loading sleep diary failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to load your sleep diary.',
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -68,10 +79,17 @@ class SleepProvider extends ChangeNotifier {
       );
       await load(userId, force: true);
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Saving sleep consent failed.',
+      );
       _syncState = SleepSyncState.error;
-      _errorMessage =
-          'Your storage choice could not be saved. Please try again.';
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Your storage choice could not be saved. Please try again.',
+      );
       return false;
     } finally {
       _isSaving = false;
@@ -79,27 +97,57 @@ class SleepProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> save(SleepEntry entry) async {
+  Future<SleepSaveResult> save(SleepEntry entry) async {
     final validation = SleepCalculator.validate(entry);
     if (validation != null) {
       _errorMessage = validation;
       notifyListeners();
-      return false;
+      return SleepSaveResult(
+        status: SleepSaveStatus.localSaveFailed,
+        message: validation,
+      );
     }
     _isSaving = true;
     _errorMessage = null;
+    _conflictingEntry = null;
     notifyListeners();
     try {
-      _entries = await _repository.save(entry, cloudEnabled: cloudEnabled);
-      _syncState = SleepSyncState.idle;
-      return true;
-    } catch (_) {
-      // The local write succeeds before cloud synchronization is attempted.
-      final result = await _repository.load(entry.userId);
-      _entries = result.entries;
-      _syncState = SleepSyncState.pending;
-      _errorMessage = 'Saved on this device. Cloud sync will be retried.';
-      return true;
+      final result = await _repository.save(entry, cloudEnabled: cloudEnabled);
+      if (result.localSaved && result.savedEntry != null) {
+        _entries = [
+          ..._entries.where(
+            (value) => value.wakeDateKey != result.savedEntry!.wakeDateKey,
+          ),
+          result.savedEntry!,
+        ]..sort((a, b) => b.wakeDateKey.compareTo(a.wakeDateKey));
+      }
+      _conflictingEntry = result.conflictingEntry;
+      if (result.status == SleepSaveStatus.savedLocallySyncPending) {
+        _syncState = SleepSyncState.pending;
+      } else if (result.status == SleepSaveStatus.localSaveFailed) {
+        _syncState = cloudEnabled
+            ? SleepSyncState.pending
+            : SleepSyncState.idle;
+      } else {
+        _syncState = SleepSyncState.idle;
+      }
+      _errorMessage = result.message;
+      return result;
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Saving sleep entry failed.',
+      );
+      _syncState = SleepSyncState.error;
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'We could not save this entry. Please try again.',
+      );
+      return SleepSaveResult(
+        status: SleepSaveStatus.localSaveFailed,
+        message: _errorMessage,
+      );
     } finally {
       _isSaving = false;
       notifyListeners();
@@ -117,7 +165,12 @@ class SleepProvider extends ChangeNotifier {
         cloudEnabled: cloudEnabled,
       );
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Deleting sleep entry failed.',
+      );
       final result = await _repository.load(userId);
       _entries = result.entries;
       if (result.pendingSync) {
@@ -126,7 +179,10 @@ class SleepProvider extends ChangeNotifier {
             'Deleted on this device. Cloud deletion will be retried.';
         return true;
       }
-      _errorMessage = 'Unable to delete this sleep entry.';
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to delete this sleep entry.',
+      );
       return false;
     } finally {
       _isSaving = false;
@@ -142,8 +198,16 @@ class SleepProvider extends ChangeNotifier {
       await _repository.deleteAll(userId, cloudEnabled: cloudEnabled);
       _entries = const [];
       return true;
-    } catch (_) {
-      _errorMessage = 'Unable to delete all sleep entries.';
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Deleting sleep diary failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to delete all sleep entries.',
+      );
       return false;
     } finally {
       _isSaving = false;
@@ -164,10 +228,17 @@ class SleepProvider extends ChangeNotifier {
       );
       _syncState = SleepSyncState.idle;
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Revoking sleep cloud storage failed.',
+      );
       _syncState = SleepSyncState.error;
-      _errorMessage =
-          'Cloud deletion is incomplete. Please retry while online.';
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Cloud deletion is incomplete. Please retry while online.',
+      );
       return false;
     } finally {
       _isSaving = false;
@@ -189,4 +260,34 @@ class SleepProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> keepCloudConflict(SleepEntry cloudEntry) async {
+    _entries = await _repository.keepCloudVersion(cloudEntry);
+    _conflictingEntry = null;
+    _errorMessage = 'Kept the version saved on the other device.';
+    notifyListeners();
+  }
+
+  Future<SleepSaveResult> replaceCloudConflict(
+    SleepEntry localEntry,
+    SleepEntry cloudEntry,
+  ) => save(localEntry.copyWith(revision: cloudEntry.revision));
+
+  Future<SleepShareGrant> createCounselorShare(int summaryWindowDays) async {
+    _isSaving = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      return await _repository.createCounselorShare(summaryWindowDays);
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  Future<List<SleepShareGrant>> loadCounselorShares(String userId) =>
+      _repository.loadCounselorShares(userId);
+
+  Future<void> revokeCounselorShare(String shareId) =>
+      _repository.revokeCounselorShare(shareId);
 }

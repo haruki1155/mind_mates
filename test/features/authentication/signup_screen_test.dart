@@ -14,6 +14,22 @@ import 'package:mind_mates/services/auth/auth_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  testWidgets('signup requires an institutional role', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final authProvider = _FakeAuthProvider();
+    await tester.pumpWidget(
+      _SignupHarness(authProvider: authProvider, role: null),
+    );
+
+    await tester.tap(find.text('Sign Up'));
+    await tester.pump();
+
+    expect(find.text('Institutional role is required'), findsOneWidget);
+    expect(authProvider.signupCalls, 0);
+  });
+
   testWidgets('department selection enables related courses', (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -142,10 +158,12 @@ void main() {
     expect(find.text('College or Department'), findsWidgets);
     expect(find.text('Course or Program'), findsNothing);
     expect(find.text('Position or Designation'), findsWidgets);
-    expect(find.text('Sector'), findsNothing);
+    expect(find.text('Sector or Office'), findsNothing);
   });
 
-  testWidgets('non-teaching signup requires and passes sector', (tester) async {
+  testWidgets('non-teaching signup uses sector and position fields', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -154,37 +172,61 @@ void main() {
       _SignupHarness(authProvider: authProvider, role: AssessmentRole.staff),
     );
 
-    expect(find.text('Sector'), findsWidgets);
+    expect(find.text('Sector or Office'), findsWidgets);
     expect(find.text('College or Department'), findsNothing);
     expect(find.text('Course or Program'), findsNothing);
+    expect(find.text('Position or Designation'), findsWidgets);
 
     await _fillRequiredTextFields(tester);
+    await _selectDropdownItem(
+      tester,
+      fieldLabel: 'Sector or Office',
+      itemLabel: 'Library',
+    );
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    await tester.tap(find.text('Sign Up'));
-    await tester.pump();
-
-    expect(find.text('Sector is required'), findsOneWidget);
-    expect(authProvider.signupCalls, 0);
-
-    await _selectDropdownItem(
-      tester,
-      fieldLabel: 'Sector',
-      itemLabel: 'Guidance/PACC',
-    );
     await tester.tap(find.text('Sign Up'));
     await tester.pumpAndSettle();
 
     expect(authProvider.signupCalls, 1);
     expect(authProvider.department, '');
     expect(authProvider.course, '');
-    expect(authProvider.sector, 'Guidance/PACC');
+    expect(authProvider.sector, 'Library');
     expect(authProvider.role, AssessmentRole.staff);
+  });
+
+  testWidgets('position is optional for student signup', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final authProvider = _FakeAuthProvider();
+    await tester.pumpWidget(_SignupHarness(authProvider: authProvider));
+
+    await _fillRequiredTextFields(tester, fillPosition: false);
+    await _selectDropdownItem(
+      tester,
+      fieldLabel: 'College or Department',
+      itemLabel: 'College of Nursing',
+    );
+    await _selectDropdownItem(
+      tester,
+      fieldLabel: 'Course or Program',
+      itemLabel: 'BS Nursing',
+    );
+    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.text('Sign Up'));
+    await tester.pumpAndSettle();
+
+    expect(authProvider.signupCalls, 1);
+    expect(authProvider.position, isNull);
   });
 }
 
-Future<void> _fillRequiredTextFields(WidgetTester tester) async {
+Future<void> _fillRequiredTextFields(
+  WidgetTester tester, {
+  bool fillPosition = true,
+}) async {
   await tester.enterText(
     find.widgetWithText(TextFormField, 'First Name'),
     'Leo',
@@ -196,8 +238,8 @@ Future<void> _fillRequiredTextFields(WidgetTester tester) async {
   await tester.enterText(
     find.widgetWithText(
       TextFormField,
-      find.text('School ID').evaluate().isNotEmpty
-          ? 'School ID'
+      find.text('Student ID').evaluate().isNotEmpty
+          ? 'Student ID'
           : 'Employee ID',
     ),
     '2026-1',
@@ -210,7 +252,7 @@ Future<void> _fillRequiredTextFields(WidgetTester tester) async {
     TextFormField,
     'Position or Designation',
   );
-  if (position.evaluate().isNotEmpty) {
+  if (fillPosition && position.evaluate().isNotEmpty) {
     await tester.enterText(position, 'Coordinator');
   }
   await tester.enterText(
@@ -251,10 +293,14 @@ class _SignupHarness extends StatelessWidget {
   });
 
   final AuthProvider authProvider;
-  final AssessmentRole role;
+  final AssessmentRole? role;
 
   @override
   Widget build(BuildContext context) {
+    final assessmentProvider = AssessmentProvider(_FakeAssessmentRepository());
+    final initialRole = role;
+    if (initialRole != null) assessmentProvider.selectRole(initialRole);
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
@@ -262,8 +308,7 @@ class _SignupHarness extends StatelessWidget {
           create: (_) => UserProvider(_FakeUserRepository()),
         ),
         ChangeNotifierProvider<AssessmentProvider>(
-          create: (_) =>
-              AssessmentProvider(_FakeAssessmentRepository())..selectRole(role),
+          create: (_) => assessmentProvider,
         ),
       ],
       child: MaterialApp(

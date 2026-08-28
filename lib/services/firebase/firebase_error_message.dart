@@ -9,16 +9,19 @@ class FirebaseErrorMessage {
   const FirebaseErrorMessage._();
 
   static String describe(Object error, {required String fallback}) {
+    final contractMismatch = _assessmentContractMismatchMessage(error);
+    if (contractMismatch != null) return contractMismatch;
     final text = [
       error.toString(),
       if (error is FirebaseFunctionsException) error.message ?? '',
       if (error is FirebaseException) error.message ?? '',
     ].join(' ').toLowerCase();
     if (text.contains('initial-throttle') ||
-        text.contains('attempts allowed again')) {
+        text.contains('attempts allowed again') ||
+        text.contains('too many attempts')) {
       return appCheckThrottleMessage();
     }
-    if (text.contains('app check') || text.contains('appcheck')) {
+    if (isAppCheckFailure(error)) {
       return appCheckMessage();
     }
     final code = codeOf(error);
@@ -40,9 +43,15 @@ class FirebaseErrorMessage {
       case 'unauthenticated':
         return 'Please sign in again to continue.';
       case 'failed-precondition':
-        return text.contains('profile')
-            ? 'Your account profile is incomplete. Retry profile setup, then try again.'
-            : 'This action cannot be completed yet. Check your profile and try again.';
+        if (text.contains('profile')) {
+          return 'Your account profile is incomplete. Retry profile setup, then try again.';
+        }
+        if (text.contains('status') ||
+            text.contains('proposal') ||
+            text.contains('no longer')) {
+          return 'This appointment changed on the server. Refresh it before trying again.';
+        }
+        return 'This action cannot be completed yet. Refresh and try again.';
       case 'app-check':
       case 'unauthorized':
         return appCheckMessage();
@@ -51,7 +60,12 @@ class FirebaseErrorMessage {
       case 'resource-exhausted':
         return 'You have reached the allowed limit for this action. Please try again later.';
       case 'already-exists':
-        return 'This information has already been saved for your account.';
+        return text.contains('different') || text.contains('conflict')
+            ? 'A different request already used this retry identifier. Refresh before trying again.'
+            : 'This information has already been saved for your account.';
+      case 'deadline-exceeded':
+      case 'cancelled':
+        return 'The request timed out before confirmation. Retry to safely check the same operation.';
       case 'network-request-failed':
       case 'unavailable':
         return 'The connection to MindMates is unavailable. Check your internet connection and try again.';
@@ -114,12 +128,30 @@ class FirebaseErrorMessage {
   static bool _isLocalWebHost(String host) =>
       host == 'localhost' || host == '127.0.0.1' || host == '::1';
 
+  static String? _assessmentContractMismatchMessage(Object error) {
+    if (error is! FirebaseFunctionsException || error.details is! Map) {
+      return null;
+    }
+    final details = error.details as Map;
+    if (details['reason'] != 'assessment_contract_mismatch') return null;
+    final correlationId = details['correlationId']?.toString().trim() ?? '';
+    final reference = correlationId.isEmpty
+        ? ''
+        : ' Reference: $correlationId.';
+    return 'This assessment version is not supported by the server. Update MindMates and try again.$reference';
+  }
+
   static bool isAppCheckFailure(Object error) {
     final text = error.toString().toLowerCase();
     final code = codeOf(error);
+    final details = error is FirebaseFunctionsException ? error.details : null;
+    final detailsText = details?.toString().toLowerCase() ?? '';
     return text.contains('app check') ||
         text.contains('appcheck') ||
         text.contains('app attestation') ||
+        detailsText.contains('app check') ||
+        detailsText.contains('appcheck') ||
+        detailsText.contains('app attestation') ||
         code == 'app-check' ||
         code == 'unauthorized';
   }

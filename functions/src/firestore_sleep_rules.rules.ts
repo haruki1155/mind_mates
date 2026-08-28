@@ -62,15 +62,20 @@ function validEntry(userId = "owner", wakeDateKey = "20260714") {
   };
 }
 
-test("owner can create, query, update, and delete a deterministic entry", async () => {
+test("owners can read their diary but direct client mutations are denied", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   const ref = doc(db, "sleep_entries/sleep_owner_20260714");
-  await assertSucceeds(setDoc(ref, validEntry()));
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "sleep_entries/sleep_owner_20260714"), {
+      ...validEntry(), updatedAt: Timestamp.now(), revision: 1,
+    });
+  });
   await assertSucceeds(
     getDocs(query(collection(db, "sleep_entries"), where("userId", "==", "owner"))),
   );
-  await assertSucceeds(updateDoc(ref, {perceivedQuality: 5, updatedAt: serverTimestamp()}));
-  await assertSucceeds(deleteDoc(ref));
+  await assertFails(setDoc(ref, validEntry()));
+  await assertFails(updateDoc(ref, {perceivedQuality: 5, updatedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(ref));
 });
 
 test("other users and administrators cannot read an owner's sleep entry", async () => {
@@ -89,7 +94,7 @@ test("other users and administrators cannot read an owner's sleep entry", async 
   );
 });
 
-test("rejects invalid IDs, tags, ratings, chronology, and identity changes", async () => {
+test("client writes are denied regardless of submitted sleep-entry shape", async () => {
   const db = environment.authenticatedContext("owner").firestore();
   await assertFails(setDoc(doc(db, "sleep_entries/wrong"), validEntry()));
   await assertFails(
@@ -110,20 +115,21 @@ test("rejects invalid IDs, tags, ratings, chronology, and identity changes", asy
       sleepOnsetAt: Timestamp.fromDate(new Date("2026-07-14T01:00:00Z")),
     }),
   );
-  const ref = doc(db, "sleep_entries/sleep_owner_20260714");
-  await assertSucceeds(setDoc(ref, validEntry()));
-  await assertFails(updateDoc(ref, {wakeDateKey: "20260715", updatedAt: serverTimestamp()}));
+  await assertFails(setDoc(doc(db, "sleep_entries/sleep_owner_20260714"), validEntry()));
 });
 
-test("owner alone controls a valid consent document", async () => {
+test("owners can read cloud consent but direct writes are callable-owned", async () => {
   const ownerDb = environment.authenticatedContext("owner").firestore();
   const preference = doc(ownerDb, "sleep_preferences/owner");
-  await assertSucceeds(setDoc(preference, {
-    userId: "owner",
-    consentVersion: "sleep-v1",
-    cloudConsent: true,
-    grantedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "sleep_preferences/owner"), {
+      userId: "owner", consentVersion: "sleep-v1", cloudConsent: true,
+      grantedAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+  });
+  await assertFails(setDoc(preference, {
+    userId: "owner", consentVersion: "sleep-v1", cloudConsent: true,
+    grantedAt: serverTimestamp(), updatedAt: serverTimestamp(),
   }));
   await assertFails(
     getDoc(doc(environment.authenticatedContext("other").firestore(), "sleep_preferences/owner")),

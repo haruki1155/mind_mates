@@ -1,11 +1,11 @@
 {
-    "name": "MindMate Admin",
-    "short_name": "MindMate Admin",
+    "name": "MindMates Admin",
+    "short_name": "MindMates Admin",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFF9E8",
     "theme_color": "#F6B900",
-    "description": "MindMate administration and counseling management portal.",
+    "description": "MindMates administration and counseling management portal.",
     "prefer_related_applications": false,
     "icons": [
         {

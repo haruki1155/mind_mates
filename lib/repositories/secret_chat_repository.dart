@@ -12,7 +12,7 @@ import '../models/secret_chat_model.dart';
 import '../models/secret_chat_profile.dart';
 import '../models/secret_chat_profile_upload_exception.dart';
 import '../services/firebase/firestore_service.dart';
-import 'user_repository.dart';
+import '../services/firebase/firebase_callable_router.dart';
 
 class SecretChatAuthException implements Exception {
   const SecretChatAuthException();
@@ -31,17 +31,14 @@ class SecretChatThreadUnavailableException implements Exception {
 class SecretChatRepository {
   SecretChatRepository({
     FirestoreService? firestoreService,
-    UserRepository? userRepository,
     this.firebaseAuth,
     FirebaseStorage? firebaseStorage,
     FirebaseFunctions? firebaseFunctions,
   }) : _firestoreService = firestoreService ?? FirestoreService(),
-       _userRepository = userRepository ?? UserRepository(),
        _storage = firebaseStorage,
        _functions = firebaseFunctions;
 
   final FirestoreService _firestoreService;
-  final UserRepository _userRepository;
   final FirebaseAuth? firebaseAuth;
   final FirebaseStorage? _storage;
   final FirebaseFunctions? _functions;
@@ -118,21 +115,21 @@ class SecretChatRepository {
     final reference = _firestoreService.firestore
         .collection(FirestoreCollections.secretChats)
         .doc(postId);
-    await reference.set({
-      'authorId': uid,
-      'message': message.trim(),
-      'category': categories.first,
-      'categories': categories,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'likeCount': 0,
-      'commentCount': 0,
-      'readCount': 0,
-      'moderationStatus': 'active',
-      'safetyLabels': safetyLabels,
-      'isAnonymous': true,
-    });
-    unawaited(_tryRecordActivity(uid, UserActivityType.secretChatPost));
+    await _firestoreService
+        .setDocument(FirestoreCollections.secretChats, reference.id, {
+          'authorId': uid,
+          'message': message.trim(),
+          'category': categories.first,
+          'categories': categories,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'likeCount': 0,
+          'commentCount': 0,
+          'readCount': 0,
+          'moderationStatus': 'active',
+          'safetyLabels': safetyLabels,
+          'isAnonymous': true,
+        });
     final profile = _profileCache[uid];
     return SecretChatModel(
       id: reference.id,
@@ -162,7 +159,7 @@ class SecretChatRepository {
         'Wait for this post to finish syncing before deleting it.',
       );
     }
-    await functions.httpsCallable('deleteSecretChatPost').call({
+    await functions.routedCallable('deleteSecretChatPost').call({
       'postId': post.id,
     });
   }
@@ -171,17 +168,17 @@ class SecretChatRepository {
     final uid = _requireUserId();
     final nextLiked = !post.isLiked;
     final interactionId = _interactionId(uid, post.id);
-    final interactionRef = _firestoreService.firestore
-        .collection(FirestoreCollections.secretChatInteractions)
-        .doc(interactionId);
-
-    await interactionRef.set({
-      'userId': uid,
-      'postId': post.id,
-      'liked': nextLiked,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    unawaited(_tryRecordActivity(uid, UserActivityType.secretChatInteraction));
+    await _firestoreService.setDocument(
+      FirestoreCollections.secretChatInteractions,
+      interactionId,
+      {
+        'userId': uid,
+        'postId': post.id,
+        'liked': nextLiked,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      merge: true,
+    );
 
     return post.copyWith(
       isLiked: nextLiked,
@@ -203,7 +200,6 @@ class SecretChatRepository {
       },
       merge: true,
     );
-    unawaited(_tryRecordActivity(uid, UserActivityType.secretChatInteraction));
     return post.copyWith(isSaved: nextSaved);
   }
 
@@ -234,29 +230,32 @@ class SecretChatRepository {
     final postRef = _firestoreService.firestore
         .collection(FirestoreCollections.secretChats)
         .doc(postId);
-    final commentRef = _firestoreService.firestore
-        .collection(FirestoreCollections.secretChatComments)
-        .doc(commentId);
+    final commentIdValue =
+        commentId ??
+        _firestoreService.firestore
+            .collection(FirestoreCollections.secretChatComments)
+            .doc()
+            .id;
 
     final postSnapshot = await postRef.get();
     if (!postSnapshot.exists ||
         postSnapshot.data()?['moderationStatus'] != 'active') {
       throw const SecretChatThreadUnavailableException();
     }
-    await commentRef.set({
-      'postId': postId,
-      'authorId': uid,
-      'message': message.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'moderationStatus': 'active',
-      'safetyLabels': safetyLabels,
-      'isAnonymous': true,
-    });
-    unawaited(_tryRecordActivity(uid, UserActivityType.secretChatComment));
+    await _firestoreService
+        .setDocument(FirestoreCollections.secretChatComments, commentIdValue, {
+          'postId': postId,
+          'authorId': uid,
+          'message': message.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'moderationStatus': 'active',
+          'safetyLabels': safetyLabels,
+          'isAnonymous': true,
+        });
 
     return SecretChatComment(
-      id: commentRef.id,
+      id: commentIdValue,
       postId: postId,
       authorId: uid,
       message: message.trim(),
@@ -295,7 +294,7 @@ class SecretChatRepository {
     if (validation != null) throw ArgumentError(validation);
     try {
       final result = await functions
-          .httpsCallable('saveSecretChatProfile')
+          .routedCallable('saveSecretChatProfile')
           .call({'alias': normalized});
       return _cacheCallableProfile(uid, result.data);
     } on FirebaseFunctionsException catch (error) {
@@ -319,7 +318,7 @@ class SecretChatRepository {
     if (currentUser == null || currentUser.uid != uid) {
       throw const SecretChatProfileUploadException(
         SecretChatProfileUploadError.authenticationRequired,
-        'Your session has expired. Sign in again before uploading a photo.',
+        'Please sign in again before uploading a photo.',
       );
     }
     try {
@@ -355,7 +354,7 @@ class SecretChatRepository {
     }
     try {
       final result = await functions
-          .httpsCallable('finalizeSecretChatProfilePhoto')
+          .routedCallable('finalizeSecretChatProfilePhoto')
           .call({'photoPath': path});
       return _cacheCallableProfile(uid, result.data);
     } on FirebaseFunctionsException catch (error) {
@@ -381,7 +380,7 @@ class SecretChatRepository {
   Future<SecretChatProfile?> removeProfilePhoto() async {
     final uid = _requireUserId();
     final result = await functions
-        .httpsCallable('removeSecretChatProfilePhoto')
+        .routedCallable('removeSecretChatProfilePhoto')
         .call();
     return _cacheCallableProfile(uid, result.data);
   }
@@ -426,7 +425,7 @@ class SecretChatRepository {
       uid,
     );
     if (data == null) {
-      await functions.httpsCallable('rebuildMySecretChatStats').call<void>();
+      await functions.routedCallable('rebuildMySecretChatStats').call<void>();
       data = await _firestoreService.getDocument(
         FirestoreCollections.secretChatProfileStats,
         uid,
@@ -471,17 +470,20 @@ class SecretChatRepository {
         .collection(FirestoreCollections.secretChatInteractions)
         .doc(_interactionId(uid, post.id));
     var incremented = false;
-    await firestore.runTransaction((transaction) async {
-      final interaction = await transaction.get(interactionRef);
-      if (interaction.data()?['readAt'] != null) return;
-      transaction.set(interactionRef, {
-        'userId': uid,
-        'postId': post.id,
-        'readAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      incremented = true;
-    });
+    await _firestoreService.runTransaction(
+      area: 'Recording Secret Chat read transaction',
+      handler: (transaction) async {
+        final interaction = await transaction.get(interactionRef);
+        if (interaction.data()?['readAt'] != null) return;
+        transaction.set(interactionRef, {
+          'userId': uid,
+          'postId': post.id,
+          'readAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        incremented = true;
+      },
+    );
     return incremented ? post.copyWith(readCount: post.readCount + 1) : post;
   }
 
@@ -567,14 +569,6 @@ class SecretChatRepository {
   }
 
   String _interactionId(String uid, String postId) => '${uid}_$postId';
-
-  Future<void> _tryRecordActivity(String userId, UserActivityType type) async {
-    try {
-      await _userRepository.recordActivity(userId, type);
-    } catch (_) {
-      // Secret Chat should remain usable even if activity sync is unavailable.
-    }
-  }
 }
 
 extension SecretChatValidationCodeLabel on SecretChatValidationCode {

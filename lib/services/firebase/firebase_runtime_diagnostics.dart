@@ -41,7 +41,7 @@ class FirebaseRuntimeDiagnostics {
     final details = error.details;
     if (details is! Map) return null;
     final value = details['correlationId']?.toString().trim() ?? '';
-    return value.isEmpty ? null : value;
+    return RegExp(r'^[A-Za-z0-9-]{8,80}$').hasMatch(value) ? value : null;
   }
 
   static String get _buildMode => kDebugMode

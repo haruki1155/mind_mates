@@ -6,6 +6,17 @@ import 'package:mind_mates/providers/appointment_provider.dart';
 import 'package:mind_mates/repositories/appointment_repository.dart';
 
 void main() {
+  test('appointment status parsing preserves pending and rejects unknown values', () {
+    expect(
+      AppointmentLifecycleStatus.parse('pending'),
+      AppointmentLifecycleStatus.pending,
+    );
+    expect(
+      AppointmentLifecycleStatus.parse('unexpected-state'),
+      AppointmentLifecycleStatus.unknown,
+    );
+  });
+
   test('loads appointments for the requested user', () async {
     final repository = _FakeAppointmentRepository([
       _appointment('a1', 'user_1'),
@@ -84,6 +95,65 @@ void main() {
     expect(await first, isTrue);
     expect(provider.appointments, hasLength(1));
   });
+
+  test('failed appointment retry retains the same submission ID', () async {
+    final repository = _FakeAppointmentRepository([])..shouldFail = true;
+    final provider = AppointmentProvider(repository);
+    final appointment = _appointment('new', 'user_1');
+
+    expect(await provider.createAppointment(appointment), isFalse);
+    repository.shouldFail = false;
+    expect(await provider.createAppointment(appointment), isTrue);
+
+    expect(repository.submissionIds, hasLength(2));
+    expect(repository.submissionIds.first, repository.submissionIds.last);
+  });
+
+  test('reschedule response uses server-confirmed status and schedule', () async {
+    final proposed = _appointment('a1', 'user_1').copyWith(
+      status: 'reschedule_proposed',
+      proposedScheduledAt: DateTime(2026, 5, 5, 14),
+      proposedScheduledTime: '2:00 PM',
+    );
+    final repository = _FakeAppointmentRepository([proposed]);
+    final provider = AppointmentProvider(repository);
+    await provider.loadAppointments('user_1');
+    repository.rescheduleResult = AppointmentRescheduleResult(
+      status: 'confirmed',
+      scheduledAt: DateTime(2026, 5, 5, 14),
+      scheduledTime: '2:00 PM',
+    );
+
+    expect(
+      await provider.respondToReschedule(proposed, accept: true),
+      isTrue,
+    );
+
+    expect(provider.appointments.single.status, 'confirmed');
+    expect(provider.appointments.single.scheduledTime, '2:00 PM');
+    expect(provider.appointments.single.scheduledAt, DateTime(2026, 5, 5, 14));
+  });
+
+  test('failed reschedule retry retains the same operation ID', () async {
+    final proposed = _appointment('a1', 'user_1').copyWith(
+      status: 'reschedule_proposed',
+      proposedScheduledAt: DateTime(2026, 5, 5, 14),
+    );
+    final repository = _FakeAppointmentRepository([proposed])
+      ..respondShouldFail = true;
+    final provider = AppointmentProvider(repository);
+    await provider.loadAppointments('user_1');
+
+    expect(await provider.respondToReschedule(proposed, accept: false), isFalse);
+    repository.respondShouldFail = false;
+    expect(await provider.respondToReschedule(proposed, accept: false), isTrue);
+
+    expect(repository.rescheduleOperationIds, hasLength(2));
+    expect(
+      repository.rescheduleOperationIds.first,
+      repository.rescheduleOperationIds.last,
+    );
+  });
 }
 
 AppointmentModel _appointment(String id, String userId) {
@@ -111,6 +181,14 @@ class _FakeAppointmentRepository extends AppointmentRepository {
   bool returnAllUsers = false;
   int createCalls = 0;
   Completer<AppointmentModel>? saveCompleter;
+  final List<String?> submissionIds = [];
+  final List<String> rescheduleOperationIds = [];
+  bool respondShouldFail = false;
+  AppointmentRescheduleResult rescheduleResult = AppointmentRescheduleResult(
+    status: 'pending',
+    scheduledAt: DateTime(2026, 4, 30, 11),
+    scheduledTime: '11:00 AM',
+  );
 
   @override
   Future<List<AppointmentModel>> fetchAppointments(String userId) async {
@@ -121,11 +199,24 @@ class _FakeAppointmentRepository extends AppointmentRepository {
 
   @override
   Future<AppointmentModel> createAppointment(
-    AppointmentModel appointment,
-  ) async {
+    AppointmentModel appointment, {
+    String? submissionId,
+  }) async {
     createCalls += 1;
+    submissionIds.add(submissionId);
     if (shouldFail) throw StateError('save failed');
     if (saveCompleter != null) return saveCompleter!.future;
     return appointment.copyWith(id: 'created_1');
+  }
+
+  @override
+  Future<AppointmentRescheduleResult> respondToReschedule({
+    required String appointmentId,
+    required bool accept,
+    required String operationId,
+  }) async {
+    rescheduleOperationIds.add(operationId);
+    if (respondShouldFail) throw StateError('response failed');
+    return rescheduleResult;
   }
 }

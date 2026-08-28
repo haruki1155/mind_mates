@@ -19,6 +19,7 @@ class MindAidMessage {
     this.supportCards = const [],
     this.actions = const [],
     this.source = 'local',
+    this.primaryIntent,
   });
 
   final String id;
@@ -30,6 +31,7 @@ class MindAidMessage {
   final List<MindAidSupportCard> supportCards;
   final List<MindAidAction> actions;
   final String source;
+  final String? primaryIntent;
 }
 
 class MindAidSupportCard {

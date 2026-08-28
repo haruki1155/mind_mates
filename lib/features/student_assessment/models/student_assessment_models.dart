@@ -1,25 +1,39 @@
 import 'assessment_interpretation_models.dart';
+import '../config/assessment_policy.dart';
 
 enum LikertAnswer {
-  never,
-  rarely,
-  sometimes,
-  often,
-  always;
+  stronglyDisagree,
+  disagree,
+  neutral,
+  agree,
+  stronglyAgree;
+
+  /// Compatibility aliases for pre-agreement-scale callers. Serialized
+  /// responses always use the agreement semantic names above.
+  @Deprecated('Use stronglyDisagree')
+  static const never = stronglyDisagree;
+  @Deprecated('Use disagree')
+  static const rarely = disagree;
+  @Deprecated('Use neutral')
+  static const sometimes = neutral;
+  @Deprecated('Use agree')
+  static const often = agree;
+  @Deprecated('Use stronglyAgree')
+  static const always = stronglyAgree;
 
   int get value => index + 1;
 
   String get label {
     switch (this) {
-      case LikertAnswer.never:
+      case LikertAnswer.stronglyDisagree:
         return 'Strongly Disagree';
-      case LikertAnswer.rarely:
+      case LikertAnswer.disagree:
         return 'Disagree';
-      case LikertAnswer.sometimes:
+      case LikertAnswer.neutral:
         return 'Neutral';
-      case LikertAnswer.often:
+      case LikertAnswer.agree:
         return 'Agree';
-      case LikertAnswer.always:
+      case LikertAnswer.stronglyAgree:
         return 'Strongly Agree';
     }
   }
@@ -88,6 +102,18 @@ class StudentAssessmentQuestion {
   final AssessmentSection section;
   final AssessmentDirection direction;
   final bool isConditional;
+
+  bool get isFunctionalImpactItem =>
+      AssessmentPolicy.functionalImpactQuestionIds.contains(id);
+
+  bool get affectsDomainScore => !isConditional;
+
+  bool get affectsSupportPriority => isFunctionalImpactItem;
+
+  String? get functionalImpactCategory =>
+      isFunctionalImpactItem ? section.label : null;
+
+  int get priorityContribution => isFunctionalImpactItem ? 1 : 0;
 }
 
 class StudentAssessmentAnswer {
@@ -122,6 +148,7 @@ class StudentAssessmentResult {
     required this.disclaimer,
     required this.totalResponses,
     required this.interpretation,
+    this.responseScaleVersion = AssessmentPolicy.fullResponseScaleVersion,
   });
 
   final String userType;
@@ -133,6 +160,37 @@ class StudentAssessmentResult {
   final String disclaimer;
   final int totalResponses;
   final AssessmentInterpretation interpretation;
+  final String responseScaleVersion;
+
+  factory StudentAssessmentResult.fromJson(Map<String, dynamic> json) {
+    final rawScores = json['subscaleScores'];
+    final scores = <String, double>{};
+    if (rawScores is Map) {
+      for (final entry in rawScores.entries) {
+        final value = entry.value;
+        if (value is num) scores[entry.key.toString()] = value.toDouble();
+      }
+    }
+    final rawInterpretation = json['interpretation'];
+    return StudentAssessmentResult(
+      userType: json['userType']?.toString() ?? 'Student',
+      overallScore: _nullableDouble(json['overallScore']),
+      status: json['status']?.toString() ?? 'Insufficient Responses',
+      subscaleScores: scores,
+      mainConcernAreas: _stringList(json['mainConcernAreas']),
+      message: json['message']?.toString() ?? '',
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      totalResponses: _int(json['totalResponses']),
+      responseScaleVersion:
+          json['responseScaleVersion']?.toString() ??
+          AssessmentPolicy.fullResponseScaleVersion,
+      interpretation: AssessmentInterpretation.fromJson(
+        rawInterpretation is Map
+            ? Map<String, dynamic>.from(rawInterpretation)
+            : json,
+      ),
+    );
+  }
 
   Map<String, Object> toJson() {
     return {
@@ -146,8 +204,25 @@ class StudentAssessmentResult {
       'totalResponses': totalResponses,
       'algorithmVersion': interpretation.algorithmVersion,
       'questionSetVersion': interpretation.questionSetVersion,
+      'responseScaleVersion': responseScaleVersion,
       'supportPriority': interpretation.supportPriority.name,
       'interpretation': interpretation.toJson(),
     };
   }
+}
+
+double? _nullableDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value == null) return null;
+  return double.tryParse(value.toString());
+}
+
+int _int(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) return const [];
+  return value.map((item) => item.toString()).toList(growable: false);
 }

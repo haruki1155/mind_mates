@@ -1,19 +1,23 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../database/firestore_collections.dart';
 import '../models/mood_model.dart';
 import '../services/firebase/firestore_service.dart';
-import 'user_repository.dart';
 
 class MoodRepository {
   MoodRepository({
     FirestoreService? firestoreService,
+    this._functions,
     DateTime Function()? nowProvider,
   }) : _firestoreService = firestoreService ?? FirestoreService(),
        _nowProvider = nowProvider ?? DateTime.now;
 
   final FirestoreService _firestoreService;
   final DateTime Function() _nowProvider;
+  final FirebaseFunctions? _functions;
+
+  FirebaseFunctions get _callables =>
+      _functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
 
   static const timezone = 'Asia/Manila';
 
@@ -33,13 +37,13 @@ class MoodRepository {
 
   static String dateKeyFor(DateTime instant) {
     final date = manilaWallClock(instant);
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
+    return '${date.year.toString().padLeft(4, '0')}'
+        '${date.month.toString().padLeft(2, '0')}'
         '${date.day.toString().padLeft(2, '0')}';
   }
 
   static String dailyDocumentId(String userId, DateTime instant) {
-    return 'daily_${userId}_${dateKeyFor(instant).replaceAll('-', '')}';
+    return 'daily_${userId}_${dateKeyFor(instant)}';
   }
 
   Future<MoodModel?> fetchTodayMood(String userId, {DateTime? now}) async {
@@ -71,89 +75,33 @@ class MoodRepository {
     String? note,
     DateTime? now,
   }) async {
-    final instant = now ?? _nowProvider();
-    final existing = await fetchTodayMood(userId, now: instant);
-    if (existing != null) {
-      return DailyMoodSaveResult(mood: existing, created: false);
+    final moodKey = _moodKeyFor(level: level, label: label);
+    final result = await _callables.httpsCallable('logDailyMood').call<Object?>(
+      {'moodKey': moodKey, if (note?.isNotEmpty ?? false) 'note': note},
+    );
+    final data = result.data;
+    if (data is! Map) throw const FormatException('Mood response was invalid.');
+    final mood = data['mood'];
+    if (mood is! Map) throw const FormatException('Mood response was invalid.');
+    final createdAtMillis = mood['createdAtMillis'];
+    if (createdAtMillis is! num) {
+      throw const FormatException('Mood response was invalid.');
     }
-
-    final dateKey = dateKeyFor(instant);
-    final wallClock = manilaWallClock(instant);
-    final documentId = dailyDocumentId(userId, instant);
-    final firestore = _firestoreService.firestore;
-    final moodRef = firestore
-        .collection(FirestoreCollections.moods)
-        .doc(documentId);
-    final userRef = firestore
-        .collection(FirestoreCollections.users)
-        .doc(userId);
-    final activityRef = firestore
-        .collection(FirestoreCollections.userActivities)
-        .doc('mood_${userId}_${dateKey.replaceAll('-', '')}');
-
-    final created = await firestore.runTransaction((transaction) async {
-      final moodSnapshot = await transaction.get(moodRef);
-      if (moodSnapshot.exists) return false;
-
-      final userSnapshot = await transaction.get(userRef);
-      final userData = userSnapshot.data();
-      final streak = StreakCalculator.calculate(
-        occurredAt: wallClock,
-        previousDateKey:
-            userData?['lastActivityDateKey']?.toString() ??
-            userData?['lastCheckInDate']?.toString(),
-        currentStreak: _intOrZero(userData?['dayStreak']),
-        longestStreak: _intOrZero(userData?['longestStreak']),
-        activeDateKeys: _stringList(userData?['activeDateKeys']),
-      );
-
-      transaction.set(moodRef, {
-        'userId': userId,
-        'level': level,
-        'label': label?.trim() ?? '',
-        'note': note?.trim() ?? '',
-        'dateKey': dateKey,
-        'timezone': timezone,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(activityRef, {
-        'userId': userId,
-        'type': UserActivityType.moodCheckIn.storedValue,
-        'dateKey': dateKey,
-        'occurredAt': Timestamp.fromDate(instant),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(userRef, {
-        'lastActiveAt': FieldValue.serverTimestamp(),
-        'lastActivityDateKey': streak.lastActivityDateKey,
-        'activeDateKeys': streak.activeDateKeys,
-        'streakUpdatedAt': FieldValue.serverTimestamp(),
-        'dayStreak': streak.dayStreak,
-        'longestStreak': streak.longestStreak,
-      }, SetOptions(merge: true));
-      return true;
-    });
-
-    if (!created) {
-      final concurrent = await fetchTodayMood(userId, now: instant);
-      if (concurrent != null) {
-        return DailyMoodSaveResult(mood: concurrent, created: false);
-      }
-      throw StateError('Daily mood exists but could not be loaded.');
-    }
-
     return DailyMoodSaveResult(
+      created: data['created'] == true,
+      dayStreak: _intOrZero(data['dayStreak']),
+      longestStreak: _intOrZero(data['longestStreak']),
       mood: MoodModel(
-        id: documentId,
+        id: mood['id']?.toString() ?? '',
         userId: userId,
-        level: level,
-        label: label?.trim(),
-        note: note?.trim(),
-        dateKey: dateKey,
+        moodKey: mood['moodKey']?.toString(),
+        level: _intOrZero(mood['level']),
+        label: mood['label']?.toString(),
+        note: mood['note']?.toString(),
+        dateKey: mood['dateKey']?.toString(),
         timezone: timezone,
-        createdAt: instant,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMillis.toInt()),
       ),
-      created: true,
     );
   }
 
@@ -210,18 +158,32 @@ class MoodRepository {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  static List<String> _stringList(Object? value) {
-    if (value is! List) return const [];
-    return value
-        .map((item) => item.toString())
-        .where((item) => item.trim().isNotEmpty)
-        .toList(growable: false);
+  static String _moodKeyFor({required int level, String? label}) {
+    final normalized = label?.trim().toLowerCase();
+    const keys = {
+      'great': 5,
+      'okay': 4,
+      'tired': 3,
+      'stressed': 2,
+      'sad': 1,
+      'angry': 1,
+      'excited': 5,
+    };
+    if (normalized != null && keys[normalized] == level) return normalized;
+    throw ArgumentError('A valid mood key is required.');
   }
 }
 
 class DailyMoodSaveResult {
-  const DailyMoodSaveResult({required this.mood, required this.created});
+  const DailyMoodSaveResult({
+    required this.mood,
+    required this.created,
+    this.dayStreak = 0,
+    this.longestStreak = 0,
+  });
 
   final MoodModel mood;
   final bool created;
+  final int dayStreak;
+  final int longestStreak;
 }

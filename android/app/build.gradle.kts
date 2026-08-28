@@ -14,20 +14,28 @@ val signingProperties = Properties()
 if (signingPropertiesFile.exists()) {
     signingPropertiesFile.inputStream().use(signingProperties::load)
 }
-val productionApplicationId = "ph.edu.ucu.mindmates"
-val productionFirebaseAppId = "1:842251480963:android:4c05d169dbacf125eb50b6"
-val googleServicesFile = file("google-services.json")
-val googleServicesConfigurationError = when {
-    !googleServicesFile.isFile ->
-        "android/app/google-services.json is required for $productionApplicationId."
-    !googleServicesFile.readText().contains("\"package_name\": \"$productionApplicationId\"") ->
-        "google-services.json does not match Android package $productionApplicationId."
-    !googleServicesFile.readText().contains("\"mobilesdk_app_id\": \"$productionFirebaseAppId\"") ->
-        "google-services.json does not match Firebase Android app $productionFirebaseAppId."
-    else -> null
-}
-if (googleServicesConfigurationError != null) {
-    throw GradleException(googleServicesConfigurationError)
+val productionApplicationId = "com.example.mind_mates"
+val stagingApplicationId = "com.example.mind_mates.staging"
+val stagingFirebaseAppId = "1:978195258114:android:36354078e3d99999f5801b"
+
+// The Google Services plugin resolves this file from src/<flavor>/.
+// Validate the tester-facing staging variant explicitly so it can never fall
+// back to production Firebase configuration.
+tasks.configureEach {
+    if (name.startsWith("processStaging") && name.endsWith("GoogleServices")) {
+        doFirst {
+            val stagingGoogleServices = file("src/staging/google-services.json")
+            if (!stagingGoogleServices.isFile) {
+                throw GradleException("android/app/src/staging/google-services.json is required for staging builds.")
+            }
+            val contents = stagingGoogleServices.readText()
+            if (!contents.contains("\"project_id\": \"mindmate-staging\"") ||
+                !contents.contains("\"package_name\": \"$stagingApplicationId\"") ||
+                !contents.contains("\"mobilesdk_app_id\": \"$stagingFirebaseAppId\"")) {
+                throw GradleException("Staging google-services.json does not match the registered staging Android app.")
+            }
+        }
+    }
 }
 val requiredSigningKeys = listOf("keyAlias", "storeFile", "storePassword", "keyPassword")
 val missingSigningKeys = requiredSigningKeys.filter { signingProperties.getProperty(it).isNullOrBlank() }
@@ -68,6 +76,21 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("development") {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+        }
+        create("production") {
+            dimension = "environment"
+        }
     }
 
     buildTypes {

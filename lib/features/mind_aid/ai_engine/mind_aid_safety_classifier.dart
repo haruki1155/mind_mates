@@ -14,11 +14,16 @@ class MindAidSafetyClassifier {
     'hurt myself',
     'i want to die',
     'do not want to live',
+    'ayoko nang mabuhay',
+    'gusto kong mamatay',
+    'magpakamatay',
+    'magpapakamatay',
   ];
 
   static const _highDistressPhrases = [
     'panic attack',
     'cant breathe',
+    'can t breathe',
     'cannot breathe',
     'i am unsafe',
     'not safe right now',
@@ -27,6 +32,18 @@ class MindAidSafetyClassifier {
     'i might hurt someone',
     'breaking down',
     'out of control',
+    'hindi ako safe',
+    'sasaktan ako',
+    'immediate danger',
+    'emergency help',
+    'nasa panganib ako',
+    'may sasakit sa akin',
+    'abusing me',
+    'being harassed',
+    'unsafe at home',
+    'relationship is violent',
+    'nananakit sa akin',
+    'hina harass ako',
   ];
 
   MindAidSafetyResult classify({

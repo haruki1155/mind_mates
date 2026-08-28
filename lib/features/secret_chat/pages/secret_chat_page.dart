@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/report_provider.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/secret_chat_provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../routes/route_names.dart';
@@ -88,7 +89,10 @@ class _SecretChatPageState extends State<SecretChatPage> {
 
   Future<void> _refreshProfileAndReport() async {
     final userProvider = _readProviderOrNull<UserProvider>();
-    final userId = userProvider?.user?.id;
+    final auth = _readProviderOrNull<AuthProvider>();
+    final userId =
+        auth?.authenticatedUserId ??
+        (auth == null ? userProvider?.user?.id : null);
     if (userId == null || userId.trim().isEmpty) return;
 
     try {

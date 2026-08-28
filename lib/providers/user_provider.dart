@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/user_model.dart';
-import '../models/profile_roles.dart';
 import '../repositories/user_repository.dart';
+import '../services/firebase/firebase_error_message.dart';
 
 class UserProvider extends ChangeNotifier {
   UserProvider(this._repository);
@@ -19,23 +19,38 @@ class UserProvider extends ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get errorMessage => _errorMessage;
 
+  void clear() {
+    _user = null;
+    _isLoading = false;
+    _isSaving = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   void setUser(UserModel? user) {
     _user = user;
     notifyListeners();
   }
 
   Future<void> loadProfile(String uid) async {
+    _user = null;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final fetchedUser = await _repository.fetchUserProfile(uid);
-      if (fetchedUser != null) {
-        _user = fetchedUser;
-      }
-    } catch (error) {
-      _errorMessage = 'Unable to load profile.';
+      _user = fetchedUser;
+    } catch (error, stackTrace) {
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Loading profile failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to load profile.',
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -52,9 +67,17 @@ class UserProvider extends ChangeNotifier {
     try {
       await _repository.updateUserProfile(updatedUser.id, updatedUser);
       return true;
-    } catch (error) {
+    } catch (error, stackTrace) {
       _user = previous;
-      _errorMessage = 'Unable to update profile.';
+      FirebaseErrorMessage.log(
+        error,
+        stackTrace,
+        area: 'Updating profile failed.',
+      );
+      _errorMessage = FirebaseErrorMessage.describe(
+        error,
+        fallback: 'Unable to update profile.',
+      );
       return false;
     } finally {
       _isSaving = false;
@@ -62,90 +85,15 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> requestRoleCorrection({
-    required PopulationRole requestedRole,
-    required String reason,
-  }) async {
-    _isSaving = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> recordAppOpen(String uid) async {
     try {
-      await _repository.requestRoleCorrection(
-        requestedRole: requestedRole,
-        reason: reason,
-      );
-      return true;
-    } catch (_) {
-      _errorMessage = 'Unable to submit role correction request.';
-      return false;
-    } finally {
-      _isSaving = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> recordActivity(
-    String uid,
-    UserActivityType type, {
-    DateTime? occurredAt,
-  }) async {
-    try {
-      final updatedUser = await _repository.recordActivity(
-        uid,
-        type,
-        occurredAt: occurredAt,
-      );
-      final current = _user;
+      final updatedUser = await _repository.recordAppOpen(uid);
       if (updatedUser != null) {
-        _user = current == null
-            ? updatedUser
-            : current.copyWith(
-                dayStreak: updatedUser.dayStreak,
-                longestStreak: updatedUser.longestStreak,
-                lastActivityDateKey: updatedUser.lastActivityDateKey,
-                lastActiveAt: updatedUser.lastActiveAt,
-                activeDateKeys: updatedUser.activeDateKeys,
-              );
+        _user = updatedUser;
         notifyListeners();
       }
     } catch (_) {
-      // Streak sync should never block the user from completing an action.
+      // Analytics must not prevent the Home screen from loading.
     }
-  }
-
-  Future<void> markActivity(String uid) {
-    return recordActivity(uid, UserActivityType.quickAssessment);
-  }
-
-  Future<void> markQuickAssessment(String uid) {
-    return recordActivity(uid, UserActivityType.quickAssessment);
-  }
-
-  Future<void> markFullAssessment(String uid) {
-    return recordActivity(uid, UserActivityType.fullAssessment);
-  }
-
-  Future<void> markMindAidMessage(String uid) {
-    return recordActivity(uid, UserActivityType.mindAidMessage);
-  }
-
-  Future<void> markMoodCheckIn(String uid) {
-    return recordActivity(uid, UserActivityType.moodCheckIn);
-  }
-
-  Future<void> markJournalEntry(String uid) {
-    return recordActivity(uid, UserActivityType.journalEntry);
-  }
-
-  Future<void> markBreathingSession(String uid) {
-    return recordActivity(uid, UserActivityType.breathingSession);
-  }
-
-  Future<void> markSecretChatPost(String uid) {
-    return recordActivity(uid, UserActivityType.secretChatPost);
-  }
-
-  Future<void> markSecretChatComment(String uid) {
-    return recordActivity(uid, UserActivityType.secretChatComment);
   }
 }

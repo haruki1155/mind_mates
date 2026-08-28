@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../providers/auth_provider.dart';
 import '../../../providers/sleep_provider.dart';
@@ -23,7 +25,7 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final auth = context.read<AuthProvider>();
-    _userId ??= auth.userId ?? auth.hydrateCurrentUser();
+    _userId ??= auth.authenticatedUserId;
     if (_userId == null || _requested) return;
     _requested = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -81,14 +83,14 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
     }
     if (provider.needsConsent) _scheduleConsent();
     final summary = provider.summary(_windowDays);
-    final observations = _windowDays == 14
+    final observations = _windowDays >= 14
         ? provider.observations()
         : const <SleepContributorObservation>[];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3E8),
       appBar: AppBar(
-        title: const Text('Sleep Quality'),
+        title: const Text('Sleep Wellness Journal'),
         backgroundColor: const Color(0xFFFFC414),
         foregroundColor: Colors.black,
         actions: [
@@ -114,6 +116,16 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
                 const PopupMenuItem(
                   value: 'delete_all',
                   child: Text('Delete all entries'),
+                ),
+              if (provider.cloudEnabled)
+                const PopupMenuItem(
+                  value: 'share_counselor',
+                  child: Text('Share summary with counselor'),
+                ),
+              if (provider.cloudEnabled)
+                const PopupMenuItem(
+                  value: 'manage_shares',
+                  child: Text('Manage counselor sharing'),
                 ),
             ],
           ),
@@ -149,6 +161,7 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
               segments: const [
                 ButtonSegment(value: 7, label: Text('7 days')),
                 ButtonSegment(value: 14, label: Text('14 days')),
+                ButtonSegment(value: 30, label: Text('30 days')),
               ],
               selected: {_windowDays},
               onSelectionChanged: (value) =>
@@ -156,6 +169,12 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
             ),
             const SizedBox(height: 14),
             _SummaryGrid(summary: summary),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _showUserSummary(summary, observations),
+              icon: const Icon(Icons.ios_share_outlined),
+              label: const Text('Generate sleep summary'),
+            ),
             if (summary.entryCount < 3) ...[
               const SizedBox(height: 10),
               const _MessageCard(
@@ -218,6 +237,112 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
         'This permanently removes ${provider.cloudEnabled ? 'both local and cloud copies' : 'the local diary'}.',
       );
       if (confirmed) await provider.deleteAll(_userId!);
+    } else if (value == 'share_counselor') {
+      await _createCounselorShare();
+    } else if (value == 'manage_shares') {
+      await _manageCounselorShares();
+    }
+  }
+
+  Future<void> _createCounselorShare() async {
+    final window = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Share a sleep summary'),
+        content: const Text(
+          'Your assigned counselor can receive a read-only, server-generated summary—not your raw diary—for 30 days. Cloud sync does not automatically share anything.',
+        ),
+        actions: [
+          for (final days in [7, 14, 30])
+            TextButton(
+              onPressed: () => Navigator.pop(context, days),
+              child: Text('Last $days days'),
+            ),
+        ],
+      ),
+    );
+    if (window == null || !mounted) return;
+    try {
+      final grant = await context.read<SleepProvider>().createCounselorShare(
+        window,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Shared ${grant.summaryWindowDays}-day summary until ${_dateLabel(grant.accessExpiresAt)}.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A confirmed assigned counselor and cloud sync are required to share a summary.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _manageCounselorShares() async {
+    try {
+      final shares = await context.read<SleepProvider>().loadCounselorShares(
+        _userId!,
+      );
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Counselor sharing', style: _SleepText.section),
+            if (shares.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('No summaries are currently shared.'),
+              ),
+            for (final share in shares)
+              ListTile(
+                title: Text('Last ${share.summaryWindowDays} days'),
+                subtitle: Text(
+                  share.revoked
+                      ? 'Access stopped'
+                      : 'Access ends ${_dateLabel(share.accessExpiresAt)}',
+                ),
+                trailing: share.revoked
+                    ? null
+                    : TextButton(
+                        onPressed: () async {
+                          await context
+                              .read<SleepProvider>()
+                              .revokeCounselorShare(share.id);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Counselor access stopped.'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Stop sharing'),
+                      ),
+              ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to load counselor sharing settings.'),
+          ),
+        );
+      }
     }
   }
 
@@ -268,6 +393,80 @@ class _SleepQualityScreenState extends State<SleepQualityScreen> {
       );
     }
   }
+
+  Future<void> _showUserSummary(
+    SleepWindowSummary summary,
+    List<SleepContributorObservation> observations,
+  ) async {
+    final text = _userSummaryText(summary, observations);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Sleep summary', style: _SleepText.section),
+            const SizedBox(height: 8),
+            Text(text),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: text));
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Sleep summary copied. Sharing it does not give a counselor access.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy summary'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () => Share.share(text),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Share summary'),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Based on self-reported entries. This is not a diagnosis, and copying it does not grant counselor access.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _userSummaryText(
+    SleepWindowSummary summary,
+    List<SleepContributorObservation> observations,
+  ) {
+    String duration(double? minutes) => minutes == null
+        ? 'Not enough entries'
+        : '${(minutes / 60).floor()}h ${minutes.round() % 60}m';
+    return [
+      'Sleep Wellness Journal — last ${summary.windowDays} days',
+      '${summary.entryCount} of ${summary.windowDays} days recorded',
+      'Estimated sleep duration: ${duration(summary.averageSleepMinutes)}',
+      'Sleep quality: ${summary.averageQuality?.toStringAsFixed(1) ?? 'Not enough entries'}/5',
+      if (summary.averageEnergy != null)
+        'Energy: ${summary.averageEnergy!.toStringAsFixed(1)}/5',
+      if (summary.averageFocus != null)
+        'Focus: ${summary.averageFocus!.toStringAsFixed(1)}/5',
+      if (summary.comparisonSleepMinutes != null)
+        'Recent change: ${summary.comparisonSleepMinutes! >= 0 ? '+' : ''}${summary.comparisonSleepMinutes!.round()} minutes compared with the previous period',
+      if (observations.isNotEmpty) observations.first.message,
+      'Self-reported wellness information only; not a diagnosis or proof of cause.',
+    ].join('\n');
+  }
 }
 
 class SleepEntryFormScreen extends StatefulWidget {
@@ -293,6 +492,9 @@ class _SleepEntryFormScreenState extends State<SleepEntryFormScreen> {
   int _restfulness = 3;
   int _sleepiness = 3;
   int _quality = 3;
+  int? _energy;
+  int? _focus;
+  bool _showDaytime = false;
   final Set<String> _contributors = {};
   final Set<String> _concerns = {};
   String? _chronologyError;
@@ -318,6 +520,9 @@ class _SleepEntryFormScreenState extends State<SleepEntryFormScreen> {
     _restfulness = entry?.restfulness ?? 3;
     _sleepiness = entry?.daytimeSleepiness ?? 3;
     _quality = entry?.perceivedQuality ?? 3;
+    _energy = entry?.energy;
+    _focus = entry?.focus;
+    _showDaytime = _energy != null || _focus != null;
     _contributors.addAll(entry?.contributorTags ?? const {});
     _concerns.addAll(entry?.concernTags ?? const {});
   }
@@ -454,30 +659,63 @@ class _SleepEntryFormScreenState extends State<SleepEntryFormScreen> {
               high: 'Very good',
               onChanged: (v) => setState(() => _quality = v),
             ),
+            ExpansionTile(
+              title: const Text('Add how today felt (optional)'),
+              initiallyExpanded: _showDaytime,
+              onExpansionChanged: (value) =>
+                  setState(() => _showDaytime = value),
+              children: _showDaytime
+                  ? [
+                      _OptionalRatingField(
+                        label: 'Energy',
+                        value: _energy,
+                        low: 'Very low',
+                        high: 'Very high',
+                        onChanged: (value) => setState(() => _energy = value),
+                      ),
+                      _OptionalRatingField(
+                        label: 'Focus',
+                        value: _focus,
+                        low: 'Very difficult',
+                        high: 'Very easy',
+                        onChanged: (value) => setState(() => _focus = value),
+                      ),
+                    ]
+                  : const [],
+            ),
             const SizedBox(height: 14),
             const Text(
               'What may have contributed? (optional)',
               style: _SleepText.section,
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: SleepTags.contributors.entries
-                  .where((entry) => entry.key != 'naps')
-                  .map(
-                    (entry) => FilterChip(
-                      label: Text(entry.value),
-                      selected: _contributors.contains(entry.key),
-                      onSelected: (selected) => setState(
-                        () => selected
-                            ? _contributors.add(entry.key)
-                            : _contributors.remove(entry.key),
+            for (final group in SleepTags.groups.entries) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: Text(
+                  group.key,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: group.value
+                    .where((key) => key != 'naps')
+                    .map(
+                      (key) => FilterChip(
+                        label: Text(SleepTags.contributors[key]!),
+                        selected: _contributors.contains(key),
+                        onSelected: (selected) => setState(
+                          () => selected
+                              ? _contributors.add(key)
+                              : _contributors.remove(key),
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(),
-            ),
+                    )
+                    .toList(),
+              ),
+            ],
             const SizedBox(height: 22),
             const Text('Safety check (optional)', style: _SleepText.section),
             const SizedBox(height: 4),
@@ -626,14 +864,62 @@ class _SleepEntryFormScreenState extends State<SleepEntryFormScreen> {
       concernTags: _concerns,
       createdAt: widget.entry?.createdAt ?? now,
       clientUpdatedAt: now,
+      schemaVersion: SleepEntry.currentSchemaVersion,
+      energy: _energy,
+      focus: _focus,
+      revision: widget.entry?.revision ?? 0,
     );
     final validation = SleepCalculator.validate(entry);
     if (validation != null) {
       setState(() => _chronologyError = validation);
       return;
     }
-    final saved = await context.read<SleepProvider>().save(entry);
-    if (saved && mounted) Navigator.pop(context, true);
+    final result = await context.read<SleepProvider>().save(entry);
+    if (!mounted) return;
+    if (result.localSaved) {
+      Navigator.pop(context, true);
+      return;
+    }
+    if (result.status == SleepSaveStatus.conflict &&
+        result.conflictingEntry != null) {
+      final resolved = await _resolveConflict(entry, result.conflictingEntry!);
+      if (resolved && mounted) Navigator.pop(context, true);
+      return;
+    }
+    setState(
+      () => _chronologyError =
+          result.message ?? 'We could not save this entry. Please try again.',
+    );
+  }
+
+  Future<bool> _resolveConflict(SleepEntry local, SleepEntry cloud) async {
+    final replace = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Entry changed on another device'),
+        content: const Text(
+          'Choose the version to keep. The cloud version is the version currently saved on the other device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep cloud version'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Replace with my version'),
+          ),
+        ],
+      ),
+    );
+    if (replace == null) return false;
+    if (!mounted) return false;
+    final provider = context.read<SleepProvider>();
+    if (!replace) {
+      await provider.keepCloudConflict(cloud);
+      return true;
+    }
+    return (await provider.replaceCloudConflict(local, cloud)).localSaved;
   }
 }
 
@@ -703,7 +989,11 @@ class _SummaryGrid extends StatelessWidget {
     String rating(double? value) =>
         value == null ? '--/5' : '${value.toStringAsFixed(1)}/5';
     final cards = [
-      ('Entries', '${summary.entryCount}', Icons.nights_stay_outlined),
+      (
+        'Recorded days',
+        '${summary.entryCount}/${summary.windowDays}',
+        Icons.nights_stay_outlined,
+      ),
       (
         'Estimated sleep',
         duration(summary.averageSleepMinutes),
@@ -728,10 +1018,10 @@ class _SummaryGrid extends StatelessWidget {
         Icons.battery_2_bar_outlined,
       ),
       (
-        'Schedule shift',
-        summary.averageScheduleShiftMinutes == null
+        'Bedtime variation',
+        summary.bedtimeVariationMinutes == null
             ? 'Not enough data'
-            : '${summary.averageScheduleShiftMinutes!.round()} min',
+            : '~${summary.bedtimeVariationMinutes!.round()} min',
         Icons.schedule_outlined,
       ),
       (
@@ -741,6 +1031,20 @@ class _SummaryGrid extends StatelessWidget {
             : '${summary.averageWakefulnessMinutes!.round()} min',
         Icons.visibility_outlined,
       ),
+      if (summary.averageEnergy != null)
+        ('Energy', rating(summary.averageEnergy), Icons.bolt_outlined),
+      if (summary.averageFocus != null)
+        (
+          'Focus',
+          rating(summary.averageFocus),
+          Icons.center_focus_strong_outlined,
+        ),
+      if (summary.comparisonSleepMinutes != null)
+        (
+          'Recent sleep change',
+          '${summary.comparisonSleepMinutes! >= 0 ? '+' : ''}${summary.comparisonSleepMinutes!.round()} min',
+          Icons.compare_arrows_outlined,
+        ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -976,6 +1280,59 @@ class _RatingField extends StatelessWidget {
           divisions: 4,
           label: '$value',
           onChanged: (v) => onChanged(v.round()),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [Text(low), Text(high)],
+        ),
+      ],
+    ),
+  );
+}
+
+class _OptionalRatingField extends StatelessWidget {
+  const _OptionalRatingField({
+    required this.label,
+    required this.value,
+    required this.low,
+    required this.high,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int? value;
+  final String low;
+  final String high;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 8, right: 8, bottom: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$label${value == null ? '' : ': $value/5'}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (value != null)
+              TextButton(
+                onPressed: () => onChanged(null),
+                child: const Text('Clear'),
+              ),
+          ],
+        ),
+        Slider(
+          value: (value ?? 3).toDouble(),
+          min: 1,
+          max: 5,
+          divisions: 4,
+          label: '${value ?? 3}',
+          onChanged: (rating) => onChanged(rating.round()),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

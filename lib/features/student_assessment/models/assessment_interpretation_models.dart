@@ -1,7 +1,17 @@
-enum AssessmentConcernBand { low, watchful, moderate, elevated, high }
+import '../config/assessment_policy.dart';
+
+enum AssessmentConcernBand {
+  insufficient,
+  low,
+  watchful,
+  moderate,
+  elevated,
+  high,
+}
 
 extension AssessmentConcernBandLabel on AssessmentConcernBand {
   String get label => switch (this) {
+    AssessmentConcernBand.insufficient => 'Insufficient responses',
     AssessmentConcernBand.low => 'Low',
     AssessmentConcernBand.watchful => 'Watchful',
     AssessmentConcernBand.moderate => 'Moderate',
@@ -148,10 +158,12 @@ class AssessmentInterpretation {
     required this.userSummary,
     required this.counselorSummary,
     required this.suggestedActions,
+    this.priorityRationale = '',
     this.protectiveFactors = const [],
     this.functionalImpactFlags = const [],
-    this.algorithmVersion = 'wellness_interpretation_v3',
-    this.questionSetVersion = 'role_based_v3',
+    this.priorityReasonCodes = const [],
+    this.algorithmVersion = AssessmentPolicy.fullScoringPolicyVersion,
+    this.questionSetVersion = AssessmentPolicy.fullQuestionSetVersion,
     this.recallPeriodDays = 14,
   });
 
@@ -163,16 +175,19 @@ class AssessmentInterpretation {
   final List<AssessmentDomainResult> domainResults;
   final List<String> protectiveFactors;
   final List<String> functionalImpactFlags;
+  final List<String> priorityReasonCodes;
   final List<String> rationale;
   final String userSummary;
   final String counselorSummary;
   final List<String> suggestedActions;
+  final String priorityRationale;
 
   factory AssessmentInterpretation.fromJson(Map<String, dynamic> json) {
     final quality = _map(json['responseQuality']);
     return AssessmentInterpretation(
       algorithmVersion:
-          json['algorithmVersion']?.toString() ?? 'wellness_interpretation_v3',
+          json['algorithmVersion']?.toString() ??
+          AssessmentPolicy.fullScoringPolicyVersion,
       questionSetVersion: json['questionSetVersion']?.toString() ?? 'legacy',
       recallPeriodDays: _int(json['recallPeriodDays'], fallback: 14),
       supportPriority:
@@ -191,10 +206,12 @@ class AssessmentInterpretation {
           : const [],
       protectiveFactors: _strings(json['protectiveFactors']),
       functionalImpactFlags: _strings(json['functionalImpactFlags']),
+      priorityReasonCodes: _strings(json['priorityReasonCodes']),
       rationale: _strings(json['rationale']),
       userSummary: json['userSummary']?.toString() ?? '',
       counselorSummary: json['counselorSummary']?.toString() ?? '',
       suggestedActions: _strings(json['suggestedActions']),
+      priorityRationale: json['priorityRationale']?.toString() ?? '',
     );
   }
 
@@ -208,10 +225,12 @@ class AssessmentInterpretation {
     'domainResults': domainResults.map((result) => result.toJson()).toList(),
     'protectiveFactors': protectiveFactors,
     'functionalImpactFlags': functionalImpactFlags,
+    'priorityReasonCodes': priorityReasonCodes,
     'rationale': rationale,
     'userSummary': userSummary,
     'counselorSummary': counselorSummary,
     'suggestedActions': suggestedActions,
+    'priorityRationale': priorityRationale,
   };
 }
 

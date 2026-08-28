@@ -11,14 +11,18 @@ import 'package:mind_mates/features/mind_aid/domain/mind_aid_context.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_dataset_models.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_model_provider.dart';
 import 'package:mind_mates/features/mind_aid/domain/mind_aid_safety.dart';
+import 'package:mind_mates/features/mind_aid/domain/mind_aid_integration_models.dart';
 import 'package:mind_mates/models/mind_aid_message_model.dart';
 import 'package:mind_mates/models/mood_model.dart';
 import 'package:mind_mates/models/report_model.dart';
 import 'package:mind_mates/repositories/mind_aid_context_repository.dart';
 import 'package:mind_mates/repositories/mind_aid_repository_screen.dart';
 import 'package:mind_mates/services/firebase/firestore_service.dart';
+import 'package:mind_mates/services/firebase/mind_aid_cloud_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('MindAidDatasetLoader', () {
     test('loads and validates dataset assets', () async {
       final loader = MindAidDatasetLoader(bundle: _MindAidTestBundle());
@@ -41,6 +45,38 @@ void main() {
 
       expect(loader.load, throwsFormatException);
     });
+
+    test(
+      'real approved dataset does not classify hi as severe distress',
+      () async {
+        final dataset = await MindAidDatasetLoader().load();
+
+        final result = await MindAidChatEngine().respond(
+          const MindAidChatRequest(
+            userId: 'user_1',
+            text: 'hi',
+            assessment: MindAidAssessmentContext(
+              userType: 'Student',
+              overallScore: 90,
+              status: 'High Concern',
+              subscaleScores: {'Emotional Well-Being': 90},
+              mainConcernAreas: ['Emotional Well-Being'],
+              summaryMessage: 'Elevated support signal.',
+            ),
+            wellnessSnapshot: MindAidWellnessSnapshot(
+              latestMoodLevel: 1,
+              recentMoodAverage: 1.5,
+              moodTrend: MindAidMoodTrend.declining,
+            ),
+          ),
+          dataset,
+        );
+
+        expect(result.text, startsWith('Hi!'));
+        expect(result.text, isNot(contains('This sounds very intense')));
+        expect(result.requiresEscalation, isFalse);
+      },
+    );
   });
 
   group('MindAidEngine', () {
@@ -98,6 +134,31 @@ void main() {
       expect(result.response, contains('I am here with you'));
     });
 
+    test('context cannot create an intent without message evidence', () {
+      final result = MindAidEngine().process(
+        'hi',
+        dataset,
+        context: const MindAidContext(
+          assessment: MindAidAssessmentContext(
+            userType: 'Student',
+            overallScore: 90,
+            status: 'High Concern',
+            subscaleScores: {'Emotional Well-Being': 90},
+            mainConcernAreas: ['Emotional Well-Being'],
+            summaryMessage: 'Elevated support signal.',
+          ),
+          wellnessSnapshot: MindAidWellnessSnapshot(
+            latestMoodLevel: 1,
+            recentMoodAverage: 1.5,
+            moodTrend: MindAidMoodTrend.declining,
+          ),
+        ),
+      );
+
+      expect(result.isFallback, isTrue);
+      expect(result.requiresEscalation, isFalse);
+    });
+
     test('prioritizes crisis safety routing', () {
       final result = MindAidEngine().process('I want to end my life', dataset);
 
@@ -127,6 +188,116 @@ void main() {
 
     setUp(() async {
       dataset = await MindAidDatasetLoader(bundle: _MindAidTestBundle()).load();
+    });
+
+    test('responds conversationally to a simple greeting', () async {
+      final result = await MindAidChatEngine().respond(
+        const MindAidChatRequest(userId: 'user_1', text: 'hello'),
+        dataset,
+      );
+
+      expect(result.text, startsWith('Hi!'));
+      expect(result.text, contains('How are you doing today?'));
+      expect(result.text, isNot(contains('intense')));
+      expect(result.requiresEscalation, isFalse);
+      expect(result.intentMatches, isEmpty);
+    });
+
+    test(
+      'low mood and assessment context do not turn hi into distress',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          const MindAidChatRequest(
+            userId: 'user_1',
+            text: 'hi',
+            assessment: MindAidAssessmentContext(
+              userType: 'Student',
+              overallScore: 90,
+              status: 'High Concern',
+              subscaleScores: {'Emotional Well-Being': 90},
+              mainConcernAreas: ['Emotional Well-Being'],
+              summaryMessage: 'Elevated support signal.',
+            ),
+            wellnessSnapshot: MindAidWellnessSnapshot(
+              latestMoodLevel: 1,
+              recentMoodAverage: 1.5,
+              moodTrend: MindAidMoodTrend.declining,
+            ),
+          ),
+          dataset,
+        );
+
+        expect(result.text, startsWith('Hi!'));
+        expect(result.safetyLevel, isNot(MindAidSafetyLevel.highDistress));
+        expect(result.requiresEscalation, isFalse);
+      },
+    );
+
+    test('greeting does not hide an explicit crisis statement', () async {
+      final result = await MindAidChatEngine().respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          text: 'hi, I want to end my life',
+        ),
+        dataset,
+      );
+
+      expect(result.safetyLevel, MindAidSafetyLevel.crisisOrImmediateRisk);
+      expect(result.requiresEscalation, isTrue);
+      expect(result.text, contains('immediate'));
+    });
+
+    test(
+      'recognizes Taglish crisis language without requiring a dataset match',
+      () async {
+        final result = await MindAidChatEngine().respond(
+          const MindAidChatRequest(
+            userId: 'user_1',
+            text: 'Ayoko nang mabuhay',
+          ),
+          dataset,
+        );
+
+        expect(result.safetyLevel, MindAidSafetyLevel.crisisOrImmediateRisk);
+        expect(result.requiresEscalation, isTrue);
+        expect(result.primaryIntent, 'crisis_immediate_risk');
+        expect(result.text, contains('immediate safety'));
+      },
+    );
+
+    test('normalizes apostrophes in high-distress breathing phrases', () async {
+      final result = await MindAidChatEngine().respond(
+        const MindAidChatRequest(userId: 'user_1', text: "I can't breathe"),
+        dataset,
+      );
+
+      expect(result.safetyLevel, MindAidSafetyLevel.highDistress);
+      expect(result.requiresEscalation, isTrue);
+      expect(result.primaryIntent, 'high_distress');
+    });
+
+    test('does not carry dialogue state into another conversation', () async {
+      final engine = MindAidChatEngine();
+      await engine.respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          conversationId: 'conversation_a',
+          text: 'I am stressed about exams',
+        ),
+        dataset,
+      );
+
+      final result = await engine.respond(
+        const MindAidChatRequest(
+          userId: 'user_1',
+          conversationId: 'conversation_b',
+          text: 'yes',
+        ),
+        dataset,
+      );
+
+      expect(result.primaryIntent, 'general_support');
+      expect(result.text, isNot(contains('stay with academic stress')));
     });
 
     test('blends the top two relevant intents', () async {
@@ -471,6 +642,69 @@ void main() {
   });
 
   group('MindAidRepository', () {
+    test('keeps deterministic greetings local when cloud is enabled', () async {
+      final cloud = _FakeMindAidCloudGateway(enabled: true);
+      final repository = MindAidRepository(
+        datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+        engine: MindAidEngine(),
+        firestoreService: _CapturingFirestoreService(),
+        cloudService: cloud,
+      );
+
+      final result = await repository.sendMessage(
+        userId: 'user_1',
+        text: 'hi',
+        preferences: _cloudPreferences,
+      );
+
+      expect(result.chatResponse.source, 'local');
+      expect(result.message.text, startsWith('Hi!'));
+      expect(cloud.sendCount, 0);
+    });
+
+    test(
+      'routes eligible support messages through the enabled cloud',
+      () async {
+        final cloud = _FakeMindAidCloudGateway(enabled: true);
+        final repository = MindAidRepository(
+          datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+          engine: MindAidEngine(),
+          firestoreService: _CapturingFirestoreService(),
+          cloudService: cloud,
+        );
+
+        final result = await repository.sendMessage(
+          userId: 'user_1',
+          text: 'I am stressed about exams',
+          preferences: _cloudPreferences,
+        );
+
+        expect(result.chatResponse.source, 'dialogflow');
+        expect(result.message.text, 'Cloud support response.');
+        expect(cloud.sendCount, 1);
+      },
+    );
+
+    test('labels a cloud failure without exposing it to the reply', () async {
+      final cloud = _FakeMindAidCloudGateway(enabled: true, throwOnSend: true);
+      final repository = MindAidRepository(
+        datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
+        engine: MindAidEngine(),
+        firestoreService: _CapturingFirestoreService(),
+        cloudService: cloud,
+      );
+
+      final result = await repository.sendMessage(
+        userId: 'user_1',
+        text: 'I am stressed about exams',
+        preferences: _cloudPreferences,
+      );
+
+      expect(result.chatResponse.source, 'local');
+      expect(result.chatResponse.fallbackReason, 'cloud_unavailable');
+      expect(result.message.text, isNot(contains('simulated cloud failure')));
+    });
+
     test('returns typed suggestions and assistant message models', () async {
       final repository = MindAidRepository(
         datasetLoader: MindAidDatasetLoader(bundle: _MindAidTestBundle()),
@@ -569,6 +803,74 @@ class _FailingFirestoreService extends FirestoreService {
   Future<String> createDocument(String collection, Map<String, dynamic> data) {
     throw StateError('permission denied');
   }
+}
+
+const _cloudPreferences = MindAidPreferences(
+  hasDecision: true,
+  cloudConsent: true,
+  personalizationEnabled: true,
+  conversationId: 'conversation_cloud',
+  consentVersion: MindAidPreferences.currentConsentVersion,
+);
+
+class _FakeMindAidCloudGateway implements MindAidCloudGateway {
+  _FakeMindAidCloudGateway({required this.enabled, this.throwOnSend = false});
+
+  final bool enabled;
+  final bool throwOnSend;
+  int sendCount = 0;
+
+  @override
+  Future<bool> isCloudEnabled() async => enabled;
+
+  @override
+  Future<MindAidCloudResponse> send({
+    required String requestId,
+    required String conversationId,
+    required String text,
+    required String launchContext,
+  }) async {
+    sendCount += 1;
+    if (throwOnSend) throw StateError('simulated cloud failure');
+    return const MindAidCloudResponse(
+      messageId: 'cloud_message',
+      text: 'Cloud support response.',
+      intent: 'academic_stress',
+      confidence: 0.9,
+      safetyLevel: 'safeSupport',
+      source: 'dialogflow',
+      suggestions: ['Take one small step'],
+      actions: [],
+      requiresEscalation: false,
+      fallbackReason: '',
+    );
+  }
+
+  @override
+  Future<MindAidPreferences> loadPreferences(String userId) async =>
+      _cloudPreferences;
+
+  @override
+  Future<MindAidPreferences> saveConsent({
+    required String userId,
+    required bool cloudConsent,
+    required bool personalizationEnabled,
+    String? existingConversationId,
+  }) async => _cloudPreferences;
+
+  @override
+  Future<void> clearHistory(String userId) async {}
+
+  @override
+  Future<String> startNewConversation(String userId) async =>
+      'new_conversation';
+
+  @override
+  Future<void> submitFeedback({
+    required String userId,
+    required String messageId,
+    required bool helpful,
+  }) async {}
 }
 
 class _CountingModelProvider implements MindAidModelProvider {
